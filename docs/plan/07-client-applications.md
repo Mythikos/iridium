@@ -782,7 +782,7 @@ export const toggleBold: StateCommand = ({ state, dispatch }) => {
 | Command | Source transformation | Notes |
 |---|---|---|
 | `toggleBold`, `toggleItalic`, `toggleStrikethrough` | wrap/unwrap `**`, `*`, `~~` | detection via `syntaxTree` node type, not regex; `__`/`_` variants are recognised for unwrapping and normalised to `**`/`*` when wrapping |
-| `toggleInlineCode` | wrap in backticks, widening the fence to `` `` `` when the selection contains a backtick | |
+| `toggleInlineCode` | wrap in backticks, widening the fence to `` `` `` when the selection contains a backtick \| \|
 | `toggleFencedCode` | wrap selected lines in ```` ``` ```` fences, preserving indentation; on an existing fence, remove it | inserts a language placeholder only when the selection is empty |
 | `insertLink` | `[selection](url)` with the caret in the URL slot; when the clipboard holds an http(s) URL it is pre-filled | with an empty selection inserts `[](url)` and selects the text slot |
 | `setHeading(1..6)` | replace the leading `#{1,6} ` run on every selected line; the same level toggles back to plain | ATX only; setext headings are left untouched when encountered |
