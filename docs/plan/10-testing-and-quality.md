@@ -1,0 +1,2273 @@
+# Testing and quality strategy
+
+This section is the definitive description of how Iridium proves itself: which runner owns which layer, what `@iridium/testkit` provides, the named test inventory mapped to every acceptance row of the feature spec (section 9), to the plan's hard properties and to the specified rules that are neither — including the completeness table that resolves every test name used anywhere in the plan to a file, a project and a tag, and the single guard that holds the declared non-goals to the built route, tool, command, capability and schema inventories — the step-by-step chaos and durability procedures, the property-based suites, the Electron security suite, the performance budgets, the CI lanes and their merge-blocking rules, the coverage and mutation thresholds, and the fixture policy. Architecture, data model, protocols and milestone gating are described in their own sections and are only referenced here (see 02-system-architecture.md, 03-data-model.md, 05-collaboration-and-durability.md, 06-mcp-and-agent-access.md, 07-client-applications.md, 12-milestones.md).
+
+## Principles
+
+1. **The hard properties are proven before any UI exists and stay on the PR critical path forever.** The kernel milestone (M1, see 12-milestones.md) exits only on the headless suites listed below; the UI milestones add browser-level proof on top of them, never instead of them.
+2. **Real infrastructure, one boot path.** Integration, chaos, contract and MCP suites run the real Fastify 5.12.4 application built by `buildApp()` against real MySQL 9.7.2 in Testcontainers, real Hocuspocus 4.7.0 and real `@hocuspocus/provider` 4.7.0 clients in Node. The server boots in-process (Vitest), as a child process (SIGKILL chaos) or in a container (load, Schemathesis, compose boot) from the same `buildApp({ mode })`; test seams are configuration and the `IRIDIUM_FAULT` registry, never forks of the boot path. The persistence writer, the loader, the compactor, `authorize()`, the audit writer and the MCP host are never mocked outside the `unit` project.
+3. **One runner per layer.** Vitest 5.0.0 owns every non-browser and component layer through `test.projects`; Playwright 1.63.0 owns web and Electron end-to-end; fast-check 4.10.0 owns property and model tests inside Vitest; k6 2.2.0 owns load; Stryker 10.0.0 owns mutation in its isolated lane; Schemathesis 4.26.1 owns black-box OpenAPI fuzzing; `@modelcontextprotocol/conformance` 0.1.16 and Inspector 2.6.0 own MCP wire conformance. No second runner is ever added for convenience (no Jest, WebdriverIO, Artillery, jest-openapi, Pact).
+4. **Determinism over retries.** Vitest `retry: 0` everywhere; Playwright `retries: 2` only in CI with `trace: 'on-first-retry'`. A flaky test is quarantined with an issue and an entry in `apps/e2e/QUARANTINE.md`; it is never retried into green. Time is injected (`Clock`), Hocuspocus debounce values are configuration, property tests print their seed, unit tests shuffle with a printed seed.
+5. **Every acceptance row, every hard property and every specified rule has named tests in named layers.** The map in "Named test inventory" is machine-checked by `guards.acceptance-map.guard.spec.ts`, which fails when a row id, a hard-property id or a rule id of "Specified rules outside the nine rows" is no longer referenced by at least one test in each required layer whose milestone has arrived. A rule the spec states but no row covers — the move/rename link warning, the `invalid_move` reason vocabulary, vault settings, single-process document ownership, the declared non-goals — is checked the same way, because a rule held by prose alone is a rule nothing fails on.
+6. **Security-relevant drift is a build failure.** Generated OpenAPI, MCP tool schemas, IPC typings, Kysely types, the Yjs single-instance check, route policy, `webPreferences`, the preload surface, redaction and DB grants are all asserted by tests or CI steps that block merges.
+7. **Coverage numbers are a floor, mutation scores are the signal.** Security and durability modules carry 100 % / 95 % per-file coverage gates and are the Stryker mutation scope; everything else carries the global thresholds.
+8. **Tests exercise the product's own paths.** Seeding goes through the CLI and REST, fixtures are imported through the import job, backups are taken with `iridium backup`, and revocation is triggered through the admin routes. Direct database writes in tests exist only to corrupt state deliberately (doctor and restore tests) and are wrapped in a helper that says so.
+
+## Hard properties under test
+
+01-vision-scope-and-principles.md states the product principles; the five properties below are their test-facing form and are referred to throughout this section by id. Each maps to the acceptance rows of the spec (section 9) and to named tests in "Named test inventory".
+
+| Id | Property | Testable statement | Primary evidence |
+|---|---|---|---|
+| HP-1 | Saved truthfulness | The client shows `saved` only when a MySQL transaction containing every local update has COMMITTED (`innodb_flush_log_at_trx_commit=1`) and the server has broadcast a state vector that dominates the client's whole local vector (skeleton A19, deviation F2). A failed or crashed persistence never produces a `persisted` message for the affected updates. | `collab.durable-ack.chaos`, `collab.baseline-on-connect.integration`, `save-state.machine.prop`, `crdt.dominates.prop`, `saved-indicator.e2e` |
+| HP-2 | Restart recovery | After any kill (SIGKILL after ack, crash before or after COMMIT) or graceful restart, reloading a note yields exactly the acknowledged content: no lost acknowledged update, no duplicated initial content, and `head_seq = GREATEST(snapshot_through_seq, MAX(note_updates.seq))`, `snapshot_through_seq <= head_seq`, `projected_seq <= head_seq` hold. | `collab.restart-no-duplication.integration`, `collab.durable-ack.chaos`, `collab.graceful-shutdown.chaos`, `persistence.model.prop`, `ops.backup-restore.drill` |
+| HP-3 | Revocation timing | Membership removal, role downgrade, user disable, session revoke, token revoke, vault archive and note trash affect already-open connections within 1 s of COMMIT, refuse reconnection, and make the next REST or MCP call fail; a role upgrade re-attaches cleanly with every pending local update merged. | `collab.live-revocation.integration`, `collab.revocation-race.chaos`, `mcp.revocation.mcp`, `revocation-while-open.e2e` |
+| HP-4 | Hostile content inertness | Hostile Markdown (scripts, `javascript:`/`data:`/`vbscript:` URLs, iframes, meta refresh, SVG scripts, event handlers, DOM clobbering, CSS injection, pathological nesting) cannot execute, navigate, open windows, reach `window.iridium`, Node or the network in the web client, the Electron renderer, the server projection worker or the sanitized hast. | `markdown.xss-corpus.unit`, `markdown.sanitize.prop`, `markdown.pathological.unit`, `preview.inertness.component`, `security.hostile-markdown.e2e` (web), `desktop.hostile-markdown.e2e`, `desktop.hardening.e2e` |
+| HP-5 | Limits enforcement | Every limit in the single limits policy (skeleton A.1) is enforced at the stated place with the stated outcome (close reason, `413`/`429` ProblemDetails, backpressure, refusal) and never by the client alone. | `collab.limits.integration`, `collab.backpressure.chaos`, `collab.admission-budget.integration`, `security.rate-limits.integration`, `mcp.rate-limit.mcp`, `attachments.security.integration`, `markdown.pathological.unit`, `limits.policy.unit`, `ops.load.slo` |
+
+**Every evidence cell here, in "Hard properties → required layers" and in the nine-row overview names a test, never a lane, a runner or a phrase.** The rule is mechanical rather than stylistic: `scripts/build-acceptance-map.ts` parses these cells into the `rowId` and `hpId` entries of `docs/acceptance-map.json`, and `guards.acceptance-map.guard` can only check an entry whose members are map keys. A cell reading "k6 nightly", "the nightly load job" or "Schemathesis" generates an entry the guard silently skips, which is worse than an empty cell: the hard property looks discharged, and nothing fails on the day the check is deleted. So HP-5's load evidence is `ops.load.slo` — the named gate specified in "Ops, restore, release and the seam contract suites", whose lane column is where "k6, nightly" belongs — and the same substitution applies to any cell added later: name the test, and let the inventory row carry the runner and the lane. The six workflow gates that have no spec file (`release.signing`, `desktop.update-from-previous`, `supply-chain.sbom`, `ops.compose-prod.clean-vm`, `ops.load.slo`, `proxied-stack.mcp-headers`) are still names in an inventory table and therefore still legal evidence; a tool or a job name is not.
+
+A cell may **narrow** a named test to one of its cases, in the form `` `test.name.layer` `` followed by `(incl. case *case name*, @M<n>)` — row 4 does this for *foreign-vault revision history*. The case name is italic prose, never a code span, so `scripts/build-acceptance-map.ts` reads the map member from the code span exactly as before and the parenthetical stays documentation for the section that cites it. That is deliberate: a case is not separately gateable, because `guards.acceptance-map.guard` resolves map members to files and a case is a `describe` block inside one. What holds a cited case in existence is the test's own exhaustiveness construction — the `satisfies Record<…>` case tables this section uses throughout — which fails at compile time rather than at map-generation time, and is therefore the stronger guarantee.
+
+## Testing pyramid and the one-runner-per-layer policy
+
+```mermaid
+flowchart TB
+  L10["L10 Mutation: Stryker 10 (tooling/mutation lane)"]
+  L9["L9 Load: k6 2.2.0 (nightly)"]
+  L8["L8 Contract: toMatchOpenApi, Schemathesis 4.26.1, MCP conformance 0.1.16, Inspector 2.6.0, license scan"]
+  L7["L7 E2E Electron: Playwright 1.63.0 _electron (3 OSes)"]
+  L6["L6 E2E Web: Playwright 1.63.0 chromium (4 shards, test locks)"]
+  L5["L5 Chaos: Vitest chaos project, child-process server, Toxiproxy 2.12.0, IRIDIUM_FAULT"]
+  L4["L4 Property and model: fast-check 4.10.0 (pure in unit, DB-backed in property)"]
+  L3["L3 Integration: Vitest integration project, Testcontainers MySQL 9.7.2, in-process buildApp()"]
+  L2["L2 Component: Vitest Browser Mode (chromium), vitest-browser-react 2.3.0, axe-core"]
+  L1["L1 Unit: Vitest unit project (ubuntu + windows, forks, shuffle)"]
+  L0["L0 Static: tsc -b, oxlint type-aware, oxfmt, knip, turbo boundaries, Redocly, gen drift, audit, dedupe, license scan"]
+  L10 --> L9 --> L8 --> L7 --> L6 --> L5 --> L4 --> L3 --> L2 --> L1 --> L0
+```
+
+| Layer | Runner / project | What it proves | Where the tests live | Gate |
+|---|---|---|---|---|
+| L0 Static | `tsc -b --builders 8` (TypeScript 7.0.2), oxlint 1.82.0 + oxlint-tsgolint 7.0.2001, oxfmt 0.67.0 `--check`, knip 6.35.1 `--production`, `turbo boundaries` (dependency-cruiser 18.2.0 fallback), `@redocly/cli 2.52.1 lint`, `pnpm gen && git diff --exit-code` (which now also regenerates `docs/non-goals.json` and `docs/acceptance-map.json`), `pnpm audit --audit-level high`, `pnpm why` dedupe check, license scan | Types, boundaries, formatting, dead code, generated-artifact freshness, supply chain, licenses | repo root scripts, `tooling/`, `scripts/` | PR (`static` job) |
+| L1 Unit | Vitest 5.0.0 projects `unit` and `guard` (`environment: 'node'`, `pool: 'forks'`, `isolate: true`, `sequence.shuffle: true`, `retry: 0`) on ubuntu and windows; pure property tests (`*.prop.spec.ts` co-located under `src/`) run here with `IRIDIUM_PROP_RUNS` | Pure logic: permission matrix, token format/CRC/hash, name and path rules, tree rules, `dominates`, codec, `SaveStateMachine`, `NoteWriter` coalescing and backoff over a fake `CollabPersistence`, cursor signing, markdown pipeline, Obsidian detector, sanitizer schema, MCP tools over an in-memory `ContentReadCore`, formatting `StateCommand`s over `EditorState`, config parsing, IPC handlers, `webPreferences` snapshot | `packages/*/src/**/*.{unit,prop}.spec.ts`, `apps/*/src/**/*.{unit,prop}.spec.ts`; the `guard` project adds `apps/server/test/guards/*.guard.spec.ts` and the package-local `*.guard.spec.ts` files | PR (`unit` job, both OSes; the `guard` project in `static`) |
+| L2 Component | Vitest project `component`: Browser Mode with `@vitest/browser-playwright 5.0.0`, `provider: playwright({ launchOptions: { channel: 'chromium' } })`, `instances: [{ browser: 'chromium' }]`, vitest-browser-react 2.3.0, axe-core (pinned at M0) | Real-Chromium behaviour of `@iridium/editor`, `@iridium/markdown-react`, `@iridium/ui`: yCollab across two in-memory Y.Docs, remote cursors, undo isolation, formatting edits source only, status pill transitions from a fake provider, preview inertness, tree keyboard/DnD, tabs, switcher, palette, token dialog, accessibility | `packages/{ui,editor,markdown-react}/src/**/*.component.spec.tsx`, `packages/*/test/**/*.component.spec.tsx` (the `host.contract.component` harness of the `IridiumHost` contract suite of 07-client-applications.md §2.4 lives in `packages/ui/src/host/`), `apps/web/src/**/*.component.spec.tsx` | PR (`unit` job, ubuntu) |
+| L3 Integration | Vitest project `integration`: `globalSetup` starts `MySqlContainer('mysql:9.7.2-oraclelinux9')` with tmpfs and the role init SQL; each worker migrates its own schema `iridium_w<VITEST_WORKER_ID>`; server in-process via `startServer({ mode: 'in-process' })` | Every server behaviour that touches MySQL, Hocuspocus or REST: collaboration harness suites, REST with `toMatchOpenApi`, tree/trash/restore, revisions, projections, search, attachments, audit chain, tickets, CSRF, rate limits, jobs, readiness, migrations | `apps/server/test/integration/**/*.integration.spec.ts` | PR (`integration` job) |
+| L4 Property / model | Pure properties in `unit` at `PROP` (PR `numRuns: 200`, nightly `5000` + soak — the skeleton A51 figures, and the strength at which every model also runs over its in-memory mirror); DB-backed model tests in Vitest project `property` (`testTimeout: 900_000`, MySQL globalSetup) carry their own `PROP_DB` budget (PR `numRuns: 20` × `maxCommands: 60`, nightly `200` × `300`) because each command there is a MySQL round trip; fast-check 4.10.0 + `@fast-check/vitest 0.5.0` | Convergence model (`SimNet` with the real `NoteWriter`), persistence model, hierarchy model against real MySQL, markdown round trip and no-rewrite, sanitizer, token effective permissions, save-state machine, cursor, name rules, deep-link parsing | `packages/*/src/**/*.prop.spec.ts` (pure), `apps/server/test/property/**/*.prop.spec.ts` (DB-backed) | PR light, nightly heavy |
+| L5 Chaos | Vitest project `chaos` (`fileParallelism: false`, `retry: 0`, `testTimeout: 180_000`); server as a child process; MySQL and `/collab` behind `ToxiProxyContainer('ghcr.io/shopify/toxiproxy:2.12.0')`; `IRIDIUM_FAULT` registry | HP-1, HP-2, HP-3, HP-5 under kills, DB outages, latency, resets, bandwidth caps, socket drops, shutdown, backpressure; backup/restore drill | `apps/server/test/chaos/**/*.chaos.spec.ts` | PR core (`chaos-core`, 20 kill iterations), nightly extended (200 iterations, all toxics) |
+| L6 E2E web | Playwright 1.63.0 projects `setup` and `chromium` (4 shards, test locks, three-context `collab` fixture) against the built web bundle served by the built server | The nine acceptance rows as a user sees them, plus every UI flow of 07-client-applications.md | `apps/e2e/web/**/*.e2e.spec.ts` | PR (`e2e-web` job, all shards) |
+| L7 E2E Electron | Playwright project `electron` (`_electron.launch`) on ubuntu (xvfb), windows, macos; MySQL from `shogo82148/actions-setup-mysql@v1` (`mysql-version: '9.7'`); test-signed package variant in `release.yml` | Shell hardening, sign-in, open note, three-instance collaboration, hostile Markdown, deep-link fuzz, attachment custody, update feed, host contract | `apps/e2e/electron/**/*.e2e.spec.ts` | PR smoke (`e2e-electron`, 3 OSes), nightly full, release packaged smoke |
+| L8 Contract | Vitest projects `contract` and `mcp`; `toMatchOpenApi` (ajv 8.20.0 + `@apidevtools/swagger-parser 13.0.0`) applied to every REST response; Schemathesis 4.26.1 `--stateful=links`; MCP dual-era through `handler.fetch` and the real `/mcp` route; conformance 0.1.16 with an empty baseline; Inspector 2.6.0 `--cli`; `bridge.parity.contract` over `StdioClientTransport`; nightly real-client matrix; license scan | Wire contracts never drift from committed artifacts; protocol conformance in both MCP eras; dependency licenses stay inside the allowlist | `apps/server/test/contract/**/*.contract.spec.ts`, `apps/server/test/mcp/**/*.mcp.spec.ts`, `packages/mcp-bridge/test/**/*.contract.spec.ts`, `scripts/check-licenses.ts` | PR light, nightly full |
+| L9 Load | k6 2.2.0 with bundled yjs 13.6.32 / y-protocols 1.0.7 / lib0 0.2.117 (M0 spike S6; fallback Node `worker_threads` generator on `@iridium/collab-client`) | SLOs of "Performance budgets"; RSS ceiling; no dropped iterations | `apps/server/test/load/**` | nightly; M8 gate |
+| L10 Mutation | Stryker 10.0.0 (`@stryker-mutator/core`, `vitest-runner`, `typescript-checker`) in `tooling/mutation` with its own `typescript` → `@typescript/typescript6` alias, `incremental`, unit project only | Tests on security and durability modules actually detect defects | `tooling/mutation/` | nightly; PR when mutate-scope paths change; thresholds in "Coverage and mutation thresholds" |
+
+The pyramid is deliberately heavy at L3–L5: the properties that matter most (HP-1, HP-2, HP-3) are only observable with a real database, a real WebSocket server and a killable process. L1 exists to make mutation testing and 100 % per-file coverage meaningful on the modules where a single wrong branch is a security or data-loss bug.
+
+## Runner configuration
+
+### Vitest 5.0.0 root configuration
+
+One root `vitest.config.ts` declares every project inline (Vitest 5 inherits the root config into inline projects and shares one Vite server). Project selection is by directory for server-side test trees and by file suffix for co-located tests, so a file's path alone says which runner semantics apply.
+
+```ts
+// vitest.config.ts (repo root)
+import { defineConfig } from 'vitest/config';
+import { playwright } from '@vitest/browser-playwright';
+
+const seed = Number(process.env.IRIDIUM_TEST_SEED ?? Date.now());
+console.info(`[vitest] sequence seed ${seed}`);            // printed so order-coupling failures replay
+
+export default defineConfig({
+  test: {
+    retry: 0,
+    clearMocks: true,                                       // Vitest 5 default, stated explicitly
+    sequence: { shuffle: true, seed },
+    reporters: process.env.CI ? ['default', 'blob'] : ['default'],
+    coverage: {
+      provider: 'v8',
+      include: ['packages/*/src/**/*.{ts,tsx}', 'apps/server/src/**/*.ts',
+                'apps/desktop/src/{preload,shared}/**/*.ts', 'apps/web/src/**/*.{ts,tsx}'],
+      exclude: ['**/*.spec.*', '**/generated/**', '**/*.d.ts', '**/testing/**', 'apps/server/src/migrations/**',
+                'apps/desktop/src/main/**'],   // proven by the Playwright `electron` project, which emits no Vitest coverage
+      reporter: ['text', 'json-summary', 'lcov'],
+      reportOnFailure: true,
+      thresholds: {
+        statements: 85, lines: 85, branches: 80, functions: 85,
+        'apps/desktop/src/{preload,shared}/**':           { 100: true, perFile: true },
+        'apps/server/src/auth/**':                        { 100: true, perFile: true },
+        'apps/server/src/authz/**':                       { 100: true, perFile: true },
+        'packages/contracts/src/{tokens,paths,authz}.ts': { 100: true, perFile: true },
+        'apps/server/src/collab/persistence/**':          { lines: 95, branches: 90, perFile: true },
+        'packages/crdt/src/**':                           { lines: 95, branches: 90, perFile: true },
+      },
+    },
+    projects: [
+      { test: { name: 'unit', environment: 'node', pool: 'forks', isolate: true, testTimeout: 10_000,
+                include: ['packages/*/src/**/*.{unit,prop}.spec.ts', 'apps/*/src/**/*.{unit,prop}.spec.ts'] } },
+      { test: { name: 'guard', environment: 'node', pool: 'forks', isolate: true, testTimeout: 30_000,
+                include: ['apps/server/test/guards/*.guard.spec.ts',            // selected by PATH, never by test title
+                          'packages/*/src/**/*.guard.spec.ts', 'packages/*/test/**/*.guard.spec.ts',
+                          'apps/*/src/**/*.guard.spec.ts'] } },
+      { test: { name: 'component', include: ['packages/{ui,editor,markdown-react}/src/**/*.component.spec.tsx',
+                                             'packages/*/test/**/*.component.spec.tsx',   // package-level component trees
+                                             'apps/web/src/**/*.component.spec.tsx'],
+                setupFiles: ['packages/ui/test/setup.browser.ts'],
+                browser: { enabled: true, headless: true, provider: playwright({ launchOptions: { channel: 'chromium' } }),
+                           instances: [{ browser: 'chromium' }] } } },
+      { test: { name: 'integration', environment: 'node', pool: 'forks', hookTimeout: 120_000, testTimeout: 30_000,
+                globalSetup: ['packages/testkit/src/global/mysql.global.ts'],
+                setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
+                include: ['apps/server/test/integration/**/*.integration.spec.ts'] } },
+      { test: { name: 'property', environment: 'node', pool: 'forks', testTimeout: 900_000, hookTimeout: 120_000,
+                globalSetup: ['packages/testkit/src/global/mysql.global.ts'],
+                setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
+                include: ['apps/server/test/property/**/*.prop.spec.ts'] } },
+      { test: { name: 'chaos', environment: 'node', pool: 'forks', fileParallelism: false, testTimeout: 180_000, hookTimeout: 180_000,
+                globalSetup: ['packages/testkit/src/global/mysql.global.ts', 'packages/testkit/src/global/toxiproxy.global.ts'],
+                include: ['apps/server/test/chaos/**/*.{chaos,drill}.spec.ts'] } },   // `drill` is a layer of this project
+      { test: { name: 'contract', environment: 'node', pool: 'forks', testTimeout: 60_000,
+                globalSetup: ['packages/testkit/src/global/mysql.global.ts'],
+                setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
+                include: ['apps/server/test/contract/**/*.contract.spec.ts', 'packages/mcp-bridge/test/**/*.contract.spec.ts'] } },
+      { test: { name: 'mcp', environment: 'node', pool: 'forks', testTimeout: 30_000,
+                globalSetup: ['packages/testkit/src/global/mysql.global.ts'],
+                setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
+                include: ['apps/server/test/mcp/**/*.mcp.spec.ts'] } },
+    ],
+  },
+});
+```
+
+Vitest 5 rules every author must know (each is enforced by an oxlint rule or a guard test where possible): `test.sequential` no longer exists (use `{ concurrent: false }`); `expect.poll()` rejects on timeout, which is exactly what eventual-state assertions need; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot` fail the test; `vi.mock`/`vi.hoisted` must be top level; `VITEST_WORKER_ID` is 1-based (schema names use it); glob thresholds do not inherit `perFile`, hence `perFile: true` repeated per glob; `coverage.include` is mandatory or untested files are invisible; `toHaveTextContent` is strict equality in Browser Mode (use `toMatchTextContent` for patterns); config files are not searched in parent directories, so every package script passes `--config ../../vitest.config.ts --project <name>`; `globalSetup` receives a `TestProject` and hands values to workers with `project.provide()` / `inject()` (typed through `declare module 'vitest' { interface ProvidedContext { … } }`).
+
+Per-project invocation is the norm: `pnpm test --project unit`, `pnpm test --project integration`, and so on. `pnpm test:all` runs the projects that need no Docker on the developer machine (`unit`, `guard`, `component`), and `pnpm test:docker` runs the rest (`integration`, `property`, `chaos`, `contract`, `mcp`). The property runs read `IRIDIUM_PROP_RUNS` (200 on PR, 5000 nightly), `IRIDIUM_PROP_DB_RUNS` / `IRIDIUM_PROP_DB_COMMANDS` for the MySQL-backed models (20 × 60 on PR, 200 × 300 nightly) and `IRIDIUM_PROP_SIZE` (`'='` on PR, `'+2'` nightly); `IRIDIUM_MYSQL_IMAGE` selects `mysql:9.7.2-oraclelinux9` (default) or `mysql:8.4.11` (nightly lane).
+
+### Playwright 1.63.0 configuration
+
+```ts
+// playwright.config.ts (repo root)
+import { defineConfig, devices } from '@playwright/test';
+const CI = !!process.env.CI;
+export default defineConfig({
+  testDir: 'apps/e2e',
+  fullyParallel: true,
+  forbidOnly: CI,
+  retries: CI ? 2 : 0,
+  workers: CI ? 4 : undefined,
+  reporter: CI ? [['blob'], ['github']] : [['html', { open: 'never' }]],
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  use: { baseURL: process.env.IRIDIUM_E2E_ORIGIN ?? 'http://127.0.0.1:4000', trace: 'on-first-retry', video: 'retain-on-failure',
+         extraHTTPHeaders: { 'X-Iridium-Client-Version': process.env.IRIDIUM_E2E_CLIENT_VERSION ?? '0.0.0-e2e' } },
+  webServer: process.env.IRIDIUM_E2E_EXTERNAL_SERVER ? undefined : {
+    command: 'node apps/server/dist/main.mjs serve',                     // the built bundle, never the Vite dev server
+    url: 'http://127.0.0.1:4000/readyz', reuseExistingServer: !CI, timeout: 120_000,
+    env: { NODE_ENV: 'test', PUBLIC_ORIGIN: 'http://127.0.0.1:4000', COLLAB_DEBOUNCE_MS: '100', COLLAB_MAX_DEBOUNCE_MS: '500' },
+  },
+  projects: [
+    { name: 'setup', testMatch: /apps\/e2e\/setup\/.*\.setup\.ts/ },
+    { name: 'chromium', testMatch: /apps\/e2e\/web\/.*\.e2e\.spec\.ts/, dependencies: ['setup'], use: { ...devices['Desktop Chrome'] } },
+    { name: 'electron', testMatch: /apps\/e2e\/electron\/.*\.e2e\.spec\.ts/, dependencies: ['setup'], workers: 1 },
+    { name: 'firefox-smoke', testMatch: /apps\/e2e\/web\/.*\.e2e\.spec\.ts/, grep: /@smoke/, dependencies: ['setup'], use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit-smoke',  testMatch: /apps\/e2e\/web\/.*\.e2e\.spec\.ts/, grep: /@smoke/, dependencies: ['setup'], use: { ...devices['Desktop Safari'] } },
+  ],
+});
+```
+
+- The `setup` project creates the bootstrap server administrator with the production CLI (`iridium admin create-user --server-admin`), then creates `editorA`, `editorB`, `viewer`, `outsider` through `POST /api/v1/admin/users` and consumes their set-password links through `POST /auth/set-password`, imports the demo vault fixture through the real import job (`POST /imports` → `PUT /imports/:jobId/upload` → `POST /imports/:jobId/scan` → `POST /imports/:jobId/commit`), signs each role in through `POST /auth/sessions` and saves `apps/e2e/.auth/<role>.json` as `storageState`. No test-only seeding CLI exists in the product.
+- The `collab` fixture (`apps/e2e/fixtures/collab.ts`) extends `test` with `editors: [Page, Page, Page]` and `viewer: Page`, each from `browser.newContext({ storageState })`. Tests that touch a shared fixture note declare `{ lock: 'note:<fixture-id>' }` (Playwright 1.63 test locks), never `serial` mode.
+- Web tests run against the production-shaped bundle: `apps/web/dist` served at `/app/*` by the built server with the nonce CSP in force. The Vite dev server is never the E2E target.
+- **`IRIDIUM_E2E` is never passed to the server process.** It is a *build-time* flag of the web bundle (the `vite build` that produces `apps/web/dist` for the E2E lane, where it gates the `window.__iridiumHostContract` runner and the editor host's `WeakRef` registry) and a *launch-time* flag of the Electron main process (updater and single-instance lock off, 07-client-applications.md §7.15). `apps/server/dist/main.mjs serve` needs only `NODE_ENV=test`, which is what enables the fault registry and the `/__test__` namespace; the server's `EnvSchema` knows the name `IRIDIUM_E2E` and handles it explicitly rather than ignoring it (02-system-architecture.md, "Configuration"; 11-operations-and-deployment.md, "Configuration and secrets"), so the harness neither sets it on the server nor relies on it being tolerated there. Every other harness knob in this section carries a reserved harness prefix (D10-5), for the same reason: the `child` and `container` modes spawn the production binary with the whole job environment.
+- The `electron` project launches `apps/desktop/dist/main/index.mjs` with `_electron.launch({ args, env: { IRIDIUM_SERVER_URL, IRIDIUM_E2E: '1', IRIDIUM_USER_DATA: <tmp> }, timeout: 30_000 })`; `IRIDIUM_E2E=1` disables the updater and the single-instance lock so three instances can run on one machine. Linux runs under `xvfb-run --auto-servernum` after `npx playwright install-deps chromium`. `electron-playwright-helpers 3.1.2` is used only for `stubDialog`/`stubMultipleDialogs`, menu clicks and `waitForWindowByTitle`; its `ipcRenderer*`/`ipcMain*` helpers require `nodeIntegration: true` and are banned by lint (`no-restricted-imports` on those named exports).
+- **Frame counters must relay to the real server.** `page.routeWebSocket` *intercepts socket creation*: a route handler that does not call `ws.connectToServer()` mocks the socket, and the page then talks to nobody. A naive "count the frames" handler would therefore give `viewer-readonly.e2e` an editor that never syncs and a test that passes for the wrong reason. The one sanctioned form lives in `apps/e2e/fixtures/frame-counter.ts` and every test uses it:
+
+  ```ts
+  export async function countFrames(page: Page) {
+    const count = { in: 0, out: 0, routed: 0 };
+    await page.routeWebSocket(/\/collab/, ws => {
+      count.routed++;
+      const server = ws.connectToServer();                       // required: relay, never mock
+      ws.onMessage(m => { count.out++; server.send(m); });
+      server.onMessage(m => { count.in++; ws.send(m); });
+    });
+    return count;
+  }
+  ```
+
+  `viewer-readonly.e2e` asserts `count.out` does not grow across a keystroke while collaboration keeps working; `vault-isolation.e2e` asserts `count.routed === 0` — that the handler was never invoked at all, which is the honest form of "no socket was opened", since a counter can only count frames on a socket that exists.
+- Sharding: `--shard=i/4` for `chromium` in CI; blob reports merged by `playwright merge-reports` in the `merge-reports` job.
+
+### Test file conventions
+
+| Convention | Rule |
+|---|---|
+| File name | `<area>.<subject>.<layer>.spec.ts[x]` where `layer ∈ {unit, component, integration, prop, chaos, contract, mcp, e2e, guard, drill}` — `drill` is a rehearsal of a shipped operator command and runs in the `chaos` project, whose `include` glob is therefore `*.{chaos,drill}.spec.ts` (`ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.key-rotation.drill`, `ops.upgrade-rehearsal.drill`). The skeleton (A47) spells the drill `ops.backup-restore.drill.spec`, which is that basename plus the `.spec` file suffix, so the canonical *name* is `ops.backup-restore.drill` and no `.chaos` variant of it exists. A test's name is its file basename minus `.spec.ts[x]`, so the skeleton's dotted names are basenames; the only exceptions are property files co-located in the package that supplies their area prefix (`crdt.dominates.prop` in `packages/crdt/src/dominates.prop.spec.ts`), and every one of them is enumerated in "Inventory completeness", which is the authority mapping name → path. Where another section names a test without its layer segment (12-milestones.md §13.5's `status-pill.transitions`, `preview.inertness`, `markdown.commonmark`), the canonical name is that name plus the layer of the project that runs it. |
+| Location | Unit, pure property and component tests co-located under `src/`; server integration/chaos/contract/mcp/property trees under `apps/server/test/<project>/`; guard tests either under `apps/server/test/guards/` or co-located as `*.guard.spec.ts` in the package whose invariant they protect (both are collected by the `guard` project, which selects by path); E2E under `apps/e2e/{setup,web,electron,perf}/`; load under `apps/server/test/load/`. |
+| Requirement tags | The top-level `describe` title carries `[spec:<row-id>]` for spec rows (`concurrent-editing`, `initialization-reconnection`, `viewer-enforcement`, `vault-isolation`, `live-revocation`, `durable-saving`, `structural-concurrency`, `portability-and-safety`, `backup-recovery`) and `[hp:HP-n]` for hard properties; a test that defends neither carries `[area:<name>]` instead (`[area:ops]`, `[area:jobs]`, `[area:admin]`, `[area:links]`, `[area:vaults]`, `[area:non-goals]`, `[area:docs]`, …), which satisfies the "every file is tagged" rule without claiming a row it does not prove. Playwright tests use `{ tag: ['@spec-<row-id>', '@hp-n', '@area-<name>'] }`. `guards.acceptance-map.guard.spec.ts` parses these tags; only `[spec:…]` and `[hp:…]` are checked against the map. |
+| Eventual state | `expect.poll(...)` or a testkit `waitFor` with an explicit timeout; `setTimeout` sleeps are banned in test files by oxlint `no-restricted-syntax` (the `ManualClock` and Toxiproxy toxics replace them). |
+| Mocks | `vi.mock` only in the `unit` and `component` projects, and only for I/O adapters and host seams — the `component` project's own inventory depends on them (the fake provider behind `status-pill.transitions.component`, the injected `host.shell.openExternal` spy behind `preview.inertness.component`, the msw handlers behind `MemoryHost`). The `integration`/`chaos`/`contract`/`mcp`/`property` projects never mock first-party modules: `guards.no-mocks-outside-unit.guard.spec.ts` greps for `vi.mock(` and for `vi.spyOn(` on a first-party module specifier, and for any `msw` import, outside `*.{unit,component}.spec.ts[x]`. |
+| Snapshots | File snapshots (`await expect(x).toMatchFileSnapshot(...)`) for golden hast/mdast/OpenAPI/`webPreferences`/preload-surface artefacts; inline snapshots banned for anything larger than one line; CI runs with `--update=false` semantics (obsolete or mismatched snapshots fail). |
+| Lint | oxlint `vitest` and `jest` plugin rules (`no-focused-tests`, `no-disabled-tests` except with an issue URL, `expect-expect`, `no-conditional-expect`, `require-to-throw-message`, `valid-expect`) and Playwright rules (`no-wait-for-timeout`, `no-networkidle`, `expect-expect`, `no-conditional-in-test`). |
+## `@iridium/testkit`
+
+`packages/testkit` is the single entry point for every harness. It is a private workspace package with the boundary tag `node` (see 02-system-architecture.md): it may import `@iridium/contracts`, `@iridium/crdt`, `@iridium/markdown`, `@iridium/collab-client` and `@iridium/api-client`, and it is a `devDependency` of `apps/server`, `apps/e2e` and `tooling/mutation` only. `apps/server`'s production code never imports it (`turbo boundaries` + `knip --production` enforce this), and the package publishes no runtime behaviour that exists in the product — it only *drives* the product. The consequence for test placement is explicit: a spec file may import `@iridium/testkit` only if it lives in `apps/server`, `apps/e2e` or `tooling/mutation`, which is why the `unit`-project mirrors of the persistence and convergence models sit under `apps/server/src/collab/persistence/` rather than in `packages/crdt`.
+
+### File layout
+
+```
+packages/testkit/
+  src/
+    index.ts                          public barrel
+    env/start-test-env.ts             startTestEnv()
+    env/mysql.ts                      MySqlContainer + template schema + per-worker clones
+    env/toxiproxy.ts                  ToxiProxyContainer + named proxies
+    global/mysql.global.ts            Vitest globalSetup (integration | property | chaos | contract | mcp)
+    global/toxiproxy.global.ts        Vitest globalSetup (chaos)
+    global/worker-schema.setup.ts     Vitest setupFiles: per-worker schema + truncation
+    server/start-server.ts            startServer({ mode }) → TestServer
+    server/in-process.ts              buildApp({ mode: 'in-process' }) + listen(0)
+    server/child.ts                   spawn(process.execPath, ['dist/main.mjs','serve'])
+    server/container.ts               docker compose / single container for load + Schemathesis
+    clients/origin-ws.ts              OriginWebSocket: `ws` subclass that injects Origin
+    clients/note-client.ts            NoteClient (real NoteSession + SaveStateMachine)
+    clients/vault-channel-client.ts   VaultChannelClient
+    clients/rest-client.ts            restClient(principal) over openapi-fetch
+    clients/mcp-client.ts             mcpClient(token, era) — handler.fetch and real socket
+    clients/stdio-bridge-client.ts    bridgeClient() over StdioClientTransport
+    seed/seed.ts                      product-path seeding (CLI + REST + import job)
+    seed/kernel.ts                    the M1 kernel cast and vault
+    auth/tickets.ts                   ticket helpers (batch, expire, reuse)
+    auth/sessions.ts                  web cookie jar + desktop bearer sessions, step-up
+    harness/sim-net.ts                SimNet — socketless multi-client Yjs harness
+    harness/converge.ts               convergence oracles
+    faults/points.ts                  FAULT constants (mirrors apps/server/src/ops/faults.ts)
+    faults/control.ts                 fault arming/disarming over the test-only control route
+    clock/manual-clock.ts             ManualClock implements @iridium/contracts Clock
+    db/invariants.ts                  assertNoteInvariants(), assertAuditChain()
+    db/corrupt.ts                     corruptDeliberately() — the only raw-write helper
+    matchers/to-match-openapi.ts      expect().toMatchOpenApi(operationId, status)
+    matchers/to-dominate.ts           expect(sv).toDominate(otherSv)
+    fixtures/index.ts                 typed fixture accessors
+    fixtures/vaults/demo/**           42-note demo vault (markdown + attachments)
+    fixtures/vaults/obsidian-sample/**Obsidian export with .obsidian/, .trash/, .canvas
+    fixtures/hostile/**               hostile Markdown corpus (.md + expectations.json)
+    fixtures/commonmark/spec.json     CommonMark 0.31.2 examples (vendored from commonmark-spec)
+    fixtures/gfm/**                   cmark-gfm extension examples for tables/tasks/strikethrough/footnotes
+    fixtures/pathological/**          quadratic / deep-nesting inputs with size and time budgets
+    msw/handlers.ts                   msw 2.15.0 handlers generated from openapi/openapi.json
+```
+
+### Environment: `startTestEnv`
+
+`startTestEnv` is called once per Vitest run from a `globalSetup` and hands its coordinates to workers with `project.provide()`. It never starts a server.
+
+```ts
+export interface TestEnvOptions {
+  mysqlImage?: string;          // default process.env.IRIDIUM_MYSQL_IMAGE ?? 'mysql:9.7.2-oraclelinux9'
+  toxiproxy?: boolean;          // chaos project only
+  network?: StartedNetwork;     // shared Docker network when toxiproxy is on
+}
+
+export interface TestEnv {
+  mysql: { rootUri: string; host: string; port: number; templateSchema: string };
+  mysqlViaToxiproxy?: ProxyHandle;        // upstream mysql:3306 on the shared network
+  toxiproxy?: { client: Toxiproxy; createProxy(name: string, upstream: string): Promise<ProxyHandle> };
+  stop(): Promise<void>;
+}
+
+export interface ProxyHandle {
+  uri: string;                                       // connection string through the proxy
+  setEnabled(enabled: boolean): Promise<void>;
+  addToxic(t: ToxicSpec): Promise<{ remove(): Promise<void> }>;
+  removeAllToxics(): Promise<void>;
+}
+```
+
+- The container is `new MySqlContainer(image).withDatabase('iridium').withUsername('iridium').withUserPassword(...).withRootPassword(...).withTmpFs({ '/var/lib/mysql': 'rw' })` plus `withCopyFilesToContainer` for `infra/docker/mysql/my.cnf` and `infra/docker/mysql/init/01_roles.sql`, so the three MySQL roles of skeleton A8 (`iridium_app`, `iridium_migrator`, `iridium_backup`) exist in tests exactly as in production. `tmpfs` is what makes a migrate-per-worker strategy affordable.
+- `withReuse()` is never used. Schema names are per run and per worker.
+- Migrations run once into the template schema `iridium_tpl` with the `iridium_migrator` credentials through the product's own `iridium migrate up` code path (not a raw SQL file), then `project.provide('mysql', …)`.
+- `global/worker-schema.setup.ts` runs in each worker: it creates `iridium_w${process.env.VITEST_WORKER_ID}` (1-based in Vitest 5) by `CREATE DATABASE` + `iridium migrate up`, and registers an `afterEach` that truncates every table in FK-safe order unless the test file opted into `keepSchema()`. Cloning by `mysqldump | mysql` from the template is the documented fallback if per-worker migration becomes the dominant cost; the decision point is measured, not assumed.
+- Toxiproxy is `new ToxiProxyContainer('ghcr.io/shopify/toxiproxy:2.12.0')` on the same `Network()` as MySQL; proxies are named `mysql` (upstream `mysql:3306`) and `collab` (upstream `server:<port>` for the child-process server, created after the server starts).
+
+### Server boot: `startServer`
+
+One boot path, three modes, identical code — this is principle 2 made concrete.
+
+```ts
+export type ServerMode = 'in-process' | 'child' | 'container';
+
+export interface StartServerOptions {
+  mode: ServerMode;
+  env: TestEnv;
+  db?: 'direct' | 'toxiproxy';                    // which DATABASE_URL the server gets
+  collab?: { debounceMs?: number; maxDebounceMs?: number; ticketTtlS?: number };
+  limits?: Partial<LimitsOverrides>;              // only the knobs @iridium/contracts/limits exposes as env
+  faults?: FaultSpec[];                           // IRIDIUM_FAULT value, child/container modes
+  clock?: 'real' | ManualClock;                   // in-process only
+  extraEnv?: Record<string, string>;
+}
+
+export interface TestServer {
+  origin: string;                  // http://127.0.0.1:<port>
+  wsUrl: string;                   // ws://127.0.0.1:<port>/collab
+  port: number;
+  mode: ServerMode;
+  db: Kysely<Database>;            // iridium_app credentials, for assertions
+  dbRoot: Kysely<Database>;        // iridium_migrator, for corruptDeliberately() only
+  rest(p: Principal | Credentials): RestClient;
+  mcp(token: string, era?: McpEra): Promise<McpTestClient>;
+  client(user: SeededUser, noteId: string, o?: NoteClientOptions): Promise<NoteClient>;
+  vaultChannel(user: SeededUser, vaultId: string): Promise<VaultChannelClient>;
+  tickets: TicketHelpers;
+  sessions: SessionHelpers;
+  faults: FaultControl;
+  seed: SeedApi;
+  metrics(): Promise<Record<string, number>>;     // parsed /metrics
+  waitReady(): Promise<void>;                     // polls /readyz
+  kill(signal?: 'SIGKILL' | 'SIGTERM'): Promise<void>;
+  stop(): Promise<void>;                          // graceful; in-process calls app.close()
+  restart(o?: { faults?: FaultSpec[]; collab?: StartServerOptions['collab'];
+                extraEnv?: Record<string, string> }): Promise<void>;   // child/container only
+  stdout: string[]; stderr: string[];             // child mode, for assertions on fail-fast messages
+}
+```
+
+`restart()` is the "kill, then bring it back exactly as it was" primitive the durability suites and the M1 gate are written against: it re-spawns (or re-runs the container) on the **same** schema, the same port and the same attachment directory, optionally with a different fault or debounce set, and resolves only after `waitReady()`. It exists in `child` and `container` modes only — `in-process` cannot be `SIGKILL`ed, so a restart there is `stop()` plus a fresh `startServer` and the tests say which they mean. `kernel.smoke.integration` (the literal spec §10 sentence, whose last two steps are `srv.kill()` then `srv.restart()`) and the child-process half of `collab.restart-no-duplication.integration` therefore run in child mode inside the `integration` project; every other file in that project uses `in-process`.
+
+| Mode | How it starts | What it is for | Limitations |
+|---|---|---|---|
+| `in-process` | `const app = await buildApp({ mode: 'in-process' }); await app.listen({ port: 0, host: '127.0.0.1' })` | `integration`, `property`, `contract`, `mcp` projects; fastest; gives direct access to singletons for white-box assertions (`app.collab.gateway`, `app.authzBus`) | cannot be `SIGKILL`ed; `clock: ManualClock` only works here |
+| `child` | `spawn(process.execPath, ['apps/server/dist/main.mjs', 'serve'], { env })` after `turbo run build --filter=@iridium/server`; readiness by polling `/readyz` | the whole `chaos` project — the only mode that can prove HP-1/HP-2, because it can be killed mid-transaction — plus `kernel.smoke.integration` and the child-process half of `collab.restart-no-duplication.integration` in the `integration` project, which is why that job builds the server too (L3's "server in-process" is the default, not an exclusive) | no in-process handles; faults must be passed as `IRIDIUM_FAULT` at spawn time or armed over the control route |
+| `container` | `docker compose -f infra/compose.yaml --profile full up` (load), the `iridium-server:ci` image the `integration` job builds (Schemathesis light) or the release image (Schemathesis full, compose-boot nightly, backup/restore drill) | k6 load, Schemathesis full, `compose.prod` clean-VM boot, backup/restore drill | slowest; no fault points (`NODE_ENV=production` disables the registry) |
+
+A guard test, `guards.one-boot-path.guard.spec.ts`, greps `apps/server/src` for a second `Fastify(` / `new Hocuspocus(` construction site and for `NODE_ENV === 'test'` branches outside `src/ops/faults.ts` and `src/config/env.ts`, so test-only behaviour cannot leak into the product boot path.
+
+### Fault injection: `IRIDIUM_FAULT`
+
+The registry lives in the product (`apps/server/src/ops/faults.ts`) and is inert unless `NODE_ENV === 'test'`; `config/env.ts` **refuses to start** when `IRIDIUM_FAULT` is set and `NODE_ENV === 'production'` (asserted by `config.refuses-faults-in-prod.unit.spec.ts`). Points are referenced through `FAULT` constants in `@iridium/testkit/faults/points.ts`, never as string literals in tests, and `guards.fault-registry.guard.spec.ts` asserts the two lists are identical.
+
+| Fault point | Spec | Where it fires | What it proves |
+|---|---|---|---|
+| `store.throw` | `store.throw[:n]` — throw on the next `n` writer transactions (default ∞ until disarmed) | `NoteWriter.flush()` before `BEGIN` | HP-1: a failed persistence never yields `persisted`; `persist-failed {reason:'db_error'}` reaches the client; Hocuspocus keeps the document and the writer retries |
+| `store.crash-before-commit` | one-shot | inside the writer transaction, after the `INSERT … note_updates` and before `COMMIT` | HP-2: restart shows no row and no ack; the client's update is still unsaved and resends on reconnect |
+| `store.crash-after-commit-before-ack` | one-shot | after `COMMIT`, before `broadcastStateless({t:'persisted'})` | HP-1/HP-2: the row exists, the client never saw `saved`, and the post-restart sync makes it `saved` — the ack is conservative, never optimistic |
+| `store.slow:<ms>` | e.g. `store.slow:3000` | `await delay(ms)` inside the transaction, after the insert, before `COMMIT` | HP-1 ordering: `saved` never precedes COMMIT (the test compares the ack's monotonic timestamp with the row's first visibility on a second `READ COMMITTED` connection; see CH-5) |
+| `store.kill-after-ack` | one-shot | the `/collab` socket layer, immediately after `persisted` is written to the wire and before returning to the event loop | HP-1/HP-2: the process dies with the ack on the wire and **no further server code executed** — a deterministic kill window, which a test-side kill cannot be (see CH-1) |
+| `compact.throw` | `compact.throw[:n]` | `Compactor.run()` before writing the snapshot | projections/revisions fail without affecting durability: `projected` is absent, `persisted` still arrives, `note_docs.projected_seq` unchanged, `/readyz` stays green, `projection_timeouts_total` unchanged but `compaction_failures_total` increments |
+| `ws.drop-after-ack` | one-shot per connection | the `/collab` socket layer, after `persisted` is written to the wire | the client's reconnect + `baseline` restores the correct `saved` state without a duplicate write |
+| `auth.slow:<ms>` | | `onAuthenticate` | ticket TTL and admission-budget races; revocation landing during authentication |
+
+Crash points call `process.kill(process.pid, 'SIGKILL')` so the process dies with no `finally`, no drain and no `Server.destroy()` flush — the only honest way to test HP-2 (`Server.destroy()` flushes pending stores, which would make the test vacuous).
+
+Faults can be set at spawn (`IRIDIUM_FAULT=store.slow:3000,ws.drop-after-ack`) or armed at runtime through a control route that exists **only** when `NODE_ENV === 'test'`: `POST /__test__/faults {point, arg?, count?}` and `DELETE /__test__/faults`. `faults.arm(FAULT.storeThrow, { count: 1 })` wraps it and returns a disposable handle; `routes.test-namespace-absent.integration.spec.ts` asserts the whole `/__test__` prefix returns 404 when `NODE_ENV=production`, and the route-policy boot assertion (skeleton A27) refuses to start if any `/__test__` route lacks `config.auth = 'test-only'`.
+
+### Multi-client collaboration harness
+
+Two harnesses with different fidelity, used for different questions.
+
+**`NoteClient` — real wire, real server.** Built on `@iridium/collab-client`'s `NoteSession`, so integration and chaos tests exercise the exact provider, codec and `SaveStateMachine` that ship in the UI.
+
+```ts
+export interface NoteClient {
+  userId: string; sessionId: string;
+  ydoc: Y.Doc; text: Y.Text; provider: HocuspocusProvider; undo: Y.UndoManager;
+  saveState: SaveState;                                  // the real SaveStateMachine's current state
+  states: SaveState[];                                   // full transition log, for ordering assertions
+  stateless: StatelessMessage[];                         // every decoded server → client message, in order
+  closes: { code: number; reason: CollabCloseReason }[];
+
+  typeAt(pos: number, s: string): void;
+  deleteAt(pos: number, len: number): void;
+  marker(tag: string): string;                           // inserts and returns `⟦tag:<n>⟧`
+  markerCount(tag: string): number;
+
+  waitFor(state: SaveState | ((s: SaveState) => boolean), o?: { timeoutMs?: number }): Promise<void>;
+  waitForAck(seq?: bigint): Promise<{ seq: bigint; sv: Uint8Array }>;   // resolves on `persisted`
+  waitForStateless<T extends StatelessType>(t: T): Promise<Extract<StatelessMessage, { t: T }>>;
+  waitSynced(): Promise<void>;
+  waitClosed(): Promise<{ code: number; reason: CollabCloseReason }>;
+
+  sv(): Uint8Array;                                      // Y.encodeStateVector(ydoc)
+  disconnectSocket(): Promise<void>;                     // socket-level, keeps pending updates
+  reconnectSocket(): Promise<void>;
+  sendRaw(bytes: Uint8Array): void;                      // hostile-client tests
+  sendStateless(payload: unknown): void;                  // malformed stateless payloads
+  setAwareness(state: unknown): void;                     // awareness spoofing tests
+  close(): Promise<void>;
+}
+```
+
+- The WebSocket is `OriginWebSocket`, a `ws` 8.21.3 subclass that injects `Origin: <PUBLIC_ORIGIN>` (browsers send it; `ws` does not), so the CSWSH guard is exercised rather than bypassed. `new NoteClient(..., { origin: null })` omits the header and is used by `security.ws-origin.integration.spec.ts` to prove an absent `Origin` is rejected.
+- Tickets are obtained through the real `POST /auth/collab-tickets` with the client's real session. There is no test-only authentication path: `guards.no-test-auth.guard.spec.ts` greps `apps/server/src/auth` for any branch keyed on `NODE_ENV`.
+- `saveState` is the product's `SaveStateMachine`, not a reimplementation, so a bug in the indicator is a test failure rather than a divergence between harness and UI.
+- `provider.configuration.flushDelay` (update batching) and Hocuspocus `debounce`/`maxDebounce` are set through options, never monkey-patched.
+
+**`SimNet` — socketless, deterministic, for property tests.** A port of Yjs's own `tests/testHelper.js` design into a form fast-check can drive: N peer `Y.Doc`s, per-peer inbound queues, a server `Y.Doc`, and the **real** `NoteWriter` + loader + compactor running against either MySQL (project `property`) or an in-memory `CollabPersistence` double (project `unit`).
+
+```ts
+export interface SimNet {
+  peers: SimPeer[];                    // { id, doc, text, undo, queue }
+  server: { doc: Y.Doc; head(): bigint; loadedFromDb: boolean };
+  insert(peer: number, pos: number, s: string): void;
+  delete(peer: number, pos: number, len: number): void;
+  undo(peer: number): void; redo(peer: number): void;
+  deliverOne(peer: number): void;      // pops one queued message
+  deliverAll(): void;                  // drains every queue until quiescent
+  disconnect(peer: number): void; reconnect(peer: number): void;   // y-protocols sync on reconnect
+  persist(): Promise<void>;            // runs the real writer FIFO to completion
+  compact(): Promise<void>;            // runs the real compactor (snapshot + projection)
+  restartServer(): Promise<void>;      // drop the server doc, reload from persisted state
+  reloadClient(peer: number): Promise<void>;  // fresh Y.Doc, sync from server state
+  oracles(): ConvergenceReport;
+}
+```
+
+### Seeding, tickets, sessions
+
+Seeding goes through the product's own paths (principle 8); `SeedApi` is a thin recorder of what it created.
+
+```ts
+export interface SeedApi {
+  admin(): Promise<SeededUser>;                          // `iridium admin create-user --server-admin` (CLI)
+  user(o: { email: string; role?: 'member' }): Promise<SeededUser>;  // POST /admin/users + POST /auth/set-password
+  vault(o: { name: string; members: Array<[SeededUser, VaultRole]> }): Promise<SeededVault>;  // POST /vaults + PUT members
+  note(o: { vault: SeededVault; parentId?: string; name: string; markdown?: string }): Promise<SeededNote>;  // POST /vaults/:id/nodes
+  importFixture(o: { fixture: 'demo' | 'obsidian-sample'; target: ImportTarget; decisions?: ImportDecisions }): Promise<ImportOutcome>;
+  kernel(): Promise<KernelSeed>;                         // admin, editorA, editorB, viewer, outsider; vault V; note N
+  token(o: { owner: SeededUser; vaults: 'all' | SeededVault[]; expiresInDays?: number }): Promise<{ secret: string; tokenId: string }>;
+}
+```
+
+`kernel()` is the cast used by the whole M1 suite and by the Playwright `setup` project: server admin `admin@iridium.test`, `editorA@`, `editorB@`, `editorC@`, `viewer@` (all members of vault `V` with the obvious roles) and `outsider@` (member of nothing). `note N` is created by importing a one-file fixture containing the marker `⟦IMPORT-MARK⟧`, so the "duplicated initial content" bug class is detectable by a marker count in every test that touches it.
+
+```ts
+export interface TicketHelpers {
+  issue(user: SeededUser, count?: number): Promise<string[]>;      // POST /auth/collab-tickets
+  expire(ticket: string): Promise<void>;                            // advances the TicketStore clock past TTL
+  reuse(ticket: string): Promise<{ firstOk: boolean; secondOk: boolean }>;
+}
+export interface SessionHelpers {
+  signInWeb(c: Credentials): Promise<CookieJar>;                    // POST /auth/sessions {client:'web'}
+  signInDesktop(c: Credentials): Promise<{ token: string }>;         // {client:'desktop'}
+  stepUp(jar: CookieJar, password: string): Promise<void>;           // POST /auth/reauthenticate
+  revokeAll(user: SeededUser): Promise<void>;                        // POST /admin/users/:id/revoke-sessions
+  ageOut(user: SeededUser, field: 'idle' | 'absolute' | 'lastAuthenticatedAt'): Promise<void>;
+}
+```
+
+`ageOut` is the one place that writes to `sessions` directly; it is implemented inside `db/corrupt.ts`'s audited helper (`corruptDeliberately('age-session', …)`) and logs a line so a reviewer can see that the test is manipulating state the product would not.
+
+### Deterministic time
+
+`@iridium/contracts` exports `interface Clock { now(): Date; monotonicMs(): number; setTimeout(fn, ms): Disposable }` and every server module takes it by injection (`guards.no-direct-date.guard.spec.ts` bans `Date.now()`/`new Date()`/bare `setTimeout` in `apps/server/src` outside `ops/clock.ts`). `ManualClock` implements it:
+
+```ts
+const clock = new ManualClock({ start: '2026-09-11T12:00:00.000Z' });
+await clock.advance(61_000);     // fires due timers in order and awaits their microtasks
+clock.jump('2026-09-12T00:00:00.000Z');
+```
+
+`ManualClock` drives ticket expiry, session idle/absolute expiry, token expiry, the 15-minute ± 3-minute `onTokenSync` re-validation, retention jobs (trash purge, update-log prune, audit archive, access-log partitions) and PAT `last_used_at` flushing without any sleeping. `vi.useFakeTimers()` is permitted only in the `unit` project for debounce/backoff logic; in every DB-backed project the clock is injected, because fake timers and a real mysql2 pool do not coexist. Tests that genuinely must observe wall-clock behaviour (the ≤ 1 s revocation bound of HP-3) use `expect.poll` with an explicit deadline and a real clock, and that is stated in the test name.
+
+### Matchers and oracles
+
+| Helper | Shape | Used by |
+|---|---|---|
+| `toMatchOpenApi(operationId, status)` | `SwaggerParser.dereference()` of `packages/contracts/openapi/openapi.json` once per worker; per-`(operationId, status)` ajv 8.20.0 validators (`ajv-formats`, `strict: false`, OpenAPI-3.1 `$dynamicRef` support); asserts status, `content-type` and body, and fails when the spec has no such operation/status (so an undocumented response is a test failure) | every REST assertion in `integration`, `contract` and Playwright API calls |
+| `toDominate(other)` | `@iridium/crdt.dominates(a, b)` with a readable diff of the first offending `clientID → clock` pair | HP-1 assertions |
+| `toConverge()` | runs every oracle in `harness/converge.ts` over a `SimNet` or a set of `NoteClient`s | convergence suites |
+| `assertNoteInvariants(db, noteId)` | the C.5 invariants: `head_seq = GREATEST(snapshot_through_seq, MAX(seq))`, `snapshot_through_seq <= head_seq`, `projected_seq <= head_seq`, exactly one `initialized_at`, a revision row at `head_seq` for unloaded notes, no `\r` in `note_projections.markdown` | every chaos test teardown, `ops.backup-restore.drill` |
+| `assertAuditChain(db, chainId?)` | recomputes the HMAC chain exactly as `iridium audit verify-chain` does and compares `audit_chain_heads` | `audit.chain.integration`, restore drill |
+
+`afterEach` in the `integration`, `property` and `chaos` projects runs `assertNoteInvariants` for every note the test touched and fails the test if an invariant broke, so invariant violations are attributed to the test that caused them instead of surfacing later as a mystery.
+
+---
+## Named test inventory — the nine acceptance rows
+
+The feature spec's section 9 table is the contract. Each row has a stable id, named tests in named layers, and a milestone at which the row turns green (milestone scope and gating live in 12-milestones.md). `guards.acceptance-map.guard.spec.ts` reads this table from `docs/acceptance-map.json` — generated by `scripts/build-acceptance-map.ts`, which parses the overview, hard-property and "Specified rules outside the nine rows" tables of `plan/10-testing-and-quality.md` plus the guard table and the "Inventory completeness" tables into JSON, and which is a step of `pnpm gen`, so `gen.drift.guard` fails whenever the prose table and the committed JSON disagree — then walks every `*.spec.ts[x]` file collecting `[spec:<row-id>]`, `[hp:HP-n]` and `[area:<name>]` tags from top-level `describe` titles and Playwright `{ tag: [...] }` annotations, and fails when:
+
+1. a row id has no test in a required layer **that is due** — every map entry is `{rowId, layer, sinceMilestone, tests[]}` and the guard compares `sinceMilestone` against the milestone named in the committed `docs/milestones/CURRENT` file, so a layer whose milestone has arrived and whose test list is empty fails, while a layer that is not due yet does not,
+2. a test claims a `[spec:…]` row id or an `[hp:…]` property id that the map does not list,
+3. a hard-property id has no test in a required layer that is due (same `sinceMilestone` rule),
+4. a file under `apps/e2e/` or `apps/server/test/` carries neither a `[spec:…]`, an `[hp:…]` nor an `[area:…]` tag (untagged tests are allowed only in the `guard` project),
+5. a case name in `hostContractCases()` has no recorded pass in every host-contract harness whose milestone has arrived (decision ARCH-26 of 02-system-architecture.md; see "The `IridiumHost` contract suite"),
+6. a rule id in "Specified rules outside the nine rows" names a test that does not exist, or whose file does not carry the `[area:…]`/`[hp:…]`/`[spec:…]` tag that table states. `ruleId` is the map's third id namespace alongside `rowId` and `hpId`, and it exists because several rules the spec states plainly — the move/rename link warning, the `invalid_move` reason vocabulary, vault settings, single-process document ownership, the declared non-goals — are neither acceptance rows nor hard properties, and prose is exactly how a rule goes untested.
+
+Rules 1–4 and 6 are pure and filesystem-only, so they run in the `static` job. Rule 5 needs evidence produced by three different jobs, so the same guard spec runs a second time in `merge-reports` with `IRIDIUM_TEST_HOST_CONTRACT_REPORTS=reports/host-contract` pointing at the merged artifacts; with the variable unset the rule is skipped, and `merge-reports` asserts that it was set, so "skipped" can never be the silent default.
+
+The milestone axis is what makes the guard runnable on every PR: rows 1, 3, 5, 6 and 8 require L6/L7/L8 layers whose tests do not exist before M3–M5, and a guard that is red from M1 to M4 would be turned off long before it caught anything. The `[area:…]` form exists because a large part of the server suite defends no spec row and no hard property — `readyz.integration`, `metrics.integration`, `migrations.integration`, `jobs.scheduler.integration`, `admin.releases.integration`, `access-log.integration`, `compat.n-minus-1.integration` — and rule 4 must still apply to them; `[area:ops]` or `[area:jobs]` is a legal tag that rule 2 does not police, so those files are tagged honestly instead of being forced to claim a row they do not defend.
+
+`docs/milestones/CURRENT` contains one line (`M4`), is changed by the commit that opens a milestone, and is the only place the phasing lives; 12-milestones.md's exit criteria and this map therefore cannot disagree about when a layer becomes mandatory. That guard runs in the `static` job, so the map cannot rot.
+
+### Overview
+
+| # | Spec row (`row-id`) | Layers required (`L<n>@<milestone>`) | Named tests | Green at |
+|---|---|---|---|---|
+| 1 | Concurrent editing (`concurrent-editing`) | L3@M1, L4@M1, L6@M4 | `collab.convergence.integration`, `convergence.model.prop`, `three-editors.e2e` | M1 headless, M4 in browser |
+| 2 | Initialization/reconnection (`initialization-reconnection`) | L3@M1, L4@M1, L5@M1 | `collab.restart-no-duplication.integration`, `collab.baseline-on-connect.integration`, `collab.unload-reopen.integration`, `convergence.model.prop`, `collab.restart.chaos` | M1 |
+| 3 | Viewer enforcement (`viewer-enforcement`) | L1@M1, L3@M1, L8@M3, L6@M4, L7@M5 | `authz.matrix.unit`, `collab.viewer-enforcement.integration`, `authz.rest-viewer.integration`, `mcp.scopes.mcp`, `viewer-readonly.e2e`, `desktop.viewer-readonly.e2e` | M1 (WS + core REST), M2 (all routes), M3 (MCP), M4 (UI), M5 (desktop host) |
+| 4 | Vault isolation (`vault-isolation`) | L3@M1, L8@M3, L6@M4 | `authz.vault-isolation.integration` (incl. case *foreign-vault revision history*, @M2), `search.acl.integration`, `mcp.isolation.mcp` (incl. case *foreign-vault revision history*, @M3), `transfer.isolation.integration`, `vault-isolation.e2e` | M1 (core REST), M2 (all routes and note history), M3 (MCP) |
+| 5 | Live revocation (`live-revocation`) | L3@M1, L5@M1, L8@M3, L6@M4, L7@M5 | `collab.live-revocation.integration`, `collab.revocation-race.chaos`, `authz.revocation-rest.integration`, `mcp.revocation.mcp`, `revocation-while-open.e2e`, `desktop.revocation-while-open.e2e` | M1, M3, M4, M5 |
+| 6 | Durable saving (`durable-saving`) | L4@M1, L5@M1, L6@M4, L7@M5 | `collab.durable-ack.chaos`, `collab.graceful-shutdown.chaos`, `persistence.model.prop`, `save-state.machine.prop`, `saved-indicator.e2e`, `desktop.durable-save.e2e` | M1 headless, M4 in browser, M5 in the desktop host |
+| 7 | Structural concurrency (`structural-concurrency`) | L1@M2, L3@M2, L4@M2 | `contracts.paths.unit`, `tree.structural-concurrency.integration`, `tree.invalid-move.integration`, `tree.stale-resurrection.integration`, `contracts.paths.prop`, `hierarchy.model.prop`, `lock-order.integration` | M2 |
+| 8 | Portability and safety (`portability-and-safety`) | L1@M2, L3@M2, L4@M2, L2@M4, L6@M4, L7@M5 | `markdown.roundtrip.prop`, `markdown.commonmark.unit`, `markdown.xss-corpus.unit`, `markdown.sanitize.prop`, `markdown.pathological.unit`, `preview.inertness.component`, `transfer.fixtures.integration`, `import.unsafe-paths.unit`, `export.manifest.integration`, `security.hostile-markdown.e2e`, `desktop.hostile-markdown.e2e`, `desktop.hardening.e2e` | M4/M5 (hostile content), M6 (portability) |
+| 9 | Backup recovery (`backup-recovery`) | L5@M8, **on `nightly.yml › backup-restore-drill` only** | `ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos` | M8 |
+
+Row 9 is the one row whose lane is not `ci.yml`. Each of its three tests provisions its own MySQL container, runs the shipped `iridium backup`/`restore` commands and re-verifies a whole restored deployment, so its iteration budget below is "skipped" on a pull request by design; the row turns green on the nightly `backup-restore-drill` job and in `release.yml › drill`, and the M8 release gate reads it there (12-milestones.md §12.4). Rows 1–8 are green on `ci.yml` for every pull request from the milestone in their "Green at" column.
+
+### 1. Concurrent editing — `[spec:concurrent-editing]`
+
+**`apps/server/test/integration/collab.convergence.integration.spec.ts`**
+
+| Case | Procedure | Oracle |
+|---|---|---|
+| three editors converge at identical offsets | `editorA/B/C` open `note N`; all three `typeAt(0, …)` in the same macrotask; `deliverAll` via `Promise.all(waitForAck())` | all three `text.toString()` equal; `sv()` equal pairwise under `toDominate` in both directions; `Y.mergeUpdates(all note_updates.update_v1)` applied to a fresh doc equals each client |
+| adjacent and nested deletions | A deletes `[5,10)` while B inserts at `7` and C deletes `[3,12)` | converged text contains no partial grapheme; no client throws; `note_docs.head_seq` equals the number of committed coalesced rows |
+| no whole-file replacement exists | grep the generated `openapi.json` for any operation whose request body contains a full `markdown` field on a note-update path | only `POST /vaults/:vaultId/nodes` (creation) and `POST /notes/:noteId/revisions/:revisionId/restore` accept content; no `PUT /notes/:id` exists |
+| persisted projection matches clients | after `flush {}` on one connection, read `GET /notes/:id/markdown` | body equals every client's `text.toString()`; `ETag` equals `note_docs.head_seq`; `note_projections.revision === note_docs.projected_seq` |
+| updates are incremental, not snapshots | sum of `LENGTH(note_updates.update_v1)` after 200 single-character insertions | total bytes < 10 % of `LENGTH(note_docs.snapshot)` × 200, proving the log stores deltas, and row count ≤ 200 (coalescing may reduce it, never increase it) |
+| six editors, mixed roles | five editors + one viewer open the note; the viewer types | the five converge; the viewer's local doc diverges locally, its `saveState` becomes `rejected`, and the server state never contains the viewer's text |
+
+**`apps/server/test/property/convergence.model.prop.spec.ts`** — see "Property and model suites".
+
+**`apps/e2e/web/three-editors.e2e.spec.ts`** — three browser contexts from the `collab` fixture, `{ lock: 'note:kernel-N' }`; each context types at a different offset in `.cm-content`; oracle: identical `.cm-content` text content in all three, identical `data-revision` on the status pill, three distinct remote-caret decorations visible in each context, and `GET /notes/:id/markdown` equal to the editor text after the `Saved` pill appears.
+
+### 2. Initialization/reconnection — `[spec:initialization-reconnection]`
+
+**`apps/server/test/integration/collab.restart-no-duplication.integration.spec.ts`**
+
+| Case | Procedure | Oracle |
+|---|---|---|
+| two clients open an imported note simultaneously | `seed.importFixture` creates `note N` containing `⟦IMPORT-MARK⟧`; `Promise.all([server.client(editorA, N), server.client(editorB, N)])` | `markerCount('IMPORT-MARK') === 1` in both docs; `notes.initialized_at` set exactly once; exactly one `note_updates` row with `origin='import'` |
+| socket disconnect/reconnect | `a.disconnectSocket()`, type while offline, `a.reconnectSocket()` | marker count still 1; the offline edit appears exactly once; `a.saveState` goes `disconnected` → `syncing` → `saved` |
+| restart with clients connected | 20 in-process restarts (`server.stop()` then a new `startServer` on the same schema) and 5 child-mode restarts through `srv.restart()`; both clients reconnect after each | marker count 1 in both clients and in `note_projections.markdown`; `note_updates` has no gap |
+| restart with no clients connected | close both clients (triggers `unloadImmediately` store + unload), then restart, then reopen | marker count 1; a `note_revisions` row of kind `unload` exists at `head_seq` |
+| cold load path is the only initializer | arm `FAULT.storeThrow` during the import commit | the vault stays in `importing` status, the note is not visible, and a retried commit is idempotent (`import.commit.integration` covers the full matrix) |
+| reload from snapshot + tail | force a compaction (`flush`), then append 30 more updates, then restart | loaded text equals pre-restart text; the loader applied `applyUpdateV2(snapshot)` then exactly the rows with `seq > snapshot_through_seq` (asserted from the `collab_load_updates_applied` metric) |
+
+**`apps/server/test/integration/collab.baseline-on-connect.integration.spec.ts`** — on every `synced`, the client sends `baseline {}` and the server replies `persisted {seq, sv}` reflecting committed state; a client that connects with purely local unsynced updates reaches `saved` only after its own updates commit, never on the baseline alone; a client with no local updates reaches `saved` immediately from the baseline.
+
+**`apps/server/test/integration/collab.unload-reopen.integration.spec.ts`** — last-client disconnect stores and unloads (`getDocumentsCount()` drops to 0); reopening loads from MySQL, not from a cached doc; `beforeUnloadDocument` vetoes on **each** of the four conditions of 05-collaboration-and-durability.md — a non-empty update queue, a transaction in flight, a writer in `retrying`/`failed`/`backpressure`, and no `note_revisions` row at `head_seq` — and the checkpoint-at-head condition is the one that keeps invariant I-10 true, so it is asserted as its own case rather than folded into the queue case (`collab.unload-after-veto.integration.spec.ts` asserts each veto, the writer's `unloadRequested` completion path, and the eventual unload).
+
+**`apps/server/test/chaos/collab.restart.chaos.spec.ts`** — the same matrix against a `SIGKILL`ed child process instead of a graceful restart.
+
+### 3. Viewer enforcement — `[spec:viewer-enforcement]`
+
+**`packages/contracts/src/authz.matrix.unit.spec.ts` (`authz.matrix.unit`)** — the full role × permission matrix of skeleton A30 as a table-driven test over every `(role, permission)` pair including `is_server_admin`, plus the negative direction: a permission absent from the matrix throws at compile time (branded `Permission` type) and at runtime. 100 % per-file coverage gate; in Stryker's mutate scope.
+
+**`apps/server/test/integration/collab.viewer-enforcement.integration.spec.ts`**
+
+| Case | Oracle |
+|---|---|
+| viewer update over `/collab` | `connection.readOnly === true`; the viewer receives `SyncStatus(false)`; `note_updates` gains no row; other clients' text unchanged; the viewer's `saveState === 'rejected'` and its text remains locally readable (exportable) |
+| viewer forges a SyncStep2 containing new content | `sendRaw` a hand-built sync-step-2 message; server applies nothing, connection stays open, no row written |
+| viewer sends `flush` | allowed (read-only operation) but rate-limited; no write |
+| viewer awareness with an editor's user id | connection closed `awareness-spoof` |
+| viewer after promotion to editor | `role {role:'editor'}` arrives, `readOnly` flips, the previously rejected text merges and reaches `saved` without a reload |
+
+**`apps/server/test/integration/authz.rest-viewer.integration.spec.ts`** — data-driven over the route table of skeleton D.1, and scoped by what the `viewer` role actually holds rather than by HTTP method: for every route whose `config.auth` is `perm:<a permission the viewer does not hold>`, call it as the viewer and assert `403 forbidden` with a ProblemDetails body matching `toMatchOpenApi(operationId, 403)` **and** a row-count snapshot of every table unchanged across the call; for every route whose required permission the viewer *does* hold, assert its documented 2xx — which includes the mutating `POST /vaults/:vaultId/exports` (`perm:export:read` is a viewer permission per 01-vision-scope-and-principles.md §2) and every `session`/`self`/`public` route such as `POST /auth/collab-tickets` and `POST /me/tokens`. A blanket "every mutating route returns 403" would contradict both the permission matrix and `export.access-control.integration`, so the scoping is the permission, never the verb.
+
+The route set is read from the Fastify instance (`app.routes()`) **and** from `packages/contracts/openapi/openapi.json`; the test first asserts the two sets are equal — an undocumented route is a failure, because a route the specification does not mention is exactly the one nobody remembers to guard — and then exercises every member. A new editor-or-above route therefore fails the test whether it was forgotten in the spec or in the test.
+
+**`apps/server/test/mcp/mcp.scopes.mcp.spec.ts`** — a read-only PAT lists exactly the six read tools of skeleton D.3 and no others; `tools/list` is byte-identical across calls (deterministic registration order); a PAT whose owner is a viewer can still read (viewer has `note:read`) but `include_trashed: true` fails because it needs `history:read`.
+
+**`apps/e2e/web/viewer-readonly.e2e.spec.ts`** — the viewer context sees a read-only CodeMirror (`.cm-content[contenteditable="false"]`), a "Read-only (viewer)" status pill, no create/rename/trash affordances in the tree context menu, and a keystroke into the editor produces no document change and no outbound network frame (asserted with the relaying `countFrames` fixture of the Playwright configuration subsection, so the viewer's collaboration socket still works and still renders remote edits while the count stays flat).
+
+**`apps/e2e/electron/desktop.viewer-readonly.e2e.spec.ts`** (`{ tag: ['@spec-viewer-enforcement'] }`, `electron` project, three operating systems, from M5) — the browser twin proves what the user sees; this one proves the **shell**, which is the process that holds the session credential. It is the row's L7 layer, replacing the manual parity entry that used to discharge it.
+
+| Assertion | How |
+|---|---|
+| the renderer is read-only | `electronApp.firstWindow()` shows `.cm-content[contenteditable="false"]` and a "Read-only (viewer)" pill; a keystroke changes no document text |
+| the refusal is the server's, not the shell's | the read-only compartment is defeated in-page through the `IRIDIUM_E2E=1` hook (the same flag that exposes the host-contract runner), the update is dispatched anyway, and the oracle is `collab.viewer-enforcement.integration`'s: `SyncStatus(false)` arrives, `saveState` becomes `rejected`, no `note_updates` row appears, and the other instance's text is unchanged — reached through the desktop's own socket rather than a Node client's |
+| the native menu is disabled, not merely hidden | `getApplicationMenu()` through `electronApp.evaluate`: the `node.rename`, `node.move`, `node.trash` and `revision.restore` items report `enabled: false`. The menu is built in the **main** process from `packages/ui/src/commands/registry.ts`, so an item hidden only in React would still be clickable from the operating system's menu bar, and `clickMenuItemById` is used to prove that activating it does nothing |
+| credential custody is the main process's | the renderer holds nothing: `window.iridium` exposes no `secrets` member, and `localStorage`, `sessionStorage`, IndexedDB and the `persist:iridium` cookie jar contain no `irid_` string (the enumeration of `desktop.attachments-no-token-in-renderer.e2e`, re-run here because a viewer's own session is what a reader would try to escalate); the credential is found only through a main-process probe over the `safeStorage`-backed store, and that probe returns a boolean, never the value |
+| the fallback transport refuses identically | the first three assertions are repeated with `IpcWebSocket` forced on, so the viewer rule does not depend on which transport carries the socket (`desktop.ipc-websocket-fallback.e2e` still owns the fallback pass of `hostContractCases()`) |
+
+### 4. Vault isolation — `[spec:vault-isolation]`
+
+**`apps/server/test/integration/authz.vault-isolation.integration.spec.ts`** — `outsider` holds a valid session but no membership. The test enumerates every route that takes a vault, node, note, attachment or job id from `app.routes()` **and** from `packages/contracts/openapi/openapi.json`, asserts the two sets are equal before exercising either (an undocumented id-bearing route is the most dangerous case for "knowledge of a note id must not grant access", and only the `app.routes()` side can see it), then calls each member with (a) the real ids of vault `V` and (b) syntactically valid random UUIDv7 ids, asserting:
+
+- status `404` with `code: 'not_found'` for both, byte-identical bodies apart from `requestId` (no existence leak; deviation F13),
+- no `ETag` header, no `Last-Modified`, no timing difference beyond noise (the test records both latencies and fails if the median ratio exceeds 2×, which catches an authorization check placed after an expensive load),
+- `access_log` records the denial with the principal and the route, and `audit_events` records nothing (reads are not audit events).
+
+Specifically covered: `/vaults/:id`, `/vaults/:id/tree`, `/vaults/:id/nodes`, `/nodes/:id`, `/nodes/:id/inbound-links`, `/notes/:id`, `/notes/:id/markdown`, `/notes/:id/links`, `/notes/:id/backlinks`, `/notes/:id/rename-impact`, `/notes/:id/revisions`, `/notes/:id/revisions/:revId`, `/notes/:id/participants`, `/vaults/:id/search`, `/search`, `/vaults/:id/trash`, `/vaults/:id/attachments`, `/vaults/:id/attachments/:aid`, `/vaults/:id/attachments/:aid/meta`, `POST /vaults/:id/exports` (the only method 09-api-reference.md §2.13 defines on that path; export jobs are *read* through `/exports/:jobId`), `/exports/:jobId`, `/exports/:jobId/download`, `/imports/:jobId`, `/vaults/:id/members`, `/vaults/:id/audit`.
+
+**Named cases the enumeration cannot reach.** The enumeration calls every route once, with path parameters and no query string, which is the right shape for "knowledge of an id must not grant access" and the wrong shape for anything gated on a *parameter*. Where a permission is carried by a query parameter rather than by the route, the enumerated call exercises the weaker permission and passes, and the stronger one is never tried. The cases below are therefore named individually, are cited by name from the spec §9 mapping table, and run in the same file against the same `outsider`.
+
+| Case | Oracle |
+|---|---|
+| *foreign-vault revision history* | every `history:read`-gated surface of vault `V`, called by `outsider` with `V`'s real note id and revision id and again with syntactically valid random ids: `GET /notes/:noteId/revisions`, `GET /notes/:noteId/revisions/:revisionId`, `GET /notes/:noteId/markdown?revision=<seq>`, `GET /vaults/:vaultId/nodes?includeTrashed=true`, `GET /vaults/:vaultId/trash`, and the two mutating history routes `POST /notes/:noteId/revisions` and `POST /notes/:noteId/revisions/:revisionId/restore`. All seven answer `404 not_found` with bodies byte-identical apart from `requestId`, no `ETag` and no `Last-Modified`, never `403 forbidden` — a `403` would confirm the note exists and would be the existence leak deviation F13 forbids, and it is the plausible wrong answer here because the outsider genuinely lacks `history:read`. The two mutating routes additionally write no `note_revisions` row and emit no `AuthzBus` event, asserted by a row-count snapshot of `note_revisions`, `note_updates` and `audit_events` across the call. The revision id used is real, so a `404` cannot be explained by the id not existing; the test seeds `V` with a named revision and a restored revision first, so the retained set is non-empty and the thinning job cannot empty it |
+| *history parameters are proven, not assumed* | the case table is declared `satisfies Record<HistoryGatedSurface, Case>` over a union exported from `@iridium/contracts/authz.ts` that lists every surface whose required permission is `history:read` or stronger, so a route or parameter added to that union without a case here does not compile. The union is the same one `authz.rest-viewer.integration` scopes its viewer expectations by, which is what keeps the two files from disagreeing about what "history" means |
+
+`revisions.named.integration`, `revisions.restore.integration` and `revisions.thinning.integration` own revision *behaviour* and deliberately carry no isolation assertions of their own: three partial copies of one rule is how the copies drift, and the union above is what makes the single copy exhaustive. This is the same division `tree.invalid-move.integration` has with `tree.structural-concurrency.integration` — one file owns the vocabulary exhaustively, the others own behaviour.
+
+**`apps/server/test/integration/collab.isolation.integration.spec.ts`** — `onAuthenticate` refuses `note:<id>` and `vault:<id>` for a non-member with close reason `unauthorized` (4401) for an unknown note and the *same* reason for a real note in a foreign vault; a ticket issued for user X cannot be used by a connection claiming user Y; a ticket is single-use.
+
+**`apps/server/test/integration/search.acl.integration.spec.ts`** — identical note bodies in vault `V` (member) and vault `W` (non-member); `GET /vaults/W/search` → 404, `GET /search?q=` returns only `V` hits; the generated boolean-mode query always carries `vault_id IN (…)` from the live membership set (asserted by intercepting the SQL through a Kysely plugin in the test, not by string-matching application code).
+
+**`apps/server/test/mcp/mcp.isolation.mcp.spec.ts`** — `list_vaults` omits `W`; `get_note` by `W`'s real note id and by a random id produce the same `isError` text; `search_notes` with `vault_id: W` errors identically; `resources/read` of `iridium://vault/<W>/note/<id>` → `-32602` with `data.uri`; a cursor minted against `V` cannot be replayed against `W` (HMAC binds the filter hash and token id).
+
+**The MCP surface needs its own history case, and it is here rather than in `authz.vault-isolation.integration`.** `list_note_revisions` is a tool, not a route: it does not appear in `app.routes()` or in `openapi.json`, so the REST enumeration cannot see it, and the tools are registered per token by scope, so a token without `history:read` does not have the tool at all — a different failure mode from a `404` and one that must not be mistaken for isolation. This case, added with the same name as its REST twin so the matrix can cite the pair, closes it:
+
+| Case | Oracle |
+|---|---|
+| *foreign-vault revision history* | with a token whose allowlist covers `V` and whose scope bundle **includes** `history:read` — so the tool is registered and the refusal is authorization rather than absence — `list_note_revisions` on `W`'s real note id, `get_note` with `W`'s note id and a real `revision`, `list_notes` with `vault_id: W` and `include_trashed: true`, and `resources/read` of `iridium://vault/<W>/note/<id>?rev=<seq>` all refuse: the three tools with the single shared `isError` text, byte-identical to the text a random id produces and to the text a note in `V` with a thinned revision produces, and the resource with `-32602` carrying `data.uri` and no `data.nearest` — because the nearest-retained hint of a legitimate thinned-revision request is itself history metadata and must not leak for a vault the token cannot reach. Repeated with a token whose bundle **omits** `history:read`: `list_note_revisions` is then absent from `tools/list` and calling it answers the era-correct unknown-tool error, which the case asserts is *not* accepted as proof of isolation |
+
+**`apps/server/test/integration/transfer.isolation.integration.spec.ts`** — export/import job ids belonging to another principal return 404 on `GET /exports/:jobId`, `/download`, `/imports/:jobId` and on every import sub-route.
+
+**`apps/e2e/web/vault-isolation.e2e.spec.ts`** — the `outsider` context navigating directly to `/v/<V>/n/<N>` lands on a "not found" view, the vault selector lists nothing, and no collaboration socket is opened at all (`countFrames`'s `routed` counter is zero — the route handler was never invoked).
+
+### 5. Live revocation — `[spec:live-revocation]`
+
+**`apps/server/test/integration/collab.live-revocation.integration.spec.ts`** — every trigger, each asserted with a deadline of 1 s measured from the COMMIT of the administrative change (HP-3):
+
+| Trigger | Call | Expected on open connections |
+|---|---|---|
+| membership removed | `DELETE /vaults/:id/members/:userId` | every connection of that user on that vault closes with `revoked` (4403) within 1 s; reconnect refused in `onAuthenticate`; pending local updates stay in the client's doc and `saveState === 'revoked'` with text still exportable |
+| role downgraded editor→viewer | `PUT /vaults/:id/members/:userId {role:'viewer'}` | `readOnly = true` + `role {role:'viewer'}` stateless; the next update answers `SyncStatus(false)`; no row written |
+| role upgraded viewer→editor | `PUT … {role:'editor'}` | `readOnly = false` + `role {role:'editor'}`; the client re-attaches and every pending local update merges and reaches `saved` |
+| user disabled | `POST /admin/users/:id/disable` | all of that user's connections across all vaults close `revoked`; REST → `401`; MCP → `401`; `users.authz_version` bumped |
+| password changed | `POST /me/password` | other sessions' connections close `revoked`; the changing session survives |
+| session revoked | `DELETE /me/sessions/:id`, `POST /admin/sessions/revoke-all` | connections bound to that `sessionId` close `revoked`; others survive |
+| token revoked | `DELETE /me/tokens/:id` | next MCP call `401`; `/collab` unaffected (tokens do not open sockets) |
+| vault archived | `POST /vaults/:id/archive` | all connections on that vault close `vault-archived` after a `closing {reason:'vault-archived', graceMs}` message |
+| note trashed | `POST /nodes/:id/trash` | connections on that note receive `closing {reason:'note-trashed'}` then close `note-trashed`; reopen refused |
+| epoch drift without a bus event | bump `users.authz_version` directly via `corruptDeliberately` | the next inbound message fails the `beforeHandleMessage` epoch check and closes `revoked`, proving the bus is an optimisation and not the only guard |
+| periodic re-validation | `ManualClock.advance(15 min + jitter)` on a connection whose membership vanished while the bus was stubbed out | `onTokenSync` re-verification closes the connection |
+
+**`apps/server/test/chaos/collab.revocation-race.chaos.spec.ts`** — `FAULT.authSlow` on `onAuthenticate` while the membership is deleted mid-authentication (both orders, 50 iterations): the outcome is always refusal or an immediately-closed connection, never an authorized connection; and `Promise.all([revoke, client.typeAt(...)])` never produces a committed `note_updates` row authored by the revoked user after the revocation's COMMIT (asserted by comparing `note_updates.created_at` to the audit event's `occurred_at`).
+
+**`apps/server/test/integration/authz.revocation-rest.integration.spec.ts`** — after each trigger above, the previously working REST call returns the right status (`404` for lost membership, `401` for disabled user/revoked session) on the *next* request with no cache warm-up allowance.
+
+**`apps/server/test/mcp/mcp.revocation.mcp.spec.ts`** — token revoke → `401 invalid_token`; owner's membership removed → tool results become not-found; owner disabled → `401`; `vaults.settings.mcp_enabled = false` → the vault vanishes from `list_vaults` and its notes read as not found; server-wide `server_settings.mcp_enabled = false` → `/mcp` returns the fail-closed response; an admin-owned token never gains server-admin-implied access (deviation F4).
+
+**`apps/e2e/web/revocation-while-open.e2e.spec.ts`** — editorB's tab shows "Access revoked", the editor becomes read-only, an "Export my text" action is offered and produces the pre-revocation text, and a reload lands on the vault selector without that vault. Deadline asserted with `expect.poll({ timeout: 2000 })` around a 1 s expectation to keep the test honest under CI jitter while still failing on a regression to "next login".
+
+**`apps/e2e/electron/desktop.revocation-while-open.e2e.spec.ts`** (`{ tag: ['@spec-live-revocation', '@hp-3'] }`, `electron` project, three operating systems, from M5) — the row's L7 layer, and the sharper of the three desktop additions: the desktop host is the process that *stores* the session credential, so what happens to that credential on revocation is a claim only an Electron test can make. The administrative call is issued from the test with Playwright's `request` fixture, and every deadline is measured from that call's response with `expect.poll({ timeout: 2000 })` around the 1 s expectation, exactly as in the web twin.
+
+| Trigger | What this test asserts in the desktop host |
+|---|---|
+| membership removed (`DELETE /vaults/:vaultId/members/:userId`) | the collaboration socket closes with code `4403` and reason `revoked` within 1 s — observed in the **main** process, not inferred from the banner; the renderer shows "Access revoked", the editor becomes read-only, and "Export my text" through `host.files.saveText` (with `stubDialog`) writes the pre-revocation text; the stored credential is **kept**, because the session is still valid for the user's other vaults — asserted by a main-process probe that the `safeStorage` entry still exists and by a relaunch that lands in the workspace with that vault absent from the selector, never on the sign-in screen |
+| session revoked (`DELETE /me/sessions/:id`) and user disabled (`POST /admin/users/:id/disable`) | every collaboration socket of that session closes `revoked`; the next REST call made through the host answers `401`; the main process **erases** the `safeStorage` entry and calls `session.fromPartition('persist:iridium').clearCache()` (both asserted with main-process spies); the window lands on the sign-in screen and a relaunch does not restore a session. This is the failure a checklist cannot catch: a desktop credential that outlives its session looks identical to a working application until the next launch |
+| the socket is closed, not merely ignored | after each trigger, `electronApp.evaluate` over the main process's socket registry — in fallback mode, the `IpcWebSocket` channel table — reports zero open collaboration sockets, so a "revoked" banner drawn over a live socket cannot pass |
+| nothing is silently replayed | a local update typed shortly before the revocation is still present in the document and still exportable, and no `note_updates` row carries it (read back through `request`), which is the desktop rendition of the pending-edit rule of 05-collaboration-and-durability.md |
+
+### 6. Durable saving — `[spec:durable-saving]`
+
+Procedures are in "Chaos and durability procedures"; the named tests are `apps/server/test/chaos/collab.durable-ack.chaos.spec.ts` (six cases), `collab.graceful-shutdown.chaos.spec.ts`, `collab.db-outage.chaos.spec.ts`, `collab.backpressure.chaos.spec.ts`, plus `apps/server/test/property/persistence.model.prop.spec.ts`, `packages/collab-client/src/save-state.machine.prop.spec.ts` and `apps/e2e/web/saved-indicator.e2e.spec.ts`.
+
+`saved-indicator.e2e` is the user-visible half: with `FAULT.storeSlow` armed at 3000 ms (armed over the test control route, which the E2E server exposes because it runs with `NODE_ENV=test`), typing produces `Syncing…` for ≥ 3 s and `Saved` only after the write has committed. No route exposes `note_updates` and a Playwright test has no `srv.db` handle, so the commit is observed through the projected head instead: the test polls `GET /api/v1/notes/:noteId` with Playwright's `request` fixture and reads `headRevision` (= `note_docs.head_seq`, which advances only inside the writer's committed transaction), records the monotonic time at which `headRevision` first exceeds the pre-edit value, and fails if the `Saved` pill was observed before that moment. The pill is watched with a `MutationObserver` installed before the first keystroke, so "observed before" means observed, not sampled.
+
+**`apps/e2e/electron/desktop.durable-save.e2e.spec.ts`** (`{ tag: ['@spec-durable-saving', '@hp-1'] }`, `electron` project, three operating systems, from M5) — CH-1's kill-after-acknowledgement recovery driven end to end through the desktop client instead of a Node `NoteClient`. It is this row's L7 layer and HP-1's L7 cell; the reason it exists rather than being declared "covered transitively by the shared `@iridium/collab-client`" is step 4, which is a property of the host and of nothing else.
+
+1. Launch with `IRIDIUM_SERVER_URL` pointing at a **child-process** server the fixture started from `apps/server/dist/main.mjs`, because the in-process server cannot be `SIGKILL`ed. Debounce values are the production ones (decision D10-24), so the kill is aimed at the real window.
+2. Type in the renderer and wait for the `Saved` pill with a `MutationObserver` installed before the first keystroke; record the text and the monotonic time at which the pill appeared.
+3. `SIGKILL` the server, restart it on the same schema, and let the desktop client reconnect on its own.
+4. Assert that the reopened note's `.cm-content` equals the recorded text, that `GET /notes/:noteId/markdown` agrees, and that the reconnection used the credential held in the main process — no sign-in screen, no re-authentication prompt, no `auth.onSessionChanged` event. A host that dropped its credential when the server went away would fail here while every headless durability suite stayed green, which is precisely the gap this test closes.
+5. The negative, so that "durable" is never confused with "optimistic": with `FAULT.storeSlow` armed at 3 000 ms over the test control route, the pill stays `Syncing…`; a `SIGKILL` inside that window is followed by a reopen whose content equals the **pre-edit** content by byte equality — not "some earlier text" — and the pill is never observed as `Saved` before the kill.
+6. Iterations: 3 on the PR `e2e-electron` smoke and 20 in the nightly `electron-full` job (`--repeat-each`), because one desktop launch costs far more than one Node client and the statistical weight of kill-after-ack belongs to CH-1, which runs 20 on a pull request and 200 nightly.
+
+**What the manual parity checklist still carries.** With these three specs, no spec §9 acceptance row is discharged by hand. Rows 3, 5 and 6 gain an `L7@M5` layer in the overview table above, and `docs/acceptance/host-parity.md` keeps only the breadth claim it is actually good at — that every route and command of M4 is *reachable* in the shell, walked over the command registry and the router's route table. That claim is not an acceptance row, and it has an automated core of its own: `desktop.host-contract.e2e` proves the `IridiumHost` seam case by case, `desktop.native-menu.e2e` proves the registry drives the menu, and `a11y.keyboard-only.e2e` proves every command has a keyboard path in the shared UI. The checklist is therefore a review artifact for the M5 exit record (12-milestones.md §13.4) and is named in no `docs/acceptance-map.json` entry, so nothing in the map can be satisfied by a human signature.
+
+### 7. Structural concurrency — `[spec:structural-concurrency]`
+
+**`apps/server/test/integration/tree.structural-concurrency.integration.spec.ts`** — each case runs the two operations with `Promise.all` from two independent principals, 25 repetitions, and asserts the post-state with one recursive-CTE read:
+
+| Pair | Allowed outcomes |
+|---|---|
+| rename + rename (same node, both with the same `If-Match`) | exactly one `200`, one `409 stale_version` |
+| rename + rename (two siblings to the same new name) | one `200`, one `409 name_conflict` |
+| move + move (same node, two parents) | one `200`, one `409 stale_version` |
+| move + trash (same node) | `200` + `200` in either order with a consistent final tree, or one `409 stale_version` |
+| trash + restore | one `200`, one `409 stale_version`; never both visible and trashed |
+| move A under B + move B under A | at least one `409 invalid_move`; the tree stays acyclic |
+| trash a non-empty category without `recursive` | `409 category_not_empty` with the child count in `detail` (deviation F5) |
+| create + create (same name, same parent) | one `201`, one `409 name_conflict`; the loser leaves no orphan `notes`/`note_docs` row |
+| purge + restore | one succeeds; `409 stale_version` otherwise; no dangling `note_updates` |
+| rename while an editor is connected | `tree-changed` arrives on `vault:<id>` with the new `treeVersion`; the note's `/collab` connection is undisturbed |
+
+Universal oracles after every case: the tree is acyclic (the recursive CTE terminates and covers every row), `uq_sibling(parent_id, name, live)` holds, no response is `5xx`, `vaults.tree_version` increased exactly once per successful mutation, and one `audit_events` row exists per successful mutation with a verifying chain.
+
+**`apps/server/test/integration/tree.stale-resurrection.integration.spec.ts`** — a client holds an open `note:<id>` session; the note is trashed; the client's queued update is refused, the connection closes `note-trashed`, `onLoadDocument` refuses a reopen, and `POST /nodes/:id/restore` returns exactly the content persisted before the trash (compared by `content_hash` against the `trash`-kind revision). A second variant purges instead of trashing and asserts the note cannot be restored and that `note_updates`/`note_docs`/`note_projections`/`note_search`/`note_links` rows are gone.
+
+**`packages/contracts/src/paths.unit.spec.ts` (`contracts.paths.unit`)** — name validation: empty, whitespace-only, `.`/`..`, path separators, NUL and control characters, trailing dot/space (Windows), reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`, case-insensitive, with and without extensions), length in UTF-16 units vs bytes, Unicode confusables under `utf8mb4_0900_as_ci` (accent-sensitive, case-insensitive: `Note` vs `note` collide, `Note` vs `Noté` do not), and NFC/NFD pairs. Runs on ubuntu **and** windows. 100 % per-file coverage; in Stryker's scope.
+
+**`packages/contracts/src/paths.prop.spec.ts` (`contracts.paths.prop`)** — the property half of the same subject (also listed under "Other pure properties"): `safePath` accepts only names the tree can store, and the rejected set is closed under the transformations an attacker controls — percent-encoding, Unicode normalisation, case, trailing dots and spaces, alternate separators. The two files are **one subject in two layers, not two spellings of one test**: the `unit` file pins the named cases a reviewer can read (`CON`, `COM9`, `Note` versus `Noté`), the `prop` file pins closure over generated inputs, and neither subsumes the other.
+
+**Canonical names for the contracts primitives.** 12-milestones.md §13.5 and its M0/M2 exit tables name the same two subjects `tree.name-rules.unit` plus `paths.prop`, and the id primitives as a bare `ids.prop`. Those spellings are superseded; the canonical set is exactly four names, two subjects × two layers:
+
+| Canonical name | File | Layer | Covers |
+|---|---|---|---|
+| `contracts.paths.unit` | `packages/contracts/src/paths.unit.spec.ts` | L1 (`unit`, ubuntu + windows) | the named name-and-path cases enumerated above: empty and whitespace-only names, `.`/`..`, separators, NUL and control characters, trailing dot or space, the reserved Windows device names, UTF-16 versus byte length, `utf8mb4_0900_as_ci` confusables, NFC/NFD pairs |
+| `contracts.paths.prop` | `packages/contracts/src/paths.prop.spec.ts` | L4 pure (runs in `unit` at the `PROP` budget) | closure of the rejected set under attacker-controlled transformations, and that `safePath` accepts nothing the tree cannot store |
+| `contracts.ids.unit` | `packages/contracts/src/ids.unit.spec.ts` | L1 (`unit`) | the UUIDv7 helpers, `BINARY(16)` ↔ canonical-string conversion, and the 2^53 bound on `note_revisions.id` and `revision` |
+| `contracts.ids.prop` | `packages/contracts/src/ids.prop.spec.ts` | L4 pure (runs in `unit` at the `PROP` budget) | monotonicity within a millisecond, 16 bytes, version and variant bits, lossless lowercase round trip, and `BINARY(16)` ordering matching timestamp ordering |
+
+The direction is the Location convention of "Test file conventions": a name follows its file, and the area prefix of a co-located file is the package that supplies it. The rules live in `packages/contracts/src/paths.ts`, not in `apps/server/src/tree/`, so the area is `contracts` — which is also why 12-milestones.md's `tree.name-rules.unit` is the spelling that moves. `paths.prop` and `ids.prop` are not wrong about the subject; they are missing the area, and the checker accepts only the full `<area>.<subject>.<layer>` form. Both spellings of one subject cannot be keys of `docs/acceptance-map.json`, so `scripts/check-test-name-references.ts` prints exactly this direction, and 12-milestones.md §13.5, §4.3 and §6.4 are corrected to match. `apps/server/src/tree/names.ts` keeps its own tests — it is the sibling-uniqueness and depth enforcement over live rows, proven by `tree.crud.integration` and `tree.invalid-move.integration` — so nothing is lost by moving the pure name rules' name to the package that owns them.
+
+**`apps/server/test/property/hierarchy.model.prop.spec.ts`** and **`apps/server/test/integration/lock-order.integration.spec.ts`** (concurrent trash, rename, note edits, attachment uploads and audited admin changes on one vault from 8 workers for 30 s — the parameters this section fixes for the file, cited by 12-milestones.md §6.4; oracle: zero `ER_LOCK_DEADLOCK`, zero lock-wait timeouts, and the documented lock order — `vaults` advisory mutex → `nodes` → `notes` → `note_docs` → `audit_chain_heads` — observed in every transaction, asserted from a `performance_schema` sampling query, plus an injected reversed lock order in a test-only call site that `withVaultLock()`'s own assertion must detect).
+
+### 8. Portability and safety — `[spec:portability-and-safety]`
+
+Two halves: byte-fidelity (Markdown in and out) and inertness (hostile content). The Markdown pipeline itself is specified in 08-markdown-pipeline-import-export.md; the suites are listed here.
+
+**Portability** — `markdown.roundtrip.prop` (property suites), `apps/server/test/integration/transfer.fixtures.integration.spec.ts` (the Obsidian sample vault: `.obsidian/` and `.trash/` excluded from content but reported, `.canvas` reported unsupported, Dataview blocks preserved verbatim, wikilinks indexed as `note_links.kind='wikilink'` and rendered literally, CRLF/CR/mixed-EOL and BOM files recorded in `notes.original_eol`/`had_bom`, tabs and trailing whitespace preserved, frontmatter with duplicate keys and tabs preserved as `frontmatter_raw` with `frontmatter_error` set), `import.commit.integration`, `packages/markdown/src/import/unsafe-paths.unit.spec.ts` (`..`, absolute POSIX and Windows paths, UNC paths, drive-relative paths, `:` streams, symlink entries in ZIPs, zip-slip, zip-bomb ratio, path lengths, duplicate entries differing only by case or Unicode normalisation — each must be rejected or quarantined with a report entry, never written), `export.manifest.integration` (manifest note ids/paths/revisions/hashes equal the DB; `restoreLineEndings` reproduces the original bytes; a second export at the same revision is byte-identical), and `apps/e2e/web/export-roundtrip.e2e.spec.ts` + `apps/e2e/electron/export-roundtrip.e2e.spec.ts`.
+
+**Inertness** — `markdown.xss-corpus.unit`, `markdown.sanitize.prop`, `markdown.pathological.unit`, `preview.inertness.component`, `security.hostile-markdown.e2e` (web), `desktop.hostile-markdown.e2e`, `desktop.hardening.e2e`; all detailed under "Hostile content and Electron security suites".
+
+### 9. Backup recovery — `[spec:backup-recovery]`
+
+**`apps/server/test/chaos/ops.backup-restore.drill.spec.ts`** (nightly lane `backup-restore-drill`, and in `release.yml`) — shells out to the *shipped commands* in child processes, never a test-only reimplementation, so a regression in argument handling, exit codes or the `mysqldump` invocation is caught:
+
+1. Seed through product paths: two vaults (one archived), 60 notes including one at the soft size cap, 3 attachments sharing one `sha256`, named revisions, a trashed note, 4 users with mixed roles, 2 PATs, 20 audit events spanning two chains.
+2. `iridium backup --out <dir>` under the `iridium_backup` role → assert the directory contains `manifest.json`, `dump.sql.zst`, `attachments/`, `binlog/`, `secrets.age` and `backup.log` (the set of 11-operations-and-deployment.md, "Backup set"), and that `manifest.format === 'iridium-backup/1'`, `manifest.schema_head`, `manifest.dump.sha256`, `manifest.attachments.count`, `manifest.collab.max_head_seq` and every `manifest.audit_chain_heads[].last_hash` match the live DB. The fixture includes one note whose `note_docs.snapshot` exceeds 24 MB, so dropping `--max-allowed-packet` from either client fails the drill rather than a real site's backup.
+3. Record the pre-backup evidence: one export per vault through `POST /vaults/:id/exports` and its manifest from `GET /exports/:jobId` (there is no vault-scoped export *list* route — 09-api-reference.md §2.13 defines `POST` on `/vaults/:vaultId/exports` and reads jobs through `/exports/:jobId`), the audit chain head, the membership matrix, `SELECT note_id, head_seq, projected_seq FROM note_docs`.
+4. Start a second, empty `MySqlContainer(process.env.IRIDIUM_MYSQL_IMAGE ?? 'mysql:9.7.2-oraclelinux9')` with the shipped `infra/docker/mysql/my.cnf`, run `init/01_roles.sh`, and give it an empty attachments directory and no secrets.
+5. `iridium restore --from <dir> --identity <age-key> --verify --verify-all` → the command blocks until all nine verification invariants of 11-operations-and-deployment.md pass and exits non-zero on any failure; assert exit 0 and the `admin.backup.verified` audit event on chain `server`. `--verify-all` (not sampled verification) is what the drill uses, because the fixture is small enough for exhaustive `collab_loadability`.
+6. `iridium doctor` → clean (no stale projections, no Yjs instance warning, no broken chain heads, no orphans).
+7. Start a server against the restored DB and replay the read-only half of the integration suite (`test/integration/**` tagged `@readonly`) plus: export manifests byte-equal to step 3, `assertAuditChain` passes for both chains, every `note_docs` row loads into a Y.Doc whose text equals the restored `note_projections.markdown`, memberships and roles equal, PAT hashes present and still usable, the archived vault still archived, the trashed note still trashed with its original `expires_at`.
+
+**`ops.restore-verify.chaos.spec.ts`** — the negative cases, pinned to the exit codes of 11-operations-and-deployment.md (`0` verified, `4` pre-flight, `5` verification, `3` misuse), because a verification that has never been observed to fail is not evidence. These are the same negatives the drill runbook of 11-operations-and-deployment.md enumerates, and they live in this file rather than as a step of `ops.backup-restore.drill` because each one needs its own freshly restored deployment and its own asserted exit code: one flipped byte in `dump.sql.zst` → exit `4` (`restore.dump_hash_mismatch`); one `note_updates` row deleted before the restore → exit `5` on `collab_heads`; one attachment file removed → exit `5` on `attachments_present`; the pepper omitted from `secrets.age` → exit `4`; a `secrets.age` that the supplied `--identity` cannot decrypt → exit `4`; the last audit event truncated → exit `5` on `audit_chain`; a dump whose `manifest.schema_head` is ahead of the binary's migration list → exit `4` on `schema`; `--verify-all` without `--from` → exit `3`. Every non-zero exit leaves the target deployment stopped and refusing to serve (`/readyz` 503).
+
+**`ops.pitr.chaos.spec.ts`** — binlog point-in-time recovery: take the backup, make further changes, note the timestamp, make a destructive change, then restore + replay binlogs to just before the destructive change and assert the intermediate state is recovered exactly (`head_seq` values included).
+
+---
+## Named test inventory — hard properties, guards, and the rest of the suite
+
+### Hard properties → required layers
+
+The acceptance rows are the spec's language; HP-1…HP-5 are the plan's own, and they are stricter. Every hard property must be covered in **every** layer marked ●; `guards.acceptance-map.guard.spec.ts` enforces the pattern.
+
+| | L1 unit | L2 component | L3 integration | L4 property | L5 chaos | L6 web E2E | L7 Electron E2E | L8 contract |
+|---|---|---|---|---|---|---|---|---|
+| HP-1 Saved truthfulness | ● `save-state.machine.prop`, `crdt.dominates.prop` (pure; `*.prop.spec.ts` files run in the `unit` project) | ● `status-pill.transitions.component` | ● `collab.baseline-on-connect.integration` | ● `persistence.model.prop` (invariants 3–4: a load always dominates every committed `sv_after`) | ● `collab.durable-ack.chaos` | ● `saved-indicator.e2e` | ● `desktop.durable-save.e2e` | |
+| HP-2 Restart recovery | | | ● `collab.restart-no-duplication.integration`, `collab.owner-lease.integration` | ● `persistence.model.prop`, `convergence.model.prop` | ● `collab.durable-ack.chaos`, `collab.restart.chaos`, `collab.graceful-shutdown.chaos`, `collab.second-process-refused.chaos`, `ops.backup-restore.drill` | | | |
+| HP-3 Revocation timing | ● `authz.matrix.unit`, `tokens.verify.unit` | | ● `collab.live-revocation.integration`, `authz.revocation-rest.integration` | ● `token.effective-permissions.prop` | ● `collab.revocation-race.chaos` | ● `revocation-while-open.e2e` | ● `desktop.revocation-while-open.e2e` | ● `mcp.revocation.mcp` |
+| HP-4 Hostile content inertness | ● `markdown.xss-corpus.unit`, `markdown.pathological.unit` | ● `preview.inertness.component` | ● `projection.hostile.integration` | ● `markdown.sanitize.prop` | | ● `security.hostile-markdown.e2e` | ● `desktop.hostile-markdown.e2e`, `desktop.hardening.e2e` | |
+| HP-5 Limits enforcement | ● `limits.policy.unit` | | ● `collab.limits.integration`, `collab.admission-budget.integration`, `security.rate-limits.integration`, `attachments.security.integration` | | ● `collab.backpressure.chaos` | | | ● `mcp.rate-limit.mcp` |
+
+`limits.policy.unit` is the single-source check: it imports `@iridium/contracts/limits.ts` and asserts that every constant is referenced by at least one enforcement site, so adding a limit without enforcing it does not compile. The mechanism is a compile-time exhaustive `switch` over the `LimitId` union whose cases are distributed across the modules that actually enforce the limits — `collab/limits.ts` (socket, admission and connection caps), `security/rate-limits.ts` and `auth/throttle.ts` (REST tiers and login hardening), `mcp/rate-limit.ts` (the four `/mcp` layers), `notes/note-service.ts` (`NOTE_SOFT_MAX_UTF16`, `NOTE_HARD_MAX_UTF16`), `@iridium/markdown`'s `prescan` (`MARKDOWN_*`, `PROJECTION_TIMEOUT_*`), `tree/names.ts` and `@iridium/contracts/paths.ts` (`TREE_MAX_DEPTH`, `NODE_NAME_MAX_BYTES`, `VAULT_NAME_MAX_CHARS`), `transfer/` (`UPLOAD_MAX_BYTES`, `IMPORT_*`) and `collab/persistence/{writer,compactor}.ts` (queue, batch and snapshot caps) — and the test fails on a `LimitId` member no case covers.
+
+**The test compares identifiers, not values, so it is only satisfiable under one naming authority.** That authority is the "Constant in `limits.ts`" column of 02-system-architecture.md, "The single limits policy" (01-vision-scope-and-principles.md D01-12, ARCH-16): a second spelling of one limit makes one constant unreferenced *and* leaves the other absent from the union, so `limits.policy.unit` cannot pass in a plan where two sections name the same cap differently. Two neighbouring rules are asserted with it: environment keys are never constant names (`MAX_UPLOAD_BYTES` overrides `UPLOAD_MAX_BYTES`, `COLLAB_MAX_LOADED_DOCS` overrides `LOADED_DOCS_MAX`, and an `EnvSchema` key appearing in the `LimitId` union fails the test), and every row of the policy has a distinct enforcement site — including the pair `MARKDOWN_SOURCE_MAX_BYTES` (checked on the UTF-8 byte length) and `NOTE_HARD_MAX_UTF16` (checked on `text.length`), which share the number 2 097 152 and are asserted to be two cases, never one.
+
+### Specified rules outside the nine rows
+
+Nine acceptance rows and five hard properties do not exhaust what the plan promises. Several rules are stated once, in the section that owns them, and then held by prose alone — which is exactly how a rule goes untested: nothing in the suite fails when it is dropped. The table below is the map's third id namespace (`ruleId`, alongside `rowId` and `hpId`), it is generated into `docs/acceptance-map.json` by `scripts/build-acceptance-map.ts` with the other inventories, and rule 6 of `guards.acceptance-map.guard` enforces it: every row must name at least one test that exists in "Inventory completeness" and whose file carries the tag stated here.
+
+| Rule id | Rule, and where it is specified | Tag | Named tests (layer @ milestone) |
+|---|---|---|---|
+| `rename-impact-warning` | Affected links are shown **before** a linked note is moved or renamed, and links are never rewritten (spec §3; 07-client-applications.md §4.4.1; 09-api-reference.md `PATCH /nodes/:nodeId {dryRun:true}`, `GET /nodes/:nodeId/inbound-links`, `GET /notes/:noteId/rename-impact`) | `[area:links]` | `tree.rename-impact.unit` (L1@M2), `tree.rename-impact.integration` (L3@M2), `rename-impact.dialog.component` (L2@M4), `rename-impact.e2e` (L6@M4) |
+| `invalid-move-reasons` | An invalid move is refused with `409 invalid_move` and a `reason` from the closed union `cycle \| depth \| cross_vault \| parent_not_category`; `nodes.vault_id` is immutable (03-data-model.md §6, the move rules and their error table; 09-api-reference.md's ProblemDetails code table) | `[spec:structural-concurrency]` | `tree.invalid-move.integration` (L3@M2), `hierarchy.model.prop` (L4@M2) |
+| `vault-settings` | A vault manager edits vault settings through `PATCH /vaults/:vaultId`; every field is validated against the effective policy resolved from the environment baseline and `server_settings`; the change is audited as `vault.settings.changed` (spec §4 role table; 03-data-model.md §13.1; 09-api-reference.md `vaults.update`) | `[area:vaults]` | `vaults.settings.integration` (L3@M2) |
+| `single-process-ownership` | Exactly one collaboration-server process owns the active documents, and a second process refuses to serve them rather than racing (spec §6; 02-system-architecture.md "What a second process would need"; 11-operations-and-deployment.md "Reference topology") | `[hp:HP-2]` | `collab.owner-lease.integration` (L3@M1), `collab.second-process-refused.chaos` (L5@M1) |
+| `declared-non-goals` | Every capability declared a non-goal in 01-vision-scope-and-principles.md §4.4 is **absent from the built product**, not merely unimplemented (spec §10) | `[area:non-goals]` | `guards.non-goals.guard` (L1@M1, assertion set ratcheted per milestone — see "The non-goal guard") |
+
+Two notes on the tags. `invalid-move-reasons` carries `[spec:structural-concurrency]` rather than an area tag because it *is* part of that acceptance row — the row's own overview entry names `tree.invalid-move.integration` too, and the rule id exists so the reason vocabulary is checked exhaustively rather than by the row's looser "at least one `409 invalid_move`" oracle. `single-process-ownership` carries `[hp:HP-2]` because two writers on one document is a restart-recovery failure, not a new property, which is also why its chaos case sits in the CH series.
+
+#### The move/rename link warning
+
+The mechanism is fully specified — three routes, one dialog, one deferral — and until these four tests existed the only suites touching those routes were `links.index.integration` (which asserts the *opposite-looking* thing: that a rename re-points every inbound `note_links` row inside the same transaction) and `authz.vault-isolation.integration` (which asserts they answer `404` to a non-member). Nothing asserted that the payload was right, that the warning preceded the mutation, or that the mutation still worked once accepted. `links.index.integration` moves to `[area:links]` with this group, so the whole rule reads as one family in the tag index.
+
+**`apps/server/src/tree/rename-impact.unit.spec.ts` (`tree.rename-impact.unit`)** — the pure summariser `summariseAffectedLinks(rows, subtreeNodeIds)` that both `affectedLinks` producers and `GET /notes/:noteId/rename-impact` call, over hand-built `note_links` row sets. In Stryker's mutate scope, because an off-by-one in a warning count is a silently wrong warning.
+
+| Case | Oracle |
+|---|---|
+| every link form is counted | a row set containing a plain wikilink (`[[Design notes]]`), an aliased wikilink with a heading (`[[Design notes#Goals\|goals]]`), an embed (`![[Design notes]]`), a relative Markdown link with a percent-encoded space (`[goals](../design/Design%20notes.md)`), a same-folder link (`[goals](Design notes.md)`) and an external link produces the exact `total`, with the external row counted only in `byStatus.external`; dropping any one form from the input lowers `total` by exactly that form's row count, so no form is collapsed into another and none is silently discarded |
+| `byStatus` is the closed union, always fully populated | the keys are exactly `resolved`, `ambiguous`, `broken`, `external`, with explicit zeros — a dialog that renders `byStatus` cannot show an undefined count — and a row whose `status` is outside the union throws instead of being dropped |
+| samples are capped, ordered and page-aligned | 400 rows yield `samples.length === 50` ordered by `(fromPath, id)`, the same keyset `GET /nodes/:nodeId/inbound-links` pages by, so the dialog's first page and the summary's samples agree row for row |
+| the unit of counting is the link, not the note | two links from one note into two notes of the moving subtree count 2 in `total` and appear as two `samples` entries; notes are never deduplicated, because the dialog states how many links break, not how many files are involved |
+| the derivation is target-side only | a link whose source note is itself inside the moving subtree is **included**, because 09-api-reference.md derives `affectedLinks` from `note_links` rows whose `resolved_node_id` is in the moving subtree with no source-side filter. The test pins the specified derivation rather than a cleverer one, so narrowing it later is a deliberate contract change with a failing test to announce it |
+| `samples` carries no content | each sample has exactly `fromNoteId`, `fromPath`, `line` and `rawTarget`; no body text, no snippet, and `rawTarget` is the source's own bytes rather than a re-rendered form |
+
+**`apps/server/test/integration/tree.rename-impact.integration.spec.ts` (`tree.rename-impact.integration`)** — the three routes against real MySQL, on a fixture vault where notes `A`, `B` and `C` link into note `N` (`A` by wikilink, `B` by a relative Markdown link, `C` twice with one broken target).
+
+| Case | Procedure | Oracle |
+|---|---|---|
+| the impact payload is correct | `GET /notes/:noteId/rename-impact?name=Renamed` | `affectedLinks.total` equals the `note_links` row count with `resolved_node_id = N`, read independently in the test; `byStatus` equals a `GROUP BY status` over the same rows; `samples` are the first 50 in `(fromPath, id)` order with `fromNoteId`/`fromPath`/`line`/`rawTarget` equal to the rows'; `newPath` is the path the rename would produce; `wouldConflict` is `false`; `toMatchOpenApi('notes.renameImpact', 200)` |
+| the move form is the same analysis | `?parentId=<another category>` | the same oracles with `newPath` under the new parent, and `total` computed over the whole moving subtree when the node is a category |
+| `wouldConflict` is the `uq_sibling` check | ask for a name a live sibling already holds, then the same name differing only by case, then the NFD form of it | `wouldConflict: true` in all three (the collation is `utf8mb4_0900_as_ci`), and a row-count-and-version snapshot of every table is unchanged across each call |
+| the dry run returns the identical summary and writes nothing | `PATCH /nodes/:nodeId {name, dryRun:true}` with `If-Match` | `dryRun: true`, `node` unchanged, `affectedLinks` byte-identical to the `rename-impact` payload for the same arguments, `nodes.version` and `vaults.tree_version` unchanged, no `audit_events` row, and no `tree-changed` frame on the `vault:<vaultId>` channel (asserted with `srv.vaultChannel`); `toMatchOpenApi('nodes.update', 200)` |
+| the dry run validates exactly as the write does | the refusal matrix (invalid name, sibling conflict, cycle, depth, cross-vault, non-category parent) run once with `dryRun:true` and once for real | identical status and identical `code`/`reason` pair in both, so the dialog can never report "safe" about a change the write refuses — the assertion `tree.invalid-move.integration` makes from the other side |
+| `GET /nodes/:nodeId/inbound-links` pages the same rows | the subtree of the category containing `N`, `limit: 2` | the concatenated pages equal the independently read row set, `subtreeNodeIds` equals the descendant count, the cursor is of kind `links`, and the page union's size equals `affectedLinks.total` for the same subtree |
+| the warning precedes the mutation on the server too | the confirmed `PATCH` with no `dryRun` | the returned `affectedLinks` is computed **before** the rename: `samples[].fromPath` and `rawTarget` are pre-rename values and `total` is the pre-rename count, even though the same transaction re-points the inbound rows. Ordering inside one transaction is otherwise unobservable, and this is the assertion that makes it observable |
+| the mutation still succeeds when accepted | the same call | `200`; `nodes.name` changed; `vaults.tree_version` bumped exactly once; one `node.renamed` audit event with a verifying chain; `tree-changed` on `vault:<vaultId>`; and — the spec §10 deferral — every inbound-linking note's `notes.content_hash` and `note_projections.markdown` byte-identical to their pre-rename values, with no new `note_updates` row on any of them |
+| a viewer may ask and may not act | the viewer principal | `GET /notes/:noteId/rename-impact` → `200`, because it requires only `vault:read` (09-api-reference.md D09-7); `PATCH … {dryRun:true}` → `403 forbidden`, because a dry run is still the rename operation's permission and a "read-only" flag must not become a permission bypass |
+
+**`packages/ui/src/tree/rename-impact.dialog.component.spec.tsx` (`rename-impact.dialog.component`)** — Vitest Browser Mode over `RenameImpactDialog` and `MoveToDialog` with the msw handlers generated from `openapi.json` and a request recorder that keeps the **order** of requests, not only their count.
+
+| Case | Procedure | Oracle |
+|---|---|---|
+| the warning precedes the mutation | F2 on a linked note, a new name, Enter | the recorder's sequence is `GET /notes/:noteId/rename-impact?name=…` and then nothing: no `PATCH /nodes/:nodeId` is issued until "Rename anyway" is activated. Asserted on the sequence, so a `PATCH` fired concurrently with the impact request fails even though both requests exist |
+| cancel mutates nothing | "Cancel" | zero `PATCH` requests, the tree item keeps its name, focus returns to the tree item |
+| accept mutates once | "Rename anyway" | exactly one `PATCH /nodes/:nodeId` carrying `If-Match` and no `dryRun`, and the toast offers "Show affected notes" |
+| an empty impact list skips the dialog | the handler answers `total: 0` | no dialog renders and the `PATCH` is issued — still only after the impact response arrived, never before or beside it |
+| the choice is never remembered | rename twice in one session | the dialog appears both times, and the `MemoryHost` storage spy records no key matching `/rename\|impact\|ask/i`, which is the "no don't-ask-again switch" rule of 07-client-applications.md §4.4.1 asserted rather than described |
+| the count shown is the payload's | the handler answers `total: 7` with 3 samples | the dialog says 7 and lists 3 behind a "Show them" action that pages `GET /nodes/:nodeId/inbound-links`; the client never re-derives a count from `samples.length` |
+| a move goes through the same gate | keyboard drag through `MoveToDialog` | the impact request is `?parentId=…` and the same ordering assertion holds before `PATCH {parentId}` |
+| a failed impact request does not become a silent rename | the handler answers `503` | the dialog reports the failure, no `PATCH` is issued, and a retry affordance is offered: the warning is a precondition, not a best effort |
+
+**`apps/e2e/web/rename-impact.e2e.spec.ts` (`rename-impact.e2e`)** — `{ tag: ['@area-links'] }`, against the built bundle and the built server, with a `{ lock: 'vault:kernel' }` test lock. Seed a vault where three notes link into `N`; rename `N` from the tree; assert that the dialog is visible with the count that `GET /nodes/:nodeId/inbound-links` reports through Playwright's `request` fixture, that no `PATCH` frame was issued before the dialog became visible (recorded with `page.route` in relaying mode, the same technique `countFrames` uses), that "Cancel" leaves `GET /vaults/:vaultId/tree` byte-identical, and that after "Rename anyway" the note's path has changed while each linking note's `GET /notes/:noteId/markdown` is byte-identical to its pre-rename body. That last assertion is the user-visible form of the "no automatic cross-document link rewriting" deferral, and it is why this test is its own file rather than a case of `tree-live-updates.e2e`.
+
+#### Invalid moves, including the cross-vault case
+
+**`apps/server/test/integration/tree.invalid-move.integration.spec.ts` (`tree.invalid-move.integration`)** — `[spec:structural-concurrency]`. `tree.structural-concurrency.integration` owns the *concurrent* pairs and asserts only that "at least one `409 invalid_move`" occurs; this file owns the refusal vocabulary and is exhaustive over it by construction: the case table is keyed by the `InvalidMoveReason` union of `@iridium/contracts/errors.ts` through a `satisfies Record<InvalidMoveReason, Case[]>`, so a member with no case does not compile — the mechanism `limits.policy.unit` and `audit.vocabulary.unit` use for their own closed vocabularies.
+
+| Reason | Procedure | Oracle |
+|---|---|---|
+| `cycle` | move category `P` under its own descendant `D`, and `P` under `P` | `409 invalid_move` with `reason: 'cycle'`, `toMatchOpenApi('nodes.update', 409)`, the tree unchanged and still acyclic, `vaults.tree_version` unchanged, no audit event |
+| `depth` | a chain of categories reaching `TREE_MAX_DEPTH` (64); move a subtree that is itself two nodes deep under the node at depth 63, then under the node at depth 62 | `409 invalid_move` with `reason: 'depth'` for the first (65 > 64) and `200` for the second (exactly 64), which is what proves the check counts the **moving subtree's own** depth as well as the target's ancestor count rather than only the latter |
+| `cross_vault` | vaults `V` and `W` with the caller a manager of **both**; `PATCH /nodes/:nodeId {parentId}` where the node is in `V` and the parent in `W` | `409 invalid_move` with `reason: 'cross_vault'` — never `404`, because this caller may read both vaults and the honest answer is "refused", not "invisible"; `nodes.vault_id` unchanged; no row written in either vault; both `tree_version`s unchanged; no audit event in either chain. The mirror case, where the caller is a member of `V` only, is `404 not_found` and is owned by `authz.vault-isolation.integration`; asserting both, in two files, is what distinguishes a refusal from an existence leak |
+| `parent_not_category` | move a note under another note; move a node under a **trashed** category | `409 invalid_move` with `reason: 'parent_not_category'` in both. 03-data-model.md's union has no separate member for a trashed parent, so this test pins the mapping instead of inventing a fifth reason, and a future fifth reason therefore arrives with a compile error here |
+| restore is the same vocabulary | `POST /nodes/:nodeId/restore` for a node whose `original_parent_id` is trashed, with and without `newParentId` | `409 invalid_move` without it and `200` with it (09-api-reference.md's restore retry path), so the reason union is proven on both routes that emit it |
+| the dry run agrees with the write | every `PATCH` case above repeated with `dryRun: true` (restore takes no `dryRun`) | identical status and identical `reason`; nothing written in either form |
+| cross-vault has no other door | `PATCH /nodes/:nodeId` bodies carrying `vaultId`, `targetVaultId` or a `parentId` in `W` under every documented spelling | the strict request object rejects the unknown members with `422 validation_failed` and the `parentId` form is the `cross_vault` refusal above; `guards.non-goals.guard` asserts separately that no route accepts a vault-changing member at all |
+
+#### Vault settings
+
+**`apps/server/test/integration/vaults.settings.integration.spec.ts` (`vaults.settings.integration`)** — `[area:vaults]`, data-driven over the request object of `PATCH /vaults/:vaultId` so a new setting cannot ship untested: the test enumerates the zod object's keys and fails on a key with no case, the same shape as `admin.surface-matrix.integration`'s enumeration of the admin routes.
+
+| Case | Oracle |
+|---|---|
+| a manager may write every setting | `200 Vault` with an `ETag` equal to the new `version`, `toMatchOpenApi('vaults.update', 200)`, the `vaults` column that 03-data-model.md's settings-columns table pairs with that field holding the new value, and `GET /vaults/:vaultId` returning it |
+| an editor and a viewer may not | `403 forbidden` for both (each holds `vault:read`, neither holds `vault:settings`), with a value-and-version snapshot of the `vaults` row unchanged |
+| `If-Match` is mandatory and checked | `428 precondition_required` when omitted, `409 stale_version` when stale |
+| validation is the schema's, per field | `422 validation_failed` naming the field in `errors[]` for `trashRetentionDays` 0 and 3651, `autoCheckpointIntervalMin` 0 and 1441, `attachmentFolder` `/abs`, `../escape` and `''`, a 501-character `description`, a 4001-character `aiGuidance`, an unknown `markdownFlavor`, an unknown `loadExternalImages`, and an empty body; `toMatchOpenApi('vaults.update', 422)`; nothing written in any case |
+| the environment floor wins | boot with a retention baseline stricter than the request, then ask for the looser value: `422 validation_failed` with `errors[0].code === 'below_env_floor'` — the same code and body shape `PUT /admin/settings` uses, because the floor rule is one rule and not two — and the direction applied per field is read from the `stricter` metadata that `@iridium/contracts/settings.ts` already declares (03-data-model.md §13.1), never from a hand-written expectation in the test |
+| the change is audited, minimally | exactly one `vault.settings.changed` row on the vault's chain per successful write, `metadata.before`/`after` containing **only** the changed keys, `assertAuditChain` passing, the actor being the manager; a refused write writes no audit event at all |
+| the change is announced once | with a `vault:<vaultId>` channel client open: one `vault-updated {version}` frame per successful write, none for a refused one, and no `tree-changed` frame — settings are not structure |
+| `mcpEnabled: false` takes effect on the next call | turn it off, then call `list_vaults` with a PAT: the vault is absent and its notes read as not found on the very next call with no cache allowance (`mcp.revocation.mcp` owns the MCP-side matrix; this case proves the REST write is what triggers it) |
+| a flavour change does not reproject | change `markdownFlavor` on a vault with 20 projected notes: every `note_projections.revision` and `.markdown` is unchanged, no projection job is enqueued, and `pipeline_version` is untouched — rendering flags are read at render time |
+| an archived vault refuses settings writes | `409 vault_archived` (`authz.archived-vault.integration` owns the general rule; this is the settings route's member of it) |
+
+#### Single-process document ownership
+
+Spec §6 starts the deployment with one collaboration-server process owning the active documents, and that rule had no enforcement: `guards.one-boot-path.guard` pins a single `new Hocuspocus(` construction site inside one process, but two copies of the same binary against one database were detected only *after* the damage — as a `head_seq` compare-and-set mismatch surfacing through `persist.cas_mismatch` and the `IridiumPersistCasMismatch` alert. After-the-fact detection is the wrong control for a condition that is refusable at boot.
+
+**The mechanism — a boot lease.** `apps/server/src/collab/owner-lease.ts` adds `CollabOwnerLease`, the smallest form consistent with the skeleton, which already uses named MySQL advisory locks for exactly this class of mutual exclusion (`GET_LOCK('iridium_migrate', 60)` around a migration run, A7):
+
+- The `collab` plugin of `buildApp()` checks out **one dedicated connection** from `dbPersist` and runs `SELECT GET_LOCK('iridium_collab_owner', 0)` after migrations are current and before the Hocuspocus instance accepts an upgrade. The name is deliberately not one of the two locks 02-system-architecture.md reserves for the multi-process path and leaves unused (`iridium_note_<id>`, `iridium_jobs_leader`): this is a whole-deployment lease, which is what "one process owns the active documents" means, so it is one lock and not one per note.
+- The timeout is `0`, so the call never waits, and the retry cadence is the readiness probe's. The mechanism therefore adds no environment variable and no constant to `@iridium/contracts/limits.ts`, and `limits.single-source.guard` and `limits.policy.unit` are unaffected.
+- Without the lease the process **refuses to serve documents**: `/collab` upgrades are refused with close code `4503` and reason `no-owner-lease` before any document is loaded, and `/readyz` gains a `collab_owner_lease` check that is fail-closed like every other one. REST reads keep working, so an operator can see a process that is up but not serving, and `collab.owner_lease.denied` is logged once rather than per attempt.
+- Acquisition is retried on each readiness evaluation, so a rolling restart hands the lease over with no operator action and without the successor ever serving beside its predecessor.
+- Release happens in the shutdown drain **after** the last `NoteWriter` has drained and every document has been stored and unloaded, so a successor cannot load a document whose updates are still queued in its predecessor.
+- The lease is a liveness control, not the durability guarantee: a `SIGKILL`ed process releases it only when MySQL reaps the session, so the `head_seq` CAS of skeleton A19 remains the backstop and `persist.cas_mismatch` remains a corruption alarm. What changes is that the ordinary operator error — two processes started against one database — is refused at boot instead of discovered from an alert.
+
+**`apps/server/test/integration/collab.owner-lease.integration.spec.ts`** — `[hp:HP-2]`:
+
+| Case | Oracle |
+|---|---|
+| the lease is held while serving | `SELECT IS_USED_LOCK('iridium_collab_owner')` from an independent connection returns the server's connection id, and `/readyz` reports `collab_owner_lease: true` |
+| the lock name and timeout are exact | a Kysely plugin records the statements: exactly one `GET_LOCK('iridium_collab_owner', 0)` per boot, on a connection that is never returned to the pool for the process's lifetime, and never inside a transaction that also holds row locks — the advisory-lock invariant of 02-system-architecture.md |
+| a denied lease refuses documents and readiness | the test holds the lock on its own connection and boots a second server on the same schema: `/readyz` → `503` with `collab_owner_lease: false`; a `/collab` upgrade closes `4503 no-owner-lease`; `GET /notes/:noteId/markdown` still answers `200`; `note_updates` gains no row; exactly one `collab.owner_lease.denied` log line is emitted however many upgrades are attempted |
+| the lease is handed over, not fought over | release the test's lock: the standby acquires it on the next readiness evaluation and then serves the same note, with no restart and no operator action |
+| release follows the drain | a graceful shutdown with one dirty document: the `RELEASE_LOCK` statement is recorded **after** the last `persist.committed` and after `afterUnloadDocument`, and `/readyz` has already been failing by then (`shutdown.drain.integration` owns the drain itself) |
+
+**`apps/server/test/chaos/collab.second-process-refused.chaos.spec.ts`** — CH-16 in "Chaos and durability procedures": the two-real-process form, which only the `chaos` project can run because only it starts the server as a child process. It is the refusal half of the rule — a second process refuses to serve rather than racing — and it also proves the recovery half: killing the owner lets the standby take the lease and serve the same note with the acknowledged content intact.
+
+### Guard tests
+
+Guard tests are cheap, run in the `guard` project (`apps/server/test/guards/*.guard.spec.ts` plus the package-local ones, both matched by the project's include globs), and exist because the invariant they protect is a security or data-loss invariant that no other test would catch until production. Every guard here is pure, filesystem-only, or at most builds the application without listening: `authz.route-policy.boot.guard` and `guards.non-goals.guard` call `buildApp({ mode: 'in-process' })` and walk `app.routes()`, which registers routes and opens no connection, so they still run in a job with no Docker. The three invariants that genuinely need a live database or a live socket — DB grants, awareness identity and log redaction — are integration tests listed in "Server suite by area", because a project without the MySQL `globalSetup` cannot run them and the `static` job has no Docker.
+
+| Guard | What it asserts | How |
+|---|---|---|
+| `deps.single-instance.guard` | exactly one resolved version of `yjs`, `lib0`, `y-protocols`, `@codemirror/state`, `@codemirror/view` | reads `pnpm-lock.yaml` directly (one parse, no child process, so it fits the `guard` project's timeout and the `static` job's pre-flight) and asserts exactly one `importers`-reachable version key per package; the `static` job additionally runs `pnpm why yjs lib0 y-protocols @codemirror/state @codemirror/view` as a shell step, which is the form 12-milestones.md §3 names, and the built web and desktop bundles are scanned for more than one `Yjs was already imported` sentinel string |
+| `collab.initial-state-only-path.guard` | `new Y.Doc(` appears only in `packages/crdt/src/**`, `apps/server/src/collab/persistence/initial-state.ts`, test files and `@iridium/testkit` | ripgrep over the workspace with an allowlist |
+| `collab.no-reinit.guard` | `getText('content').insert(` appears only in `NoteService.initialize`, the revision-restore path, the content repair path and tests | ripgrep with an allowlist; this is the guard against the "rebuild the doc from Markdown" bug class |
+| `collab.lf-invariant.guard` | no code path writes `\r` into `Y.Text`; `normalizeSource` is the only producer of content for `initialize` | ripgrep for `\r` literals in `apps/server/src/notes`, `transfer`, `collab` ; the corpus-wide `note_projections.markdown NOT LIKE '%\r%'` assertion is DB-backed and lives in `transfer.fixtures.integration` |
+| `limits.single-source.guard` | no numeric limit exists outside `@iridium/contracts/limits.ts` (invariant 6 of 02-system-architecture.md) | ripgrep over `apps/server/src`, `packages/collab-client`, `packages/editor` and `packages/ui` for a numeric literal adjacent to `limit`/`max`/`cap`, plus the specific literals the policy owns (`64`, `255`, `120`, `5`, `900`, `86400`, `100`) in `tree/names.ts` and `auth/throttle.ts`; an allowlist file records the few legitimate ones (CodeMirror viewport sizes) with a reason each. Paired with `limits.policy.unit`: this guard stops a number being invented, that test stops a constant being unenforced |
+| `authz.route-policy.boot.guard` | every Fastify route declares `config.auth`; every PAT-enabled route is in the `★` allowlist; `/__test__` routes are `test-only`; no route is registered twice | `buildApp({ mode: 'in-process' })` then walk `app.routes()`; also asserted at boot in production (the server refuses to start) |
+| `authz.no-mcp-admin-implied.guard` | `is_server_admin` never widens a token principal | type-level (`Principal` union) plus a runtime table test in `token.effective-permissions.prop` |
+| `ipc.origin.guard` | every `ipcMain.handle`/`on` registration is wrapped by the origin-checking helper and every payload is zod-parsed | AST-free ripgrep over `apps/desktop/src/main/ipc/**` asserting the wrapper is the only registration form, plus a runtime test that a handler invoked with a foreign `senderFrame.origin` throws |
+| `desktop.preload-surface.guard` | the object exposed on `window.iridium` matches a committed file snapshot, keys and arity | imports the preload module in a Node context with a stubbed `contextBridge`, snapshots the tree |
+| `desktop.webPreferences.guard` | the `webPreferences` object passed to `new BrowserWindow` matches a committed file snapshot | imports the window factory with a stubbed `electron` module |
+| `desktop.fuses.guard` | `electron-builder`'s fuse configuration matches the table of skeleton A53, and the E2E variant differs only by `enableNodeCliInspectArguments` | parses `electron-builder.yml` + the `@electron/fuses` call site; a second assertion in `release.yml` runs `npx @electron/fuses read` on the produced binaries |
+| `gen.drift.guard` (CI step) | `pnpm gen` produces no diff (`openapi.json`, `paths.d.ts`, `mcp/tools.schema.json`, Kysely `Database`, IPC typings, msw handler skeleton, `docs/non-goals.json`, `docs/acceptance-map.json`) | `pnpm gen && git diff --exit-code` |
+| `guards.no-mocks-outside-unit.guard` | `vi.mock(`, `vi.spyOn(` on first-party modules, and `msw` appear only in `unit`/`component` test files | ripgrep with a path allowlist |
+| `guards.no-sleep.guard` | no `setTimeout`-based sleep, no `page.waitForTimeout`, no `delay(` in test files | ripgrep; the fix is `expect.poll`, `ManualClock` or a Toxiproxy toxic |
+| `guards.no-direct-date.guard` | `Date.now()`/`new Date()`/bare `setTimeout` absent from `apps/server/src` outside `ops/clock.ts` | ripgrep |
+| `guards.fault-registry.guard` | `@iridium/testkit/faults/points.ts` and `apps/server/src/ops/faults.ts` declare the same point names | imports both and compares sorted key lists |
+| `guards.acceptance-map.guard` | the acceptance map is complete and honest (the six rules above), enforced only for layers whose `sinceMilestone` has arrived per `docs/milestones/CURRENT` | parses `docs/acceptance-map.json`, `docs/milestones/CURRENT` and every spec file's tags in `static` (rules 1–4 and 6); re-runs in `merge-reports` over `reports/host-contract/*.json` for rule 5 |
+| `guards.non-goals.guard` | every capability declared a non-goal in 01-vision-scope-and-principles.md §4.4 is absent from the route, MCP, CLI, client-capability, schema and dependency inventories — not merely unimplemented | reads the generated `docs/non-goals.json`, asserts its ids equal the `NonGoalId` union of `@iridium/contracts/non-goals.ts`, then runs one exhaustive absence assertion per id (`satisfies Record<NonGoalId, NonGoalAssertion>`) over `app.routes()` + `openapi.json`, `mcp/tools.schema.json` + `mcp/resources.ts`, the CLI command table, the `IridiumHost` members + `hostContractCases()` + `commands/registry.ts` + the router route tree, the Kysely `Database` interface + the migration list, and `pnpm-lock.yaml`. See "The non-goal guard" |
+| `guards.one-boot-path.guard` | one `Fastify(`/`new Hocuspocus(` construction site; no `NODE_ENV==='test'` branch outside `ops/faults.ts` and `config/env.ts` | ripgrep |
+| `guards.error-shape.guard` | every `ProblemDetails.code` used in `apps/server/src` exists in the contracts enum and appears in `openapi.json` | imports the enum, ripgreps usages |
+| `guards.i18n.guard` | no user-visible string literal in `packages/ui/src` outside `i18n/en.ts`; every key in `en.ts` is used | ripgrep + knip-style reachability |
+| `guards.no-raw-sql-in-tests.guard` | the only raw `sql` tagged template in a test file is inside `packages/testkit/src/db/corrupt.ts` | ripgrep with a single-path allowlist |
+| `guards.no-inner-html.guard` | `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `document.write` are absent from `packages/markdown-react` and `packages/ui` | ripgrep |
+| `guards.no-test-auth.guard` | `apps/server/src/auth/**` contains no branch keyed on `NODE_ENV`, `IRIDIUM_E2E` or `IRIDIUM_FAULT` | ripgrep |
+| `guards.mutation-lane.guard` | `@typescript/typescript6` appears only in `tooling/mutation/package.json` | parses every workspace manifest |
+| `docs.spikes.spec` | every spike that a reached milestone references exists as `docs/spikes/S<nn>-<slug>.md`, carries all eight template headings, has a `Result` of `pass` or `fail` and never `open`, and — when the result is `fail` — names the pull request that executed the recorded fallback | reads the spike register of 12-milestones.md §4.4 and the note files, both from the filesystem; the milestone axis is `docs/milestones/CURRENT`, the same file `guards.acceptance-map.guard` reads, so a spike that runs at M2 is not demanded at M1. Its name is fixed outside this section's layer convention — see "The spike-register check" below |
+
+#### The spike-register check
+
+`docs.spikes.spec` is the "Spikes closed" gate of 12-milestones.md §3, and it is a test rather than a read-through by decision D14-11 of 14-risks-and-open-questions.md, which owns the spike-note template it asserts. Until now it was named in three documents and specified in none, so it could not be a key of `docs/acceptance-map.json` and 15-requirements-traceability.md had nothing to cite; the row above and the "Ops, restore, release and the seam contract suites" row below are that specification.
+
+| Property | Value |
+|---|---|
+| Layer | L1, project `guard` — pure and filesystem-only, like every other guard, so it needs no Docker and no network |
+| Location | `apps/server/test/guards/docs.spikes.guard.spec.ts` |
+| Lane | `ci.yml › static`, in the first `vitest --project guard` step, alongside `gen.drift.guard` and `guards.acceptance-map.guard` |
+| Tag | `[area:docs]` |
+| What it asserts | every spike id that a **reached** milestone references in 12-milestones.md §4.4 resolves to a `docs/spikes/S<nn>-<slug>.md` file; each such file carries all eight headings of D14-11's template (Question, Why it blocks, Pinned versions, Method, Result, Decision, Fallback executed, Follow-ups); every `Result` is `pass` or `fail` and never `open`; a `fail` result names the pull request that executed the recorded fallback; and the id set, the `Runs at` assignments and the filenames in §4.4 equal those of the register in 14-risks-and-open-questions.md, so the two registers cannot diverge |
+
+**Two ownership notes, recorded so nobody "fixes" them later.**
+
+- **The name predates the layer convention and is deliberately not renamed.** Under the Location convention the file's basename would make this `docs.spikes.guard`, and that spelling is *wrong* here: 14-risks-and-open-questions.md D14-11 fixes `docs.spikes.spec`, 12-milestones.md §3 and §13.5 cite it under that spelling, and §13.5 records the exception explicitly. This section owns test names (D10-21), and it exercises that ownership by adopting 14's spelling unchanged rather than by overruling it — the opposite of the `tree.name-rules` / `contracts.paths` call, because there the two sections disagreed about *which test* was meant, while here they agree about the test and only one of them has a template to protect. The completeness table is the authority mapping a name to a path (it already performs that job for every co-located property file), so the name/basename divergence is recorded data, not drift.
+- **Ownership is joint, and the assertion set follows 14.** The template headings, the `Result` vocabulary and the fallback-names-a-pull-request rule are D14-11's; this section owns the file, the project, the lane and the tag. A change to the template is a change to 14-risks-and-open-questions.md first and to this row second, in the same commit — the same two-part discipline `guards.non-goals.guard` has with 01-vision-scope-and-principles.md §4.4.
+
+**One mechanical consequence.** `scripts/check-test-name-references.ts` matches `<area>.<subject>.<layer>` with `layer` drawn from the ten legal layers, and `spec` is not one of them, so this name would be invisible to the reference checker — neither validated nor flagged. The script therefore carries `docs.spikes.spec` as a single literal exception, matched by name and resolved against `docs/acceptance-map.json` exactly like a pattern match. Widening the layer alternation with `spec` instead was rejected: every `*.spec.ts` filename quoted anywhere in `plan/` would start to look like a test name, and the checker would fail on dozens of legitimate file references.
+
+#### The non-goal guard
+
+`guards.non-goals.guard` (`apps/server/test/guards/non-goals.guard.spec.ts`, project `guard`, tag `[area:non-goals]`) is the one merge-blocking guard that turns spec §10's deferrals from prose into a build failure. Twelve traceability rows were held by prose alone before it existed — graph view, per-note or per-category permission overrides, mobile clients, enterprise single sign-on, multi-server collaboration, offline-first editing, cross-vault moves, automatic cross-document link rewriting, full Obsidian syntax compatibility, built-in AI features, "not a complete Obsidian replacement" and "no second content write path" — and all twelve share one shape: the *seam* is proven and the *absence* is not, so partially building the deferred feature breaks no test.
+
+**The declared list it reads.** `scripts/build-non-goals.ts`, a `pnpm gen` step placed immediately before `scripts/build-acceptance-map.ts`, parses 01-vision-scope-and-principles.md §4.4 — the deferral table and the two bullet lists that follow it — into `docs/non-goals.json`, one entry per declared non-goal as `{ id, title, whatTheMvpDoesInstead, seamKept, section, sinceMilestone }`. The file is committed, so `gen.drift.guard` covers it exactly as it covers `openapi.json` and `docs/acceptance-map.json`: editing §4.4 without regenerating, or regenerating without committing, fails the `static` job. `packages/contracts/src/non-goals.ts` declares the `NonGoalId` union by hand; the guard's first assertion is that the union's members and the ids in `docs/non-goals.json` are the same set, and its assertion table is declared `satisfies Record<NonGoalId, NonGoalAssertion>`, so **adding a non-goal to §4.4 without writing its assertion does not compile** and removing one fails until its assertion goes too. That is the single-authority mechanism `limits.policy.unit` uses for `LimitId`, chosen for the same reason: a guard whose list can drift from the declaration is a guard that quietly stops covering things.
+
+**The inventories it asserts against.** Every one is obtainable without Docker and without a network, which is what keeps the guard in the `guard` project and therefore in the `static` job.
+
+| Inventory | How it is obtained |
+|---|---|
+| Registered routes | `buildApp({ mode: 'in-process' })` without `listen()`, then `app.routes()` — the technique `authz.route-policy.boot.guard` already uses — cross-checked against `packages/contracts/openapi/openapi.json` and required to agree before either is used (decision D10-26) |
+| MCP tools and resources | the committed `packages/contracts/mcp/tools.schema.json` plus the resource-template list imported from `apps/server/src/mcp/resources.ts`. `mcp.tools-schema.contract` separately proves the live `tools/list` equals that artifact, so the guard may assert over the artifact without a running server |
+| CLI commands | the command table under `apps/server/src/cli/` imported as data — the same table `cli.contract` compares with the generated `docs/ops/runbooks/cli.md` |
+| Client host capabilities | the `IridiumHost` member list of `packages/ui/src/host/host.ts`, the case names of `hostContractCases()`, the command ids of `packages/ui/src/commands/registry.ts`, and the typed route ids of the TanStack Router route tree |
+| Database tables and columns | the committed Kysely `Database` interface plus the migration file list under `apps/server/src/migrations/`; a deferred table appearing in either is a non-goal that has started shipping |
+| Dependency closure | `pnpm-lock.yaml`, parsed once — the parse `deps.single-instance.guard` already performs — so a deferred capability cannot arrive as a dependency before it arrives as code |
+
+**What each declared non-goal asserts,** in the order of §4.4:
+
+| Non-goal | Absence assertion |
+|---|---|
+| Plugin ecosystem | no dynamic `import(` or `require(` of a non-bundled specifier in `apps/desktop/src` or `packages/ui/src`; no `plugins`/`extensions` directory in either; `commands/registry.ts` is re-exported from no package entry point, so the one extension-shaped surface stays internal |
+| Graph view | no route, CLI command, MCP tool, command-registry id or router route id matching `/graph\|network-view\|canvas-view/i`; no graph-layout dependency (`d3-force`, `cytoscape`, `vis-network`, `sigma`, `react-force-graph`) |
+| Advanced WYSIWYG / live-preview editing | no `contenteditable` in `packages/ui` or `packages/markdown-react` outside CodeMirror's own view; no ProseMirror, Slate, Lexical, TipTap or Quill dependency |
+| Automatic link rewriting | no `jobs.type` enum member and no CLI command that rewrites links; the writers of note content are exactly the allowlist of `collab.no-reinit.guard`; `note_links` is written only by the projection writer |
+| Full Obsidian syntax compatibility | the registered remark and rehype plugin lists equal their committed sets, and `remarkWikiLink`, `remarkCallout`, `remarkHighlight` and `remarkComment` are absent from the default pipeline while open question G2 is undecided. G2's state is a field of this non-goal's `docs/non-goals.json` entry, so deciding it "yes" flips the expectation in the same commit that extends the HP-4 corpus and `markdown.sanitize.prop` — the coupling 14-risks-and-open-questions.md asks for |
+| Per-note / per-category ACL overrides | `authorize()`'s context type has exactly the key `vaultId`; every route's `config.auth` uses one of the four documented `vaultFrom` forms; no `nodes`, `notes` or `note_*` column named `role`, `permissions`, `acl`, `visibility` or `shared_with` exists in the `Database` interface or in any migration |
+| Public sharing | the `Principal` union is exactly `user \| token \| system`; no route declares `{ public: true }` outside the documented public set; no `share` or `publish` route, command or tool |
+| Cross-vault moves | no request object in `openapi.json` carries a vault-changing member (`vaultId`, `targetVaultId`, `newVaultId`) on a node, note or attachment path; no Kysely `.set(` in `apps/server/src` assigns `vault_id` outside the node-creation and import-commit paths. The *behaviour* is `tree.invalid-move.integration`'s `cross_vault` case; this is the assertion that there is no other door |
+| Bidirectional filesystem / Git sync | no `chokidar`, `fs.watch`, `fs.watchFile`, `nodegit` or `isomorphic-git` in `apps/server/src` or the client packages; `mirror` is the only filesystem writer and has no reader (`mirror.readonly.integration` proves the runtime half) |
+| Offline-first editing | no `y-indexeddb`, `y-leveldb`, `y-websocket` or `y-webrtc` reachable from the importers of `packages/{collab-client,editor,ui}` or `apps/{web,desktop}`; no `Y.encodeStateAsUpdate` call adjacent to a storage API in those packages; the `host.storage` key allowlist contains no note-id pattern |
+| Mobile clients | no `react-native`, Capacitor or Cordova dependency in any workspace manifest; no `@media` breakpoint below the desktop floor declared in `packages/ui/src/styles/tokens.css`; no Playwright project with a viewport narrower than that floor |
+| Enterprise SSO | exactly one `SessionIssuer` implementation in the module graph; the deferred tables `auth_providers`, `identities`, `groups`, `group_members`, `oauth_clients`, `oauth_authorization_codes` and `oauth_refresh_tokens` appear in no migration and in no `Database` key; `sessions.mfa_verified_at` has no reader; no route under `/auth/` outside the documented set; no OAuth or OIDC dependency |
+| Multi-server collaboration | one `new Hocuspocus(` construction site (the composed claim; `guards.one-boot-path.guard` owns the primitive); no `@hocuspocus/extension-redis`, `ioredis` or `redis` dependency; `GET_LOCK('iridium_note_` and `GET_LOCK('iridium_jobs_leader'` appear in no non-test source file, so the locks 02-system-architecture.md reserves stay reserved, while `GET_LOCK('iridium_collab_owner'` appears exactly once |
+| Built-in AI features | `tools.schema.json` holds exactly the six read tools, each with `readOnlyHint: true`; no route under `/ai` or `/chat`; no `note_proposals` table in any migration or `Database` key; no `VECTOR` column type and no column named `embedding`; no LLM or vector dependency (`openai`, `@anthropic-ai/sdk`, `langchain`, `llamaindex`, `chromadb`, `@xenova/transformers`, `faiss-node`) |
+| Not a complete Obsidian replacement | the composite claim of spec §1: the plugin, graph-view, WYSIWYG and filesystem-sync assertions above must all hold, asserted as one case so the scope sentence has one failing test rather than four partial ones |
+| No second content write path | `new Y.Doc(` and `getText('content').insert(`/`.delete(` appear only in the allowlists of `collab.initial-state-only-path.guard` and `collab.no-reinit.guard`; no `openapi.json` operation accepts a full `markdown` body except `nodes.create` and `revisions.restore`; no MCP tool is anything but read-only; no CLI command writes note content except `repair content`; `iridium mirror` never reads the filesystem back |
+
+The remaining §4.4 bullets (agent write access, OAuth for MCP, MCP notifications and sessions, binary MCP resources, comments, SCIM/MFA/passkeys, external search engines, attachment encryption, vault hard deletion, math and Mermaid rendering, e-mail delivery, the publishing and packaging deferrals) each carry an entry too; most reduce to an assertion the contract suites already make, and the guard cites the suite rather than duplicating it — which is legal because the exhaustiveness check is over ids, not over assertion styles, and a citation that names a test absent from "Inventory completeness" fails `scripts/check-test-name-references.ts`.
+
+**Why it blocks a merge rather than advising.** A deferral nothing enforces is re-litigated by accident: a graph pane, a mobile breakpoint and a second content write path all arrive as small, reasonable-looking changes, and by the time anyone notices, the security suites signed off against the narrower surface no longer cover the product. The guard runs in the `guard` project, which the `static` job runs first, so a crossed non-goal is reported before any heavier lane starts. Crossing one deliberately is a three-part commit — edit §4.4, regenerate `docs/non-goals.json`, change the assertion — which is exactly the review a scope change deserves, and 13-decision-log.md then carries the override that spec §10's "deferrals stand unless overridden" requires.
+
+**Milestone phasing.** These are absence claims, so almost all of them are satisfiable from M0. The exceptions are the inventories that do not exist yet: the route walk before the first route, the MCP artifact before M3, the router route tree and the `IridiumHost` member list before M4, the Electron entries before M5. Each assertion therefore declares a `sinceMilestone`; the guard fails on an assertion whose milestone has arrived and whose inventory is missing, and skips one whose milestone has not — read from the same `docs/milestones/CURRENT` file `guards.acceptance-map.guard` uses — so "not applicable yet" cannot quietly become the permanent state.
+
+### Server suite by area (L3/L4/L8 unless noted)
+
+| Area | Tests | Key assertions |
+|---|---|---|
+| Kernel | `kernel.smoke.integration` | the literal spec §10 sentence in one test: one authenticated note, two editors, one viewer, MySQL persistence, a server restart — it is the M1 gate and is never allowed to be skipped or quarantined |
+| Auth — credentials | `auth.policy.unit`, `auth.hasher.unit`, `auth.throttle.integration`, `setpw-link.integration` | NIST-style policy (length, denylist, no composition rules); `needsRehash` and pepper-version drift re-hash transparently; DB-backed throttling counts per account and per IP and does not lock out on successful logins; set-password links are single-use, 24 h, hashed, and consumed atomically; a consumed link is unusable even with a valid password |
+| Auth — sessions | `auth.sessions-web.integration`, `auth.sessions-desktop.integration`, `auth.step-up.integration` | `__Host-` cookie attributes exactly as specified; idle-sliding and absolute expiry via `ManualClock`; desktop bearer sessions are not accepted as cookies and vice versa; step-up expires after 10 min and is required on every route marked `step-up` (data-driven from `app.routes()`) |
+| Auth — tickets | `tickets.batch-and-limits.integration` | single use, 60 s TTL, batch ≤ 50, bound to `{sessionId, userId}`, rate limits 300/min/session and 1 000/min/IP, a ticket for a revoked session fails, a ticket survives a reconnect storm of 20 documents with one batch |
+| Auth — tokens | `tokens.format.unit`, `tokens.verify.unit`, `tokens.rotation.integration`, `token.effective-permissions.prop` | format `irid_<kind>_<id16>_<secret43><crc6>`; CRC rejects single-character corruption; SHA-256 at rest and never logged; mandatory expiry with the 90/366-day policy; rotation keeps both secrets valid for `overlapHours` then the old one dies; effective permissions = scopes ∩ allowlist ∩ owner's live explicit role (never admin-implied) |
+| Authorization | `authz.matrix.unit`, `authz.rest-viewer.integration`, `authz.vault-isolation.integration`, `authz.archived-vault.integration` | archived vaults refuse all writes with `vault_archived` while reads and exports still work for members |
+| Transport security | `security.csrf.integration`, `security.ws-origin.integration`, `security.rate-limits.integration`, `security.headers.integration` | `X-Iridium-Client: web` plus `Sec-Fetch-Site` (then `Origin`, then `Referer`) is required on every state-changing cookie-principal route including multipart, and bearer requests skip it — data-driven from `app.routes()` so a new mutating route is covered automatically; a `/collab` upgrade with a foreign or absent `Origin` is refused; the three REST rate-limit tiers (600/min authenticated per principal, 60/min unauthenticated per IP, 10/min login per IP) return `429` with `Retry-After` and a `rate_limited` ProblemDetails; the helmet/CSP/HSTS/COOP/CORP/`Referrer-Policy`/`Permissions-Policy` header set matches a committed snapshot on `/app/*`, `/api/v1/*`, `/mcp` and attachment responses |
+| Audit | `audit.chain.integration`, `audit.export.integration`, `audit.archive.integration` | chain verifies under 8 concurrent writers on two chains; a tampered row is detected at the exact `last_id`; `iridium audit export` JSONL/CSV round-trips; archiving moves rows without breaking verification; the closed vocabulary is exhaustive (every `AuditAction` value is produced by at least one test — a table test over the enum) |
+| Access log | `access-log.integration` | every MCP call and every PAT REST call writes one row with `note_ids`; batching does not lose rows under a `SIGTERM` drain; retention partitions drop on schedule |
+| Vaults | `vaults.settings.integration` | a vault manager writes every setting of `PATCH /vaults/:vaultId` and an editor or viewer writes none; `If-Match` is mandatory; each field's validation is the schema's; a value weaker than its environment floor is `422 validation_failed` with `errors[0].code='below_env_floor'` in the direction the `stricter` metadata of `@iridium/contracts/settings.ts` declares; one `vault.settings.changed` audit event per successful write carrying only the changed keys; one `vault-updated` frame and no `tree-changed`; `mcpEnabled:false` bites on the very next MCP call; a flavour change reprojects nothing; an archived vault refuses the write (full case table in "Specified rules outside the nine rows") |
+| Tree | `tree.crud.integration`, `tree.paths.integration`, `tree.invalid-move.integration`, `tree.rename-impact.integration`, `tree.structural-concurrency.integration`, `tree.stale-resurrection.integration`, `tree.trash-retention.integration` | `tree.invalid-move.integration` is exhaustive over the `InvalidMoveReason` union by construction, so `cross_vault` — a manager of both vaults moving a node into the other — is a named case rather than an unproven sentence, and `tree.rename-impact.integration` owns the link-warning payload and its ordering; derived paths from the recursive CTE equal an independently computed path in the test; `tree.paths.integration` also records the `GET /vaults/:vaultId/nodes` p95 at 20 000 nodes so skeleton A12's cache trigger (p95 > 200 ms) is observable, and asserts the cache invalidates on `tree_version` from the milestone that actually builds it (A12 makes the per-vault path cache a measured-trigger optimisation, not an M2 deliverable — 12-milestones.md §6.2); trash retention purges at `expires_at` and not before |
+| Notes & revisions | `notes.initialize.integration`, `revisions.restore.integration`, `revisions.thinning.integration`, `revisions.named.integration` | double-init is impossible under `Promise.all`; restore writes `pre_restore` then applies a minimal prefix/suffix diff through a `DirectConnection`, other clients' cursors survive, the restoring user's own undo does not capture the restore (non-tracked origin), and the restore is itself reversible; thinning keeps every `named`/`import`/`restore`/`pre_restore`/`trash` row |
+| Projections | `projection.monotonic.integration`, `projection.title-after-rename.integration`, `projection.hostile.integration`, `projection.reindex.integration` | the `WHERE revision < ?` guard rejects an out-of-order write (injected by running two compactions concurrently); `heading_title` and `note_search.title` update on rename; a pathological note lands in `status='too_complex'` with raw Markdown still served; `iridium reindex --pipeline-version` is resumable and throttled |
+| Search | `search.acl.integration`, `search.query-parser.unit`, `search.snippets.integration`, `search.staleness-hint.integration` | boolean-mode operator escaping (`+ - > < ( ) ~ * " @`), phrase queries, negation, 1-character tokens falling back to `title LIKE`, snippets anchored to real line numbers, `stale: true` when `projected_seq < head_seq` |
+| Attachments | `attachments.security.integration`, `attachments.dedupe.integration`, `attachments.unreferenced-report.integration` | MIME sniffing overrides the declared type; `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`, `Cache-Control: private`; SVG and HTML are never served inline; size cap 50 MiB returns `413`; identical bytes in one vault dedupe to one row; a `Range` request returns `206` with the right slice and an unsatisfiable range returns `416`; deletion with referencing notes needs `force`; the unreferenced report never lists a referenced blob |
+| Transfer | `transfer.fixtures.integration`, `import.commit.integration`, `import.unsafe-paths.unit`, `import.resume.integration`, `export.manifest.integration`, `export.stream.integration` | a half-committed import is never visible; commit is idempotent under retry; export streams without buffering the whole ZIP (asserted by RSS delta on a 500 MB fixture) |
+| MCP | `mcp.dual-era.contract`, `mcp.tools-schema.contract`, `mcp.scopes.mcp`, `mcp.isolation.mcp`, `mcp.revocation.mcp`, `mcp.cursor.unit` + `.mcp`, `mcp.output-schema.mcp`, `mcp.rate-limit.mcp`, `mcp.resources.mcp`, `mcp.fail-closed.mcp`, `mcp.factory-error.mcp`, `mcp.instructions.mcp`, `mcp.conformance.mcp`, `mcp.inspector-smoke.mcp`, `bridge.parity.contract` | detailed in "Contract and conformance suites" |
+| Collaboration | `collab.awareness-identity.integration`, `collab.limits.integration`, `collab.admission-budget.integration`, `collab.flush.integration`, `collab.participants.integration`, `collab.token-sync.integration`, `collab.unload-after-veto.integration`, `collab.isolation.integration`, `collab.owner-lease.integration` | the boot lease `GET_LOCK('iridium_collab_owner', 0)` is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses `/collab` with `4503 no-owner-lease` while `/readyz` reports `collab_owner_lease: false`; a forged awareness `user.id` closes the connection `awareness-spoof` (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through `startServer({ limits: { maxLoadedDocs: 8 } })`, never by opening 2 001 documents; `flush {}` is rate-limited per session and never writes; the participant map is server-supplied; `onTokenSync` re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer `retrying`/`failed`/`backpressure`, no `note_revisions` row at `head_seq`) and the writer completes the vetoed unload itself once it drains |
+| Vault channel | `collab.vault-channel.integration` | the harness for the `tree-changed` producer, from the milestone that ships it (M2, before any product client subscribes): a second connection on `vault:<id>` — the testkit's `vaultChannelClient`, reached through `srv.vaultChannel(user, vaultId)` — receives `tree-changed {treeVersion, changes[]}` after every structural COMMIT and nothing before it; the channel document is never persisted, because its `onStoreDocument` throws `SkipFurtherHooksError` (asserted by a zero row count in `note_docs`/`note_updates` for the channel name); a non-member's `vault:<id>` connection is refused `unauthorized` (4401); an open `note:<id>` connection on the same vault is undisturbed by a rename |
+| DB roles | `db-grants.integration` | `iridium_app` cannot `UPDATE`/`DELETE` `audit_events`, cannot run DDL, and `iridium_backup` cannot write: the test executes each forbidden statement and expects `ER_TABLEACCESS_DENIED_ERROR`, and asserts the `audit_events` BEFORE UPDATE/DELETE triggers raise (skeleton A8; the grant set is compared with the committed fixture `SHOW GRANTS` output) |
+| Jobs | `jobs.scheduler.integration`, `jobs.trash-purge.integration`, `jobs.update-log-prune.integration`, `jobs.partitions.integration`, `jobs.session-sweep.integration` | every job is idempotent, re-entrant-safe (a second invocation while the first runs is a no-op), bounded per run, and driven by `ManualClock`; `POST /admin/jobs/:type/run` is audited |
+| Ops | `readyz.integration`, `healthz.integration`, `metrics.integration`, `logging-redaction.integration`, `shutdown.drain.integration`, `migrations.integration`, `config.env.unit`, `routes.test-namespace-absent.integration`, `doctor.integration` | `/readyz` is fail-closed on each of its checks independently (DB ping, migrations current, storage writable, writer backlog age, worker pool, and the `collab_owner_lease` check of `collab.owner-lease.integration`); `/metrics` exposes every metric name the alert rules reference (a table test against `infra/monitoring/alerts.yml`); migrations produce a schema identical to a fresh build (`kysely-codegen` diff) on `mysql:9.7.2-oraclelinux9` and `mysql:8.4.11`; `config.env.unit` rejects an unknown `IRIDIUM_*` key, boots on an environment carrying every reserved harness name of D10-5, loads `*_FILE` secrets, prints the redacted summary and parses **every documented default** — which is the only place the production values of the capacity limits are asserted (`COLLAB_MAX_LOADED_DOCS` 2 000, `COLLAB_MAX_STATE_BYTES_TOTAL` 1 GiB): reaching them in a live test would mean 2 001 document loads, so the behaviour is proven at an overridden budget in `collab.admission-budget.integration` and CH-10 and the number is proven here; `routes.test-namespace-absent.integration` asserts the whole `/__test__` prefix returns 404 under `NODE_ENV=production`, that the control routes exist and arm faults under `NODE_ENV=test`, and that the route-policy boot assertion refuses to start when a `/__test__` route lacks `config.auth = 'test-only'`; `iridium doctor` detects each invariant violation that `corruptDeliberately` can create; `logging-redaction.integration` boots with a pino destination captured in memory, exercises login, token use, a collab session, an import and an error path, then scans every line against the `irid_[a-z]{3}_` regex, `/Bearer /`, `Cookie`/`Set-Cookie`, the fixture note's unique marker and a base64 prefix of a known Yjs update (skeleton A49) |
+| Admin | `admin.users.integration`, `admin.vaults.integration`, `admin.tokens.integration`, `admin.sessions.integration`, `admin.settings.integration`, `admin.releases.integration` | every admin action is authorized, step-up-gated, audited, and visible to vault managers where the skeleton says so; `server_settings` respects env floors (an admin cannot raise a TTL above the env ceiling) |
+| Compatibility | `meta.apiversion.integration`, `compat.n-minus-1.integration` | `GET /meta` shape; a client sending an `X-Iridium-Client-Version` below `minClientVersion` receives the documented refusal on write routes and a readable body; a client at `apiVersion` N-1 still works on every route marked additive |
+
+### Client suite (L2 component, Vitest Browser Mode)
+
+| Test | Proves |
+|---|---|
+| `editor.ycollab.two-docs.component` | typing in view A appears in view B across two in-memory `Y.Doc`s wired with `Y.applyUpdate`; `data-line`/offset decorations stay correct; `EditorView.cspNonce` is applied so no inline style is blocked |
+| `editor.remote-cursors.component` | `yRemoteSelections` renders a caret and selection per remote client with the name/colour taken from the server-supplied participant map, not from awareness |
+| `editor.undo-isolation.component` | A's `Y.UndoManager` (trackedOrigins) never removes B's text, across 200 randomized interleavings |
+| `editor.formatting-source-only.component` | each formatting `StateCommand` (bold, italic, strikethrough, inline code, link, fenced code, headings 1–6, bullet/ordered/task list, blockquote) edits the Markdown source and nothing else; round-tripping a command twice returns the original source; `Mod-b` does not fall through to `selectParentSyntax` |
+| `editor.readonly-compartment.component` | the read-only compartment blocks input without unmounting the view and restores editability on upgrade |
+| `editor.frontmatter.component` | the `iridiumFrontmatterBlock` lezer parser highlights YAML inside `---` fences and does not consume a `---` thematic break mid-document |
+| `preview.inertness.component` | every hostile corpus entry renders with no `<script>`, no `on*` attribute, no `javascript:`/`data:`/`vbscript:` href, no `<iframe>`, no `<object>`, no `<meta>`; a DOM-level re-scan of the rendered subtree confirms it; no network request leaves the page (intercepted) |
+| `preview.worker-timeout.component` | a pathological note produces the "Preview unavailable" banner within the 2 s client budget and the worker is terminated and respawned |
+| `status-pill.transitions.component` | every one of the ten `SaveState` values of 05-collaboration-and-durability.md renders the right label — `connecting`, `syncing`, `saved`, `save-failed` ("Not saved — retrying"), `disconnected`, `read-only`, `rejected`, `revoked`, `trashed`, `closed` — plus baseline arrival, the "up to date for agents" flash after a `flush`, and role re-attach; driven by a fake provider feeding `reduceSaveInput`, not by timing. Close *reasons* (`note-trashed`, `shutdown`) are inputs, not states: the test asserts the reason→state mapping of the 05 rule table rather than inventing pill states for them |
+| `rename-impact.dialog.component` | the move/rename link warning precedes the mutation: the recorder's request *sequence* shows the impact request and then no `PATCH` until "Rename anyway" is activated; cancel issues none; an empty impact list skips the dialog but not the request ordering; no "don't ask again" key is ever written to `host.storage`; the count rendered is the payload's `total`, never `samples.length`; a failed impact request never degrades into a silent rename |
+| `tree.keyboard.component`, `tree.dnd.component` | full keyboard reachability and operation (arrows, Home/End, type-ahead, F2 rename, Delete, Enter), drag-and-drop move with an invalid-drop refusal, and live `tree-changed` application without losing selection |
+| `tabs.preview-and-pinned.component`, `switcher.quick-open.component`, `palette.registry.component` | tab pinning/reordering/close-with-unsaved-warning, quick-switcher fuzzy ordering determinism, command palette registry coverage (every registered command is reachable and has a label) |
+| `tokens.dialog.component` | the secret is shown exactly once, snippets are generated per client with the secret injected client-side, and the secret never appears in any DOM node after the dialog closes |
+| `a11y.axe.component` | axe-core on the workspace, vault selector, settings, admin and dialog surfaces: zero violations at `serious`/`critical`; focus order and visible focus ring asserted; `prefers-reduced-motion` honoured |
+| `host.contract.component` | `MemoryHost` and `BrowserHost` satisfy every case of `hostContractCases()` (see "The `IridiumHost` contract suite"); a member whose behaviour differs between the two fails here before any E2E lane runs |
+
+### The `IridiumHost` contract suite
+
+07-client-applications.md §2.4 requires one behavioural contract satisfied by `MemoryHost`, `BrowserHost` and `ElectronHost`, and the skeleton's M4/M5 exit lists name `host.contract` in both hosts. That contract cannot be one spec file: the browser half executes under Vitest Browser Mode (`expect` from `vitest`, `vitest-browser-react`) and the desktop half under Playwright's `electron` project (`expect` from `@playwright/test`, `_electron.launch`), and the two runners' test and assertion APIs are incompatible. The cases also cannot live in `@iridium/testkit`, which is `node`-tagged and therefore not a devDependency of the `browser`-tagged `packages/ui`. The seam is therefore runner-agnostic **data** (decision ARCH-26 of 02-system-architecture.md):
+
+```ts
+// packages/ui/src/host/contract-cases.ts — no test-runner import anywhere in this file
+export interface AssertFns {
+  equal<T>(actual: T, expected: T, what: string): void;
+  match(actual: string, re: RegExp, what: string): void;
+  rejects(fn: () => Promise<unknown>, code: string, what: string): Promise<void>;
+  keys(obj: object, expected: readonly string[], what: string): void;
+}
+export function hostContractCases(): Array<{
+  name: string;                                              // e.g. 'shell.openExternal refuses file:'
+  run(host: IridiumHost, assert: AssertFns): Promise<void>;
+}>;
+```
+
+The cases live beside `host.ts` in the package that owns `IridiumHost`, so no new boundary tag and no test-only package is needed, and they assert exactly the members 07 §2.4 lists: the `Object.keys` shape per namespace, the rejection code for every unsupported member, that `attachments.urlFor` never embeds a credential, that `shell.openExternal` refuses `javascript:`, `file:`, `data:` and `http:`, that `collab.websocketUrl()` derives from `server.origin()`, that `storage` round-trips UTF-8 and survives a reload, and that `auth.onSessionChanged` fires exactly once per sign-out.
+
+| Harness | File | Host(s) | How it runs the cases |
+|---|---|---|---|
+| `host.contract.component` | `packages/ui/src/host/host.contract.component.spec.tsx` | `MemoryHost`, `BrowserHost` | imports the array directly; `it.for(hostContractCases())` with an `AssertFns` facade over Vitest's `expect` |
+| `host.contract.e2e` | `apps/e2e/web/host.contract.e2e.spec.ts` | `BrowserHost` in the built bundle | the bundle exposes `window.__iridiumHostContract = { list(), run(name) }` **only** under `IRIDIUM_E2E=1` (the same flag that gates the perf `WeakRef` registry); the spec enumerates `list()` and asserts each `run(name)` report with Playwright's `expect` |
+| `desktop.host-contract.e2e` | `apps/e2e/electron/desktop.host-contract.e2e.spec.ts` | `ElectronHost` | the same page-side runner reached through `electronApp.firstWindow()`; the fallback-mode pass required by 07-client-applications.md §7.10 is owned by `desktop.ipc-websocket-fallback.e2e`, which drives the identical case list with `IpcWebSocket` forced on |
+
+Each harness writes `reports/host-contract/<harness>.json` listing the case names it passed; `merge-reports` aggregates them and `guards.acceptance-map.guard` fails when a case in the array has no recorded pass in every harness whose milestone has arrived (`host.contract.component` from M4, `host.contract.e2e` from M4, `desktop.host-contract.e2e` from M5). A case added to the array is therefore an automatic failure in whichever host does not yet implement it — which is the drift this suite exists to close.
+
+### E2E inventory
+
+**Web (`apps/e2e/web/`, Playwright `chromium`)**: `three-editors.e2e`, `saved-indicator.e2e`, `viewer-readonly.e2e`, `vault-isolation.e2e`, `revocation-while-open.e2e`, `disconnect-pause.e2e`, `undo-isolation.e2e`, `tabs-lifecycle.e2e`, `tree-live-updates.e2e`, `rename-impact.e2e`, `restore-revision.e2e`, `history-named-version.e2e`, `search-operators.e2e`, `import-report.e2e`, `export-roundtrip.e2e`, `attachments.e2e`, `token-create-and-use.e2e`, `admin.e2e`, `security.hostile-markdown.e2e`, `host.contract.e2e`, `perf.workspace.e2e`, `a11y.keyboard-only.e2e`. Tests tagged `@smoke` also run in the nightly `firefox-smoke` and `webkit-smoke` projects.
+
+**Electron (`apps/e2e/electron/`, Playwright `electron`)**: `desktop.launch.e2e` (the M0 smoke: `_electron.launch` reaches a window, `/readyz` is green, the app exits cleanly — it exists from the first milestone so the `e2e-electron` job is never an empty required check), `desktop.hardening.e2e`, `desktop.sign-in.e2e`, `desktop.open-note.e2e`, `desktop.three-instances.e2e`, `desktop.viewer-readonly.e2e`, `desktop.revocation-while-open.e2e`, `desktop.durable-save.e2e`, `desktop.hostile-markdown.e2e`, `desktop.deep-link-fuzz.e2e`, `desktop.attachments-no-token-in-renderer.e2e`, `desktop.update-check-local-feed.e2e`, `desktop.export-roundtrip.e2e`, `desktop.import-folder.e2e`, `desktop.server-profiles.e2e`, `desktop.tls-pin.e2e`, `desktop.native-menu.e2e`, `desktop.ipc-contract.e2e`, `desktop.host-contract.e2e`, `desktop.perf.e2e`, `release.packaged-smoke.e2e` (release only).
+
+### Inventory completeness
+
+The five inventories above (acceptance rows, hard properties, the specified rules outside the nine rows, guards, and the server/client/E2E suites) name the tests this section specifies in prose. They are not the whole plan: twelve other sections cite tests by name too, and a name that appears in 04/06/08/11/12/13 but nowhere here is an undefined reference — nothing says where the file lives, which project runs it, or what it asserts, and `guards.acceptance-map.guard` cannot be satisfied by it. The tables below close that gap in one direction: **every `<area>.<subject>.<layer>` name used anywhere in the plan resolves here to a file, a project and a tag.**
+
+Two mechanical consequences:
+
+- `scripts/build-acceptance-map.ts` generates `docs/acceptance-map.json` from this section — the five inventories plus the tables below — and the generated file is committed. It is the only input to `guards.acceptance-map.guard`. The script is a step of `pnpm gen` (last in the order, after the OpenAPI and MCP artefacts, because it references their operation and tool names), so `docs/acceptance-map.json` is covered by `gen.drift.guard` exactly like `openapi.json`: a table edited without regenerating, or a map regenerated without committing, fails the `static` job rather than rotting into a stale coverage claim. `scripts/build-acceptance-map.ts --check` in `static` is the same code path with the write suppressed, so a contributor sees the diff named before the drift gate reports it.
+- `scripts/check-test-name-references.ts` runs in the `static` job. It greps every markdown file under `plan/` and `docs/` for `[a-z][a-z0-9-]*(\.[a-z0-9-]+)+\.(unit|component|integration|prop|chaos|contract|mcp|e2e|guard|drill)` and fails on any match that is not a key in `docs/acceptance-map.json`, printing the canonical spelling when the match is a superseded variant. A rename therefore breaks the build in the commit that renames, and cross-section drift is a build failure rather than a discovery at implementation time.
+
+File paths follow the Location convention, so a table states a path only where the layer does not imply it (`integration` → `apps/server/test/integration/<name>.spec.ts`, `chaos` and `drill` → `apps/server/test/chaos/`, `contract` → `apps/server/test/contract/`, `mcp` → `apps/server/test/mcp/`, `e2e` → `apps/e2e/{web,electron}/`, `unit`/`prop`/`component` → co-located under `src/`). A co-located file may omit the area prefix its own directory or package already supplies: `packages/crdt/src/dominates.prop.spec.ts` is `crdt.dominates.prop`, `apps/server/src/auth/policy.unit.spec.ts` is `auth.policy.unit`.
+
+**Contracts, CRDT and shared primitives** (project `unit`; tag `[area:contracts]` unless stated)
+
+| Test | File | Asserts |
+|---|---|---|
+| `contracts.ids.unit` | `packages/contracts/src/ids.unit.spec.ts` | UUIDv7 helpers, `BINARY(16)` ↔ canonical-string conversion, and that `note_revisions.id` and `revision` stay below 2^53 so JSON numbers are safe (09-api-reference.md §1). Canonical against 12-milestones.md's `ids.prop`, which names the property half of this subject (section 7, "Canonical names for the contracts primitives") |
+| `contracts.ids.prop` | `packages/contracts/src/ids.prop.spec.ts` | UUIDv7 monotonicity within a millisecond, 16 bytes, version and variant bits, lossless lowercase canonical round trip, and `BINARY(16)` ordering matching timestamp ordering. Runs in the `unit` project at the `PROP` budget; also listed under "Other pure properties" |
+| `contracts.paths.unit` | `packages/contracts/src/paths.unit.spec.ts` | `[spec:structural-concurrency]` — the named name-and-path cases of section 7 on ubuntu **and** windows; 100 % per-file coverage; in Stryker's mutate scope. Canonical against `tree.name-rules.unit` |
+| `contracts.paths.prop` | `packages/contracts/src/paths.prop.spec.ts` | `[spec:structural-concurrency]` — `safePath` accepts only storable names and the rejected set is closed under percent-encoding, Unicode normalisation, case, trailing dots and spaces and alternate separators. Runs in the `unit` project at the `PROP` budget; canonical against 12-milestones.md's bare `paths.prop` |
+| `crdt.codec.prop` | `packages/crdt/src/codec.prop.spec.ts` | `[hp:HP-2]` — `encodeState`/`loadState` round-trip in V1 and V2, `loadState` is idempotent, an already-contained update changes nothing, and a snapshot plus its tail reconstructs the same doc as the full V1 log |
+| `crdt.guards.unit` | `packages/crdt/src/guards.unit.spec.ts` | `[hp:HP-4]` — the package's content guards (`assertLfOnly`, `assertNoAttributes`, `assertWithinCaps`) accept valid state and throw a typed error on `\r`, on a formatting attribute and above each cap |
+| `crdt.prefix-suffix-diff.prop` | `packages/crdt/src/prefix-suffix-diff.prop.spec.ts` | `prefixSuffixDiff(a, b)` applied to `a` yields `b` for arbitrary pairs, touches only the minimal differing range, and never emits an attribute or a `\r` |
+| `crdt.scan.prop` | `packages/crdt/src/scan.prop.spec.ts` | `[hp:HP-4]` — the content-invalid scan finds every `\r` and every attribute run, is linear in document size, and reports no false positive on valid text |
+| `tokens.kind-enum.unit` | `packages/contracts/src/tokens.kind-enum.unit.spec.ts` | `[area:tokens]` — the `access_tokens.kind` union: `pat` live, `oat`/`scim` reserved and refused, prefix dispatch exhaustive |
+| `token.reserved-scopes-inert.unit` | `packages/contracts/src/token.reserved-scopes-inert.unit.spec.ts` | `[area:tokens]` — the reserved write scopes parse and are schema-valid yet grant nothing: every permission check over them is false |
+| `security.problem-details.unit` | `packages/contracts/src/problem-details.unit.spec.ts` | every `ProblemDetails.code` has a title and a documented status, and the constructor cannot be called with a code outside the enum |
+
+**Authentication and credentials** (04-auth-and-access-control.md owns the behaviour; tag `[area:auth]` unless stated)
+
+| Test | Project | Asserts |
+|---|---|---|
+| `auth.policy.unit` | `unit` | NIST-style policy: 15–128 characters, any Unicode, no composition rules, no rotation rules |
+| `auth.policy.blocklist-hash.unit` | `unit` | the bundled top-100k breached-password list is consulted by hash prefix, entirely offline, and never logs or transmits the candidate |
+| `auth.hasher.unit` | `unit` | argon2id `m=65536, t=3, p=1`, versioned pepper, `needsRehash` on parameter or pepper-version drift, transparent re-hash on the next successful login |
+| `auth.phc.unit` | `unit` | PHC string round trip; an unparseable or unknown-variant hash is a typed failure, never a silent accept |
+| `auth.login-timing.unit` | `unit` | the single login path runs a dummy verify for an unknown account, so a response time does not distinguish existence |
+| `auth.login.integration` | `integration` | the cookie and bearer login flows, the generic `invalid_credentials` body, and one `auth.login.*` SIEM event per outcome |
+| `auth.logout.integration` | `integration` | logging out clears the `__Host-` cookie, deletes the row, and closes that session's `/collab` connections |
+| `auth.pepper-rotation.integration` | `integration` | after `iridium keys rotate pepper`, old-pepper users still log in and are re-hashed, and a pepper-version downgrade refuses to boot |
+| `keys-rotate.integration` | `integration` | `[area:ops]` — every `keys rotate` target is idempotent, exits `3` rather than overwriting, writes nothing to the database itself, and the next boot records `schema_meta` plus the audit event |
+| `security.credential-flood.integration` | `integration` | `[area:security]` — a flood of malformed credentials costs one dummy verify each, never exhausts the pool, and is throttled per IP without locking a real account out |
+
+**Authorization, tokens and sessions** (tag `[hp:HP-3]` unless stated)
+
+| Test | Project | Asserts |
+|---|---|---|
+| `authz.read-core.unit` | `unit` | `ContentReadCore` resolves a principal's readable set from the live membership snapshot only, with no ambient admin widening |
+| `authz.seams.unit` | `unit` | `[area:authz]` — `authorize()` takes its epoch tuple and membership set by parameter: no module-level state, no I/O, no clock |
+| `authz.usage.unit` | `unit` | `[area:authz]` — every call site passes a branded `Permission`; a route handler without a check does not type-check |
+| `authz.step-up.order.unit` | `unit` | `[area:authz]` — step-up is evaluated after authentication and before permission, so a step-up prompt never leaks a resource's existence |
+| `authz.bus-after-commit.unit` | `unit` | an `AuthzBus` event is published only from an after-commit hook, never inside the transaction, so a rolled-back change cannot revoke anybody |
+| `collab.epoch-tuple.prop` | `unit` (`apps/server/src/collab/epoch-tuple.prop.spec.ts`) | no pair of independent version counters produces the same epoch tuple, and a bump of any counter makes every earlier tuple stale |
+| `tokens.lifecycle.integration` | `integration` | `[area:tokens]` — create → use → rotate → revoke → expire, with `last_used_at` flushed on the documented interval and the secret shown exactly once |
+| `tokens.verifier.integration` | `integration` | `[area:tokens]` — `verifyAccessToken` against real rows: prefix dispatch, CRC, SHA-256 comparison, expiry, revocation and owner status, all fail-closed |
+| `tokens.admin-owned.integration` | `integration` | a server admin's own PAT reaches exactly the vaults where that admin holds an explicit membership (deviation F4) |
+| `authz.rest-token.integration` | `integration` | the `★` PAT-enabled REST allowlist is exactly the set of routes that accept a token principal; every other route answers `401` to a bearer PAT, mutations included |
+| `authz.archived-vault.integration` | `integration` | `[area:authz]` — an archived vault refuses every write with `vault_archived` while reads and exports still work for members |
+| `authz.performance.unit` | `unit` (`apps/server/src/authz/performance.unit.spec.ts`) | `[area:authz]` — the `authorize()` micro-budget: under 50 µs per call and no I/O, which is stable enough to assert because the function is pure and takes its epoch tuple and membership set by parameter (`authz.seams.unit` is what makes the number meaningful). The measurement is written to `reports/perf/*.jsonl` |
+
+**Collaboration, content read model and search**
+
+| Test | Project | Tag | Asserts |
+|---|---|---|---|
+| `collab.hooks-never-reject.unit` | `unit` (`apps/server/src/collab/hooks-never-reject.unit.spec.ts`) | `[hp:HP-2]` | every Hocuspocus hook resolves: a store failure is reported through `persist-failed` and a retry, never by rejecting the hook, because a rejected `onStoreDocument` would drop the document and the edit with it |
+| `collab.clientid-stable.chaos` | `chaos` | `[hp:HP-2]` | a client's Yjs `clientID` is stable across a socket reconnect and a server restart, so `note_updates.actor_id` attribution and undo scoping survive both |
+| `content.read-model.integration` | `integration` | `[area:content]` | every read route serves the committed projection, never the live `Y.Doc` (skeleton A37): with a document loaded and dirty, the bytes equal `note_projections.markdown` at `projected_seq` |
+| `content.read-parity.integration` | `integration` | `[area:content]` | REST `GET /notes/:id/markdown`, MCP `get_note` and the export manifest return byte-identical content and the same `revision`/`stale` pair for the same note |
+| `content.etag.integration` | `integration` | `[area:content]` | `ETag` equals `note_docs.projected_seq`, `If-None-Match` yields `304`, and `X-Iridium-Head-Revision` is present on every content read |
+| `content.fresh-flag.integration` | `integration` | `[area:content]` | `stale: true` exactly when `projected_seq < head_seq`; a `flush {}` clears it; no read route ever blocks waiting for freshness |
+| `content.no-ydoc.unit` | `unit` (`apps/server/src/content/no-ydoc.unit.spec.ts`) | `[area:content]` | the content read module's import graph contains no `yjs` import at all, so a read path cannot instantiate a document even by accident |
+| `content.lines-and-heading.unit` | `unit` (`apps/server/src/content/lines-and-heading.unit.spec.ts`) | `[area:content]` | line-range paging is 1-based and inclusive, clamps out-of-range requests, never splits a grapheme, and `heading_title` extraction matches the projection's |
+| `search.ranking.integration` | `integration` | `[area:search]` | the documented ranking inputs (FULLTEXT score, title match, recency) are applied in the documented order and ties break deterministically |
+| `search.rebuild.integration` | `integration` | `[area:search]` | `iridium reindex --vault` rebuilds `note_search` to byte-equality with an incremental build, is resumable, and never serves a partially rebuilt index |
+| `search.snippets.unit` | `unit` (`apps/server/src/search/snippets.unit.spec.ts`) | `[area:search]` | snippet windows anchor to real line numbers, never split a grapheme, and escape every markup character they carry |
+| `snippet.fallback.integration` | `integration` | `[area:search]` | a note with no FULLTEXT hit still yields a deterministic head-of-document snippet rather than an empty one |
+| `links.index.integration` | `integration` | `[area:links]` | `note_links` rows are replaced atomically per projection, carry `kind`/`status` and offsets, and a rename updates every inbound row in the same transaction. Tagged `[area:links]` rather than `[area:markdown]` so the whole `rename-impact-warning` family reads as one group in the tag index — and because this file asserts the *re-pointing*, which is the one thing a reader can mistake for the deferred link rewriting |
+| `tree.rename-impact.unit` | `unit` (`apps/server/src/tree/rename-impact.unit.spec.ts`) | `[area:links]` | the pure `summariseAffectedLinks(rows, subtreeNodeIds)`: every link form counted, `byStatus` a fully populated closed union, samples capped at 50 and ordered by `(fromPath, id)`, the link and not the note as the unit of counting, the target-side-only derivation pinned, and no content in `samples`. In Stryker's mutate scope |
+| `tree.rename-impact.integration` | `integration` | `[area:links]` | the three link-warning routes against real MySQL: the impact payload equals an independent read of `note_links`, `wouldConflict` is the `uq_sibling` check under `utf8mb4_0900_as_ci`, `dryRun:true` writes nothing and validates identically to the write, `inbound-links` pages the same rows, `affectedLinks` on the real `PATCH` carries pre-rename values, the accepted rename succeeds, and every inbound-linking note's `content_hash` and projection are byte-identical afterwards |
+| `tree.invalid-move.integration` | `integration` | `[spec:structural-concurrency]` | exhaustive over the `InvalidMoveReason` union by `satisfies Record<InvalidMoveReason, Case[]>`: `cycle`, `depth`, `cross_vault` (a manager of both vaults — `409`, never `404`, with `nodes.vault_id` unchanged) and `parent_not_category`, on `PATCH /nodes/:nodeId` and on `POST /nodes/:nodeId/restore`, each repeated with `dryRun:true` |
+| `collab.owner-lease.integration` | `integration` | `[hp:HP-2]` | the boot lease: exactly one `GET_LOCK('iridium_collab_owner', 0)` per boot on a dedicated connection never returned to the pool and never inside a row-locking transaction; `/readyz` reports `collab_owner_lease`; a denied lease refuses `/collab` with `4503 no-owner-lease` while REST reads still answer; the lease is handed over on release; `RELEASE_LOCK` follows the writer drain and the last unload |
+| `collab.second-process-refused.chaos` | `chaos` | `[hp:HP-2]` | CH-16: two real server processes against one schema — the second refuses to serve documents rather than racing, writes no `note_updates` row and produces no `persist.cas_mismatch` on the owner; killing the owner lets the standby acquire the lease and serve the same note with the acknowledged content intact |
+| `tree.root-row.integration` | `integration` | `[spec:structural-concurrency]` | the per-vault root row exists exactly once, cannot be renamed, moved, trashed or purged, and every path resolution starts at it |
+| `collab.db-outage.chaos` | `chaos` | `[hp:HP-1]`, `[hp:HP-5]` | CH-6: a 30-second MySQL outage behind Toxiproxy takes every client to `save-failed` without disconnecting one, keeps `/healthz` 200 and `/readyz` 503, never exhausts the mysql2 pool and never produces a false `persisted`; recovery converges all three clients to `saved` with no duplicated content. The `reset_peer` and `timeout` variants cover mid-statement kills and half-open connections |
+| `collab.network-degradation.chaos` | `chaos` | `[hp:HP-5]` | CH-7: under latency, bandwidth, slicer, `limit_data` and `reset_peer` toxics on `/collab`, convergence still holds after draining, `saveState` never shows `saved` while a local update is unacknowledged, the provider's reconnect backoff is bounded and jittered, and every reconnect performs exactly one authorization round trip with a fresh ticket and one `baseline` |
+| `collab.admission.chaos` | `chaos` | `[hp:HP-5]` | CH-10's churn half — 50 open/close cycles across 20 notes with 4 workers leave the loaded-document count at 0 with no leak and `collab_documents_loaded` equal to `getDocumentsCount()`. The admission *limit* itself is `collab.admission-budget.integration`; this file owns behaviour under churn |
+| `collab.compaction-failure.chaos` | `chaos` | `[area:content]` | CH-11: with `FAULT.compactThrow` armed, durability is unaffected (`persisted` arrives, the client reaches `saved`) while `projected` does not, `note_docs.projected_seq` is unchanged, the read routes and MCP `get_note` serve the last committed projection with the correct `ETag` and a `stale` indication, and `/readyz` stays 200 because a projection lag is not an outage. Clearing the fault and requesting `flush {}` brings `projected_seq` to `head_seq` with `note_search` and `note_links` written in the same transaction |
+| `collab.content-invalid.chaos` | `chaos` | `[hp:HP-4]` | CH-12: an update carrying `\r` or a formatting attribute, sent with `sendRaw` as a hostile or non-Iridium client would, is caught by the compaction scan — `note_projections.status='invalid_content'`, `notes.content_invalid=1`, a `content-invalid` message on every connection, the editor read-only for that note, an audit event, and durability untouched. `iridium doctor --repair-content` then writes a repair update with `origin='repair'`, clears the flag and records a revision |
+| `collab.oversize.chaos` | `chaos` | `[hp:HP-5]` | CH-13: crossing the 1 000 000 UTF-16 soft cap by collaborative edit produces `size-exceeded`, sets `notes.oversize=1` at compaction and makes the note read-only until it is reduced; the 2 097 152 hard cap is refused `413 note_oversized` at create, import, restore and repair before any Yjs state is built; a single update above 1 MiB closes the connection `too-large` and a frame above the 2 MiB `maxPayload` never reaches the application |
+| `collab.restart-under-load.chaos` | `chaos` | `[hp:HP-2]` | CH-15: `SIGKILL` at a uniformly random point in a 20-second window with 40 clients across 10 notes, 40 iterations nightly — every update acknowledged before the kill is present after the restart, marker counts are 1, `assertNoteInvariants` passes, text length is monotonic in the acknowledged sequence and no note is left `content_invalid` or `oversize` |
+| `persistence.performance.integration` | `integration` | `[hp:HP-1]` | the writer micro-budget: a single coalesced update commits in under 15 ms at `innodb_flush_log_at_trx_commit=1`, asserted as a p95 over 200 commits with the 3× runner tolerance the test records; the measurement is written to `reports/perf/*.jsonl` |
+| `projection.performance.integration` | `integration` | `[area:content]` | the projection micro-budget: a 100 KB note projects in under 250 ms in the piscina worker, measured through the real pool rather than by calling `project()` directly, with the measurement written to `reports/perf/*.jsonl` |
+| `search.performance.integration` | `integration` | `[area:search]` | the search micro-budget: query build plus FULLTEXT over the generated `corpus-5k` fixture completes in under 200 ms, with the measurement written to `reports/perf/*.jsonl`. The fixture is shared with the k6 `read-heavy` scenario so the two numbers are comparable |
+
+**Markdown pipeline, transfer and Obsidian** (08-markdown-pipeline-import-export.md owns the behaviour; tag `[spec:portability-and-safety]` unless stated)
+
+| Test | Project | Asserts |
+|---|---|---|
+| `markdown.golden.unit` | `unit` | the committed mdast/hast/HTML goldens under `__golden__/` for the demo corpus, with `IRIDIUM_FIXTURE_VERSION` embedded so a stale golden fails loudly |
+| `markdown.frontmatter.unit` | `unit` | the example-based half of the frontmatter contract: duplicate keys, tabs, a `---` thematic break, and a `frontmatter_error` that still preserves `frontmatter_raw` |
+| `markdown.offsets.prop` | `unit` | every mdast node's `start_offset`/`end_offset` slices back to the exact source text, for arbitrary generated documents |
+| `markdown.body-text-map.prop` | `unit` | `body_text` carries no markup, and every offset in it maps back to a source offset, so a snippet can always be located in the original |
+| `markdown.attachment-reference.prop` | `unit` | an attachment reference resolves to a vault-scoped id or is reported `broken`; a foreign-vault id is never `resolved`; a rendered URL always goes through the attachment scheme |
+| `markdown.pipeline-version.guard` | `guard` (`packages/markdown/src/pipeline-version.guard.spec.ts`) | `[area:markdown]` — `PIPELINE_VERSION` is bumped in the same commit as any change under `packages/markdown/src/{parse,project,sanitize}/`, asserted from the git diff |
+| `import.classification.unit` | `unit` | every ZIP or folder entry is classified into exactly one of content, attachment, excluded, unsupported or unsafe, with a report entry for the last three |
+| `import.report.integration` | `integration` | the import report lists every finding with its path and class, survives a resume, and is byte-stable for the same input |
+| `export.sanitized-paths.unit` | `unit` | every exported path is a safe relative path on all three platforms: no `..`, no absolute or UNC form, no reserved device name, no case collision |
+| `export.revocation.integration` | `integration` | `[hp:HP-3]` — an export job whose owner loses membership mid-run stops, is marked failed, and its download route answers `404` |
+| `export.access-control.integration` | `integration` | `[spec:vault-isolation]` — an export contains exactly the notes the requesting principal may read when the job starts, and a viewer may export |
+| `obsidian.detect.unit` | `unit` | the detector's findings are a function of the source only, cover every construct listed in 08-markdown-pipeline-import-export.md, and never rewrite the source |
+| `obsidian.basename-resolution.unit` | `unit` | wikilink basename resolution is deterministic under collision, prefers the same-folder match, and reports `ambiguous` rather than guessing |
+| `mirror.integration` | `integration` | `[area:transfer]` — `iridium mirror` writes a read-only filesystem mirror whose bytes equal `restoreLineEndings(projection)` for every note, and re-running is a no-op |
+| `mirror.readonly.integration` | `integration` | `[area:transfer]` — the mirror is never an input: an edited mirror file changes nothing in the database and is overwritten on the next run |
+| `preview.worker-only.unit` | `unit` (`packages/markdown-react/src/worker-only.unit.spec.ts`) | `[hp:HP-4]` — the preview renderer is reachable only through the worker entry point; the main-thread bundle contains no parser or sanitizer code |
+| `markdown.no-rewrite.prop` | `unit` (`packages/markdown/src/no-rewrite.prop.spec.ts`) | `parseNote(src)` followed by any preview or projection operation never mutates `src`, and `project(parseNote(src)).markdown === normalizeSource(src).text` — opening or previewing a note cannot change its content (spec §3). Runs in the `unit` project at the `PROP` budget; specified under "Markdown properties" |
+| `markdown.frontmatter.prop` | `unit` (`packages/markdown/src/frontmatter.prop.spec.ts`) | frontmatter is either parsed into `frontmatter` under the YAML 1.2 core schema or reported in `frontmatter_error`, never silently dropped; `frontmatter_raw` always equals the original slice byte-for-byte; a `---` that is a thematic break is never treated as frontmatter. The property half of `markdown.frontmatter.unit`; `PROP` budget |
+| `markdown.search-query.prop` | `property` (`apps/server/test/property/markdown.search-query.prop.spec.ts`) | `[area:search]` — `parseQuery` never produces a boolean-mode string MySQL rejects and never produces an unquoted operator from user input. **The one markdown property in the DB-backed `property` project rather than in `unit`**, because "MySQL rejects it" is verified by executing the generated string; it therefore carries the `PROP_DB` budget |
+| `markdown.obsidian-detector.prop` | `unit` (`packages/markdown/src/obsidian-detector.prop.spec.ts`) | the detector's findings are a function of the source only, are stable under re-running and never rewrite the source; a document with no Obsidian constructs yields an empty finding list. The property half of `obsidian.detect.unit`; `PROP` budget |
+| `projection.worker-isolation.unit` | `unit` (`apps/server/src/projection/worker-isolation.unit.spec.ts`) | `[hp:HP-4]` — the projection worker's module graph has no database, network or filesystem import, so a hostile note cannot reach any of them |
+
+**MCP and the stdio bridge** (06-mcp-and-agent-access.md owns the behaviour)
+
+| Test | Project | Tag | Asserts |
+|---|---|---|---|
+| `mcp.tools.unit` | `unit` (`apps/server/src/mcp/tools.unit.spec.ts`) | `[area:mcp]` | all six read tools over an in-memory `ContentReadCore`: argument coercion, defaults, `structuredContent` shape and error texts |
+| `mcp.verifier.unit` | `unit` (`apps/server/src/mcp/verifier.unit.spec.ts`) | `[hp:HP-3]` | the bearer verifier maps every credential state to exactly one outcome and never returns a principal for an unknown prefix |
+| `mcp.verifier.dispatch.unit` | `unit` (`apps/server/src/mcp/verifier.dispatch.unit.spec.ts`) | `[hp:HP-3]` | prefix dispatch is exhaustive over `access_tokens.kind`, and the reserved `oat`/`scim` kinds dispatch to a refusal rather than to the PAT verifier |
+| `mcp.error-texts.unit` | `unit` (`apps/server/src/mcp/error-texts.unit.spec.ts`) | `[spec:vault-isolation]` | forbidden and missing share one byte-identical `isError` text, and no error text contains an id the caller did not already supply |
+| `mcp.snippets.unit` | `unit` (`apps/server/src/mcp/snippets.unit.spec.ts`) | `[area:mcp]` | the per-client connection snippets are generated from one table, carry no secret, and name the documented transport for each client |
+| `mcp.no-write-imports.unit` | `unit` (`apps/server/src/mcp/no-write-imports.unit.spec.ts`) | `[area:mcp]` | the MCP module graph imports no write path — no `NoteWriter`, no tree mutation service, no admin route module |
+| `mcp.tools-schema.contract` | `contract` | `[area:mcp]` | the live `tools/list` result equals the committed `packages/contracts/mcp/tools.schema.json`, including `title`, `description` (≤ 2 KB), `annotations`, `outputSchema` and registration order |
+| `mcp.host-guard.contract` | `contract` | `[area:mcp]` | on the real `/mcp` route: `hostHeaderValidation([PUBLIC_HOST])` rejects a foreign `Host`, any browser `Origin` is refused with `403`, cookies are ignored, and the 1 MiB body limit applies |
+| `mcp.no-prm.contract` | `contract` | `[area:mcp]` | the `401` carries no `resource_metadata` parameter and `/.well-known/oauth-protected-resource` is absent, because MVP ships no discovery (skeleton A33) |
+| `mcp.no-fresh.contract` | `contract` | `[area:mcp]` | no tool or resource exposes a freshness or flush parameter: agents read the committed projection and are told its staleness instead |
+| `agent-activity.integration` | `integration` | `[area:access-log]` | the agent-activity view is built from `access_log` alone, lists every call with its `note_ids`, and is scoped to the vaults the reader manages |
+| `bridge.cli.unit` | `unit` (`packages/mcp-bridge/src/cli.unit.spec.ts`) | `[area:bridge]` | argument and environment parsing, `--help`/`--version`, and a usage error on an unknown flag |
+| `bridge.token-sources.unit` | `unit` (`packages/mcp-bridge/src/token-sources.unit.spec.ts`) | `[area:bridge]` | the documented precedence of token sources, and that a missing token fails before the upstream connection is opened |
+| `bridge.no-token-leak.unit` | `unit` (`packages/mcp-bridge/src/no-token-leak.unit.spec.ts`) | `[area:bridge]` | the token never reaches stdout, stderr, an error message or the process title |
+| `bridge.stdout-discipline.unit` | `unit` (`packages/mcp-bridge/src/stdout-discipline.unit.spec.ts`) | `[area:bridge]` | stdout carries only JSON-RPC frames: `console.log` is replaced at entry and every diagnostic goes to stderr |
+
+**Audit, access log, jobs and admin**
+
+| Test | Project | Tag | Asserts |
+|---|---|---|---|
+| `audit.vocabulary.unit` | `unit` (`apps/server/src/audit/vocabulary.unit.spec.ts`) | `[area:audit]` | the `AuditAction` vocabulary is closed, every value has a documented shape, and canonical JSON is byte-identical between the row and the export |
+| `audit.bounded-failures.integration` | `integration` | `[area:audit]` | an audit write failure fails its transaction rather than being swallowed, and a chain-head contention retry is bounded and never writes twice |
+| `audit.trash-race.chaos` | `chaos` | `[area:audit]` | concurrent trash, restore and purge on one subtree keep every chain verifiable and never interleave two writers on one `audit_chain_heads` row |
+| `cli.audit-coverage.integration` | `integration` | `[area:audit]` | every CLI mutation writes an audit event with `credential_type='cli'`; the test enumerates the command table and fails on an unaudited mutation |
+| `cli.contract` | `contract` | `[area:ops]` | `iridium --help --json` matches the generated `docs/ops/runbooks/cli.md`, so a new command cannot ship undocumented and a removed flag cannot linger in a runbook |
+| `admin.jobs.integration` | `integration` | `[area:admin]` | `POST /admin/jobs/:type/run` is authorized, step-up-gated and audited, refuses a second concurrent run, and reports the last outcome per job |
+| `admin.system.integration` | `integration` | `[area:admin]` | `/admin/system` reports loaded documents, writer backlog, pool usage and build metadata, and exposes no content and no credential |
+| `admin.surface-matrix.integration` | `integration` | `[area:admin]` | data-driven over `app.routes()`: every admin route's required permission, step-up flag and audit action match the skeleton's admin matrix |
+| `admin.step-up.integration` | `integration` | `[area:admin]` | every route marked `step-up` refuses without a fresh re-authentication and accepts inside the 10-minute window |
+| `admin.reset-password.integration` | `integration` | `[area:admin]` | an admin reset issues a single-use link, revokes the user's sessions, and never reveals or sets a password directly |
+| `vault-manager.audit.integration` | `integration` | `[area:admin]` | a vault manager reads exactly their own vault's audit rows through `GET /vaults/:id/audit`, and no server-chain row |
+| `vaults.settings.integration` | `integration` | `[area:vaults]` | `PATCH /vaults/:vaultId` data-driven over the request object's keys: manager-only, `If-Match` mandatory, per-field validation, the environment floor winning with `errors[0].code='below_env_floor'` in the direction `@iridium/contracts/settings.ts` declares, one minimal `vault.settings.changed` audit event, one `vault-updated` frame, `mcpEnabled:false` biting on the next MCP call, no reprojection on a flavour change, and `409 vault_archived` on an archived vault |
+
+**Ops, restore, release and the seam contract suites**
+
+| Test | Project / lane | Tag | Asserts |
+|---|---|---|---|
+| `ops.alerts.unit` | `unit` (`apps/server/src/ops/alerts.unit.spec.ts`) | `[area:ops]` | every metric named by `infra/monitoring/alerts.yml` exists in the registry and every alert rule parses — the static half of `metrics.integration` |
+| `ops.trust-proxy.integration` | `integration` | `[area:ops]` | `X-Forwarded-For` and `X-Request-Id` are honoured only from the configured proxy CIDR; a spoofed header from elsewhere is ignored for rate limiting and for logging |
+| `backup.attachment-superset.integration` | `integration` | `[spec:backup-recovery]` | the attachment copy taken after the dump transaction begins is always a superset of what the dump references, never a torn state (11-operations-and-deployment.md, artefact 2) |
+| `ops.key-rotation.drill` | `chaos`, `nightly.yml › backup-restore-drill` | `[area:ops]` | rotate pepper and audit key on a demo dataset, restart, log in as every user, verify every chain; `rotate cursor` invalidates outstanding MCP cursors with the documented `isError` text |
+| `ops.upgrade-rehearsal.drill` | `chaos`, `nightly.yml › mysql-84` plus the `upgrade-rehearsal` step of `backup-restore-drill` | `[area:ops]` | an N-1 → N upgrade on a seeded deployment: migrations forward, `/readyz` green, an N-1 client still served, no manual step outside the runbook |
+| `ops.load.slo` | k6 nightly (`apps/server/test/load/`) | `[area:ops]` | the SLO table of "Server and collaboration SLOs", enforced by `scripts/check-load-budget.ts` against `baseline.json`. HP-5's load evidence names *this* row, not the runner |
+| `docs.spikes.spec` | `guard` (`apps/server/test/guards/docs.spikes.guard.spec.ts`), `ci.yml › static` | `[area:docs]` | the "Spikes closed" gate of 12-milestones.md §3: every spike a reached milestone references in §4.4 exists as `docs/spikes/S<nn>-<slug>.md` with all eight headings of D14-11's template, a `Result` of `pass` or `fail` and never `open`, the executing pull request named when the result is `fail`, and an id/`Runs at`/filename set equal to the register in 14-risks-and-open-questions.md. **Name owned jointly with 14-risks-and-open-questions.md (D14-11) and deliberately outside this section's layer convention — see "The spike-register check"; do not rename it to `docs.spikes.guard`** |
+| `ops.compose-prod.clean-vm` | `nightly.yml › compose-boot` | `[area:ops]` | `infra/compose.prod.yaml` on a clean VM following `docs/ops/deployment.md` verbatim, then a three-editor smoke and a `claude mcp add` |
+| `proxied-stack.mcp-headers` | `nightly.yml › mcp-clients` (the one job that carries both the real-client matrix and the proxied-stack test, so there is no separate `proxied-stack` lane to keep in step) | `[area:ops]` | behind **both** reference proxy configurations of 11-operations-and-deployment.md (`infra/caddy/Caddyfile` and `infra/nginx/iridium.conf`): `Authorization` passthrough on `/mcp` with `Mcp-Method`, `Mcp-Name` and `MCP-Protocol-Version` preserved — and a request sent *without* `Mcp-Method` arriving without it, never as present-and-empty — `flush_interval -1` streaming behaviour, `/collab` surviving a 150-second idle period, and `X-Request-Id`/`X-Forwarded-*` honoured only from the configured proxy CIDR |
+| `release.signing` | `release.yml › desktop` | `[area:release]` | every produced artefact is signed and notarised and `npx @electron/fuses read` matches skeleton A53 |
+| `desktop.update-from-previous` | `release.yml › update-feed` | `[area:release]` | the previous release's binary updates itself from the published feed, end to end |
+| `supply-chain.sbom` | `release.yml › server-image` | `[area:release]` | a syft SBOM and a grype scan are produced for the pushed digest and the license scan is re-run against the published closure |
+| `docker-image` | `release.yml › server-image` | `[area:release]` | the image boots as a non-root user with no writable layer beyond the documented volumes and answers `/readyz` |
+| `authz-bus.contract` | `contract` (`apps/server/test/contract/seams/`) | `[area:seams]` | the parameterised `AuthzBus` suite of decision ARCH-19, run against the in-process implementation and required to pass unchanged for any future one |
+| `ticket-store.contract` | `contract` (`.../seams/`) | `[area:seams]` | single use, TTL, `{sessionId, userId}` binding and batch limits, independent of the implementation |
+| `rate-limit-store.contract` | `contract` (`.../seams/`) | `[area:seams]` | bucket arithmetic, refill, burst and `Retry-After` values, independent of the implementation |
+| `search-index.contract` | `contract` (`.../seams/`) | `[area:seams]` | index, update, delete and query semantics including the ACL filter, independent of the implementation |
+| `storage-driver.contract` | `contract` (`.../seams/`) | `[area:seams]` | content-addressed `put`/`get`/`delete`/`stat`, blob immutability, and the refusal to overwrite a differing blob under an existing name |
+| `settings-store.contract` | `contract` (`.../seams/`) | `[area:seams]` | environment floors always win, a write outside the allowed range is refused, and a read is never stale after a write |
+| `job-claim.contract` | `contract` (`.../seams/`) | `[area:seams]` | the `jobs.locked_by` claim protocol: one winner, lease expiry, re-entrancy refusal, and no lost job when a holder dies |
+| `rest.route-index.contract` | `contract` | `[area:contracts]` | the route table of 09-api-reference.md §2.18, parsed out of that markdown, has the same operation set, auth column and `If-Match` column as `openapi.json` and the boot-time route policy |
+
+**Client, editor and desktop**
+
+| Test | Project | Tag | Asserts |
+|---|---|---|---|
+| `editor.view-lifecycle.component` | `component` | `[area:editor]` | the `EditorView` is created once per note and never rebuilt on a prop, theme or role change; the read-only compartment and the collab extension are reconfigured in place |
+| `editor.formatting.prop` | `unit` (`packages/editor/src/formatting.prop.spec.ts`) | `[spec:portability-and-safety]` | for arbitrary source and selection, each formatting command is its own inverse when applied twice and changes only the selected range |
+| `editor.paste-guard.unit` | `unit` (`packages/editor/src/paste-guard.unit.spec.ts`) | `[hp:HP-4]` | pasted HTML becomes Markdown text or is dropped, never inserted as markup, and a pasted `\r` is normalised before it reaches `Y.Text` |
+| `editor.csp-nonce.e2e` | `chromium` | `[hp:HP-4]` | under the production CSP, `EditorView.cspNonce` is taken from the meta tag and no style-mod stylesheet is blocked — zero CSP violations for the application's own styles |
+| `token-list.component` | `component` | `[area:tokens]` | the token list shows kind, scopes, vault allowlist, expiry and last use, offers rotate and revoke behind a confirmation, and never renders a secret |
+| `ui.theme.component` | `component` | `[area:ui]` | light, dark and system resolution, `prefers-reduced-motion`, and that no component reads a colour outside the token set |
+| `desktop.update-required.e2e` | `electron` | `[area:compat]` | a `/meta` with a raised `minClientVersion` blocks the workspace, explains the update, and still offers "Export my text" |
+| `desktop.ipc-websocket-fallback.e2e` | `electron` | `[area:desktop]` | with the `IpcWebSocket` fallback forced on, every case of `hostContractCases()` passes against `ElectronHost` and a two-instance collaboration round trip completes, so the path cannot rot while it is not the default (this file owns the fallback-mode pass that `desktop.host-contract.e2e` delegates to it) |
+| `export.no-overwrite.e2e` | `electron` | `[spec:portability-and-safety]` | an export into a non-empty directory refuses rather than overwriting, and the chosen path is validated in the main process, never in the renderer |
+| `rename-impact.dialog.component` | `component` (`packages/ui/src/tree/rename-impact.dialog.component.spec.tsx`) | `[area:links]` | the warning precedes the mutation, asserted on the recorded request *sequence*; cancel issues no `PATCH`; an empty impact list skips the dialog but not the ordering; no "don't ask again" key reaches `host.storage`; the count rendered is the payload's `total`; a failed impact request never becomes a silent rename; `MoveToDialog` goes through the same gate |
+| `rename-impact.e2e` | `chromium` (`apps/e2e/web/rename-impact.e2e.spec.ts`) | `[area:links]` | in the built application: the dialog is visible with the count `GET /nodes/:nodeId/inbound-links` reports, no `PATCH` frame precedes it, "Cancel" leaves the tree byte-identical, and after "Rename anyway" the note's path changed while every linking note's `GET /notes/:noteId/markdown` is byte-identical — the user-visible form of the "no automatic link rewriting" deferral |
+| `desktop.viewer-readonly.e2e` | `electron` | `[spec:viewer-enforcement]` | the row's L7 layer: read-only renderer, the server's refusal reached through the desktop socket with the compartment defeated in-page, `node.rename`/`node.move`/`node.trash`/`revision.restore` disabled in the **main**-process menu, no credential anywhere in the renderer, and the same three assertions under the `IpcWebSocket` fallback |
+| `desktop.revocation-while-open.e2e` | `electron` | `[spec:live-revocation]`, `[hp:HP-3]` | the row's L7 layer: the socket closes `4403 revoked` within 1 s observed in the main process; membership removal keeps the stored credential and a relaunch stays signed in with the vault gone; session revoke and user disable erase the `safeStorage` entry, clear the `persist:iridium` cache and land on sign-in with no session after a relaunch; zero open collaboration sockets afterwards; the pending local update stays exportable and reaches no `note_updates` row |
+| `desktop.durable-save.e2e` | `electron` | `[spec:durable-saving]`, `[hp:HP-1]` | HP-1's L7 cell: kill-after-acknowledgement against a child-process server at production debounce values, driven through the desktop client — the reopened note equals the text observed when the pill said `Saved`, the reconnection uses the main process's credential with no sign-in prompt, and with `FAULT.storeSlow` armed a kill inside the window leaves the **pre-edit** content by byte equality |
+
+**Superseded spellings.** Each left-hand name appears — or appeared in an earlier draft of the section that cited it — as another section's name for a test this one specifies differently; a row stays after the citing section is corrected, so a reference in an older draft still resolves instead of reading as an undefined test. The canonical spelling is on the right; `scripts/check-test-name-references.ts` fails on a left-hand spelling and prints the right-hand one, so the fix is a rename in the citing section rather than a duplicate test. Where the skeleton fixes a name (`db-grants.integration`, `logging-redaction`, `setpw-link.integration`, `authz.matrix.unit`, `ops.backup-restore.drill`, `token.effective-permissions.prop`, `transfer.fixtures.integration`, `lock-order.integration`) the skeleton's spelling is canonical and this section adopted it; where two other sections disagree and the skeleton is silent, 12-milestones.md §13.5 wins as the document that fixes names (decision D12-12).
+
+**One exception is recorded explicitly, because it is the one place those two rules collided.** The skeleton's M2 exit list names the *subject* `tree.name-rules` with no layer, and 12-milestones.md §13.5 read that as the skeleton fixing a name. It is not: a bare skeleton name resolves through this section's Location convention — a name follows its file, and a co-located file's area prefix is the package that supplies it — and the rules live in `packages/contracts/src/paths.ts`. So the canonical set is the four names of section 7's "Canonical names for the contracts primitives" table (`contracts.paths.unit`, `contracts.paths.prop`, `contracts.ids.unit`, `contracts.ids.prop`), and `tree.name-rules`, `tree.name-rules.unit`, `paths.prop` and `ids.prop` are all superseded. This section owns test names (decision D10-21), so on this pair 12-milestones.md is corrected rather than followed — which is what makes `docs/acceptance-map.json` keyable at all: two spellings of one subject cannot both be keys, and `scripts/check-test-name-references.ts` was unsatisfiable as written while both stood.
+
+| Superseded | Canonical | Why |
+|---|---|---|
+| `db.grants.guard`, `logging.redaction.guard`, `collab.awareness-identity.guard` | `db-grants.integration`, `logging-redaction.integration`, `collab.awareness-identity.integration` | skeleton A8/A49 spellings; all three need a live database or socket and cannot run in the `guard` project |
+| `auth.setpw-link.integration`, `auth.set-password.integration` | `setpw-link.integration` | skeleton M1 exit list |
+| `auth.password.unit`, `credentials.unit` | `auth.policy.unit` (policy) and `auth.hasher.unit` (hashing) | 04 splits policy from hashing; one name cannot cover both |
+| `auth.login-throttle.integration` | `auth.throttle.integration` | the spelling used by 04, 11 and 13 |
+| `auth.session.integration` | `auth.sessions-web.integration`, `auth.sessions-desktop.integration` | the two client kinds have different cookie and bearer contracts |
+| `auth.token-parse.unit`, `auth.token-format.prop` | `tokens.format.unit`, `tokens.format.prop` | the credential format lives in `@iridium/contracts`, not in `auth` |
+| `contracts.permissions.unit` | `authz.matrix.unit` | skeleton A51 and the M1 exit list |
+| `contracts.tokens.unit` | `tokens.format.unit`, `tokens.verify.unit` | format and verification are separate files with separate coverage gates |
+| `tree.name-rules`, `tree.name-rules.unit` | `contracts.paths.unit` (named cases) **and** `contracts.paths.prop` (closure) | the rules live in `packages/contracts/src/paths.ts`, and a name follows its file; the subject spans two layers, so one bare name resolves to two canonical ones (section 7). `apps/server/src/tree/names.ts` is the live-row enforcement and is proven by `tree.crud.integration` and `tree.invalid-move.integration`, so no coverage moves with the name |
+| `paths.prop` | `contracts.paths.prop` | correct subject, missing area; the checker accepts only the full `<area>.<subject>.<layer>` form |
+| `ids.prop` | `contracts.ids.prop` | same correction; `contracts.ids.unit` is the example-based sibling, not a rival spelling |
+| `desktop.signout-clears-cache.e2e` | `desktop.revocation-while-open.e2e` | 04-auth-and-access-control.md §14 cites that name for the `Clear-Site-Data`, TanStack Query reset and `session.fromPartition('persist:iridium').clearCache()` behaviour on a `4403 revoked` and on sign-out. Those are cases of the desktop revocation suite — the same triggers, the same host, the same credential store — and splitting them into a second Electron launch would double the slowest lane's cost to assert one more spy |
+| `crdt.prefixSuffixDiff.prop` | `crdt.prefix-suffix-diff.prop` | file basenames are kebab-case |
+| `authz.token-subset.prop` | `token.effective-permissions.prop` | skeleton spelling; property 1 of that file *is* the subset claim |
+| `authz.admin-owned-token.unit` | `authz.no-mcp-admin-implied.guard` | the invariant is type-level plus a guard, not a behavioural unit test |
+| `authz.live-revocation.integration` | `collab.live-revocation.integration` | the live half is on the socket |
+| `authz.rest-revocation.integration` | `authz.revocation-rest.integration` | one spelling for the REST half |
+| `authz.csrf.integration` | `security.csrf.integration` | CSRF is a transport-security concern |
+| `authz.rest-token-mutations` | `authz.rest-token.integration` | 06 owns the token surface and covers reads and mutations in one data-driven file |
+| `tickets.single-use.integration` | `tickets.batch-and-limits.integration` | single use is one case of that file |
+| `tokens.rest.integration` | `authz.rest-token.integration` | the same test |
+| `tokens.rate-limit.integration` | `security.rate-limits.integration` | the REST tiers live in one file; the MCP tier is `mcp.rate-limit.mcp` |
+| `security-headers.integration` | `security.headers.integration` | area-dot-subject, matching 07's `security.headers` |
+| `config.unit` | `config.env.unit` | one configuration module, one test |
+| `collab.flush.integration`, `collab.participants.integration`, `collab.token-sync.integration` | as written, in the Collaboration row of "Server suite by area" | specified above, not missing |
+| `access-log.partitions.integration` | `access-log.integration` | partition rotation is one case of that file |
+| `audit.chain-tamper.integration` | `audit.chain.integration` | tamper detection is one case of that file |
+| `collab.viewer-rejected` | `collab.viewer-enforcement.integration` | the acceptance row is `viewer-enforcement` and the file is named after it; 13-decision-log.md's Verification lines used a third stem |
+| `collab.trash-resurrection` | `tree.stale-resurrection.integration` | the stale-session-after-trash property is owned by the tree suite, which also covers the purge variant |
+| `collab.origin-allowlist` | `security.ws-origin.integration` | the CSWSH guard is a transport-security concern, and the skeleton's A24 wording is "Origin"; one spelling for absent, foreign and port-mutated origins |
+| `audit.lock-order.integration` | `lock-order.integration` | skeleton spelling; the file covers every participant in the lock order, not only audit |
+| `retention-jobs.integration` | `jobs.trash-purge.integration`, `jobs.update-log-prune.integration`, `jobs.partitions.integration`, `jobs.session-sweep.integration` | four jobs, four files, plus `jobs.scheduler.integration` |
+| `migration.lock.integration` | `migrations.integration` | the advisory-lock case belongs to that file |
+| `meta.integration`, `meta.contract` | `meta.apiversion.integration` | one `/meta` test |
+| `perf.tree-paths.integration` | `tree.paths.integration` | the micro-budget is asserted inside the functional file (see "Server-side micro-budgets") |
+| `search.freshness.integration` | `search.staleness-hint.integration` | one spelling for the `stale` hint |
+| `search.title-after-rename.integration` | `projection.title-after-rename.integration` | the title is written by the projection |
+| `links.resolve.prop` | `markdown.links.prop` | the resolver is part of the Markdown pipeline |
+| `no-inner-html.unit` | `guards.no-inner-html.guard` | it is a guard, not a unit test |
+| `transfer.zip-bomb.unit` | `import.unsafe-paths.unit` | ratio and entry-count limits are cases of that file |
+| `import.commit.idempotent.integration`, `import.invisible-until-active.integration` | `import.commit.integration` | both are cases of the commit matrix |
+| `import.obsidian-fixture.integration` | `transfer.fixtures.integration` | skeleton spelling |
+| `export.manifest.contract` | `export.manifest.integration` | the manifest is asserted against the database, not against a wire schema |
+| `export.roundtrip.prop` | `markdown.roundtrip.prop` | skeleton spelling |
+| `attachments.unreferenced.integration` | `attachments.unreferenced-report.integration` | one spelling |
+| `attachments.delete-refused.integration` | `attachments.security.integration` | the `force` refusal is one case of that file |
+| `attachments.mime-policy.unit`, `attachments.range.integration` | as written, new rows are unnecessary: `attachments.security.integration` owns sniffing and headers, `attachments.dedupe.integration` owns ranges | one file per behaviour, not one per assertion |
+| `projection.timeout.integration` | `projection.hostile.integration` | the timeout is asserted over the pathological corpus |
+| `restore.invariant-violation.integration`, `restore.key-mismatch.integration`, `restore.missing-attachment.integration` | `ops.restore-verify.chaos` | the nine `restore --verify` invariants and their negatives are one file, because each case needs the same restored deployment |
+| `content-read.parity.integration`, `content-read.no-ydoc.unit` | `content.read-parity.integration`, `content.no-ydoc.unit` | the area is `content` throughout |
+| `mcp.tools-schema-drift`, `mcp.tools-schema-drift.unit`, `mcp.tools.contract` | `mcp.tools-schema.contract` | the assertion needs a live `tools/list`, so it is a contract test; 09-api-reference.md §4.4 and skeleton A3 cite the bare `mcp.tools-schema-drift` for the same assertion |
+| `mcp.auth.contract`, `mcp.isolation.contract`, `mcp.revocation.contract`, `mcp.resources.contract`, `authz.revocation.mcp` | `mcp.auth.mcp`, `mcp.isolation.mcp`, `mcp.revocation.mcp`, `mcp.resources.mcp` | these run in the `mcp` project against both eras |
+| `mcp.fail-closed.unit`, `mcp.kill-switch.integration` | `mcp.fail-closed.mcp` | one file covers the vault switch, the server switch and the DB-unreachable case |
+| `mcp.factory-error.integration`, `mcp.instructions.unit` | `mcp.factory-error.mcp`, `mcp.instructions.mcp` | both need the real handler |
+| `mcp.origin.contract` | `mcp.host-guard.contract` | host and origin are guarded together on the route |
+| `mcp.pagination.integration` | `mcp.cursor.mcp` | paging *is* the cursor contract |
+| `mcp.inspector-smoke`, `mcp.inspector.mcp` | `mcp.inspector-smoke.mcp` | 12 §13.5's subject plus the project's layer |
+| `bridge.auth-failure.e2e` | `bridge.parity.contract` | the `401`-on-stdio case is one of that file's bridge assertions |
+| `editor.formatting.component`, `editor.ycollab.component`, `tabs.component`, `switcher.component`, `palette.component`, `tokens-dialog.component`, `token-dialog.component`, `a11y.component`, `ui.a11y.component`, `status-pill.component`, `preview.inert.component`, `desktop.packaged-smoke.e2e` | `editor.formatting-source-only.component`, `editor.ycollab.two-docs.component`, `tabs.preview-and-pinned.component`, `switcher.quick-open.component`, `palette.registry.component`, `tokens.dialog.component`, `tokens.dialog.component`, `a11y.axe.component`, `a11y.axe.component`, `status-pill.transitions.component`, `preview.inertness.component`, `release.packaged-smoke.e2e` | 12 §13.5 fixed these subjects (D12-12); this section adopted them and adds the layer |
+| `ui.commands.registry.unit` | `palette.registry.component` | the registry is asserted through the palette in a real browser |
+| `ui.keyboard.e2e` | `a11y.keyboard-only.e2e` | one keyboard-only suite |
+| `tokens.e2e` | `token-create-and-use.e2e` | one flow test |
+| `editor.undo-scope.integration` | `editor.undo-isolation.component` | undo scoping is a component-level property of `Y.UndoManager` |
+| `editor.view-rebuild.integration` | `editor.view-lifecycle.component` | 12 §13.5's subject |
+| `desktop.navigation.e2e`, `desktop.fuses.e2e` | `desktop.hardening.e2e`, with `desktop.fuses.guard` for the configuration half | navigation denial and fuse bits are assertions of the hardening suite |
+| `desktop.attachment-scheme.e2e`, `desktop.secure-storage.e2e` | `desktop.attachments-no-token-in-renderer.e2e` | one custody suite |
+| `desktop.updater.e2e`, `desktop.deep-link.e2e` | `desktop.update-check-local-feed.e2e`, `desktop.deep-link-fuzz.e2e` | one updater suite, one deep-link suite |
+| `host.contract`, `host.contract.spec`, `host.contract.spec.ts`, `markdown.commonmark`, `markdown.golden`, `markdown.frontmatter`, `markdown.links`, `markdown.xss-corpus`, `markdown.pathological`, `mcp.conformance`, `mcp.output-schema`, `tree.keyboard`, `tree.dnd`, `editor.undo-isolation`, `ipc-websocket.fallback`, `export.access-control`, `ops.upgrade-rehearsal`, `limits.single-source` | the same name with the layer of the project that runs it (`.component`/`.e2e`, `.unit`, `.prop`, `.mcp`, `.integration`, `.guard`, `.drill`) | 12 §13.5 and the skeleton are terse about layers; the checker accepts only the layered form. `host.contract.spec.ts` is additionally superseded as a *file*: the contract is the `hostContractCases()` array, run by three harnesses under two runners (see "The `IridiumHost` contract suite") |
+| `tooling.boundaries` | the `static` job's `turbo boundaries` step | a CI step, not a spec file |
+| `ops.backup-restore.drill.chaos`, `ops.backup-restore.drill.spec` | `ops.backup-restore.drill` | skeleton spelling (A47's `ops.backup-restore.drill.spec` is the *file* basename plus `.spec`, and a name is the basename minus `.spec.ts[x]`); `drill` is the layer, collected by the `chaos` project's `*.{chaos,drill}.spec.ts` glob, so there is no `.chaos` variant of this name |
+| `desktop/launch.spec`, `e2e/desktop/launch.spec` | `desktop.launch.e2e` | 12-milestones.md §4.3 names the M0 Electron smoke by path; the location convention puts it in `apps/e2e/electron/` and the layer segment is `e2e` |
+
+---
+## Chaos and durability procedures
+
+The chaos project is the only place where HP-1 and HP-2 can actually be proven, because it is the only place where the process can die inside a transaction. Everything here runs in Vitest project `chaos`: `fileParallelism: false`, `retry: 0`, `testTimeout: 180_000`, the server as a **child process** built from `apps/server/dist/main.mjs`, MySQL reached through a Toxiproxy proxy, and `/collab` optionally reached through a second proxy.
+
+### Common setup and teardown
+
+Every chaos file **except the `ops.*` drills** uses this fixture, so a reader can assume it. The drills (`ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos`, `ops.key-rotation.drill`, `ops.upgrade-rehearsal.drill`) own their containers instead: they start their own `MySqlContainer(process.env.IRIDIUM_MYSQL_IMAGE ?? 'mysql:9.7.2-oraclelinux9')` instances, run the shipped `init/01_roles.sh`, and drive the server in `container` mode (see the mode table), because what they rehearse is an operator procedure on a fresh deployment, not a fault inside a running one. They live in the `chaos` project for its `fileParallelism: false` and its artifact collection, not for its fixture.
+
+```ts
+const env = inject('testEnv');                        // MySQL + Toxiproxy coordinates from globalSetup
+let srv: TestServer;
+beforeEach(async () => {
+  srv = await startServer({
+    mode: 'child', env, db: 'toxiproxy',
+    collab: { debounceMs: 2000, maxDebounceMs: 10000 },  // production values: the windows we must survive
+  });
+  await srv.waitReady();
+  seed = await srv.seed.kernel();
+});
+afterEach(async () => {
+  await env.mysqlViaToxiproxy!.removeAllToxics();
+  await env.mysqlViaToxiproxy!.setEnabled(true);
+  await assertNoteInvariants(srv.db, seed.noteId);      // C.5 invariants after every chaos case
+  await assertAuditChain(srv.db);
+  await srv.stop();                                     // ignores an already-dead child
+});
+```
+
+Note the debounce values, because they are the one harness setting that differs by project and the difference is a factor of twenty in every chaos wait: the `integration` project and the Playwright `webServer` set `COLLAB_DEBOUNCE_MS=100` / `COLLAB_MAX_DEBOUNCE_MS=500` for speed, while the `chaos` project deliberately keeps the **production** 2 000 / 10 000 ms, because the whole purpose of the lane is to survive the real failure windows — a kill aimed at a 500 ms window proves nothing about a deployment whose window is 10 s. Every "wait for `maxDebounce` + 2 s" in the procedures below is therefore 12 s, not 2.5 s, and the iteration budgets are sized for that. Where a test needs to widen a window further it adds a Toxiproxy `latency` toxic on MySQL rather than changing configuration, because latency is what production actually does.
+
+Artifacts on failure (collected by an `onTestFailed` hook and uploaded by CI): the child's full stdout/stderr, the `NoteClient` state-transition log, the decoded stateless-message log, `SELECT * FROM note_docs`/`note_updates (seq, LENGTH(update_v1), actor_id, created_at)`/`note_revisions (seq, kind)` for the note, the active toxic list, the armed fault list, and the Vitest sequence seed.
+
+### CH-1 — Kill after ack (HP-1, HP-2; `collab.durable-ack.chaos`, case *kill after ack recovers the acknowledged revision*)
+
+PR runs 20 iterations; nightly runs 200 with a random MySQL `latency` toxic of 500–2 000 ms to move the kill point around inside the transaction window.
+
+1. Add a `latency` toxic on the `mysql` proxy (`stream: 'upstream'`, `attributes: { latency: rand(500, 2000), jitter: 200 }`) — nightly only.
+2. Open `editorA` on `note N`, wait for `synced` and the baseline `persisted`, then arm `FAULT.storeKillAfterAck` (one-shot) over the test control route.
+3. Insert a unique marker: `const m = a.marker('ACK')` → text now contains `⟦ACK:<n>⟧`.
+4. The kill happens **inside the server**: immediately after the next `persisted` frame is written to the wire, the armed point calls `process.kill(process.pid, 'SIGKILL')` synchronously, before returning to the event loop, so **no further server code runs at all** — no compaction, no writer tick, no drain. This is the deterministic window, and it is why the point lives in the product's fault registry rather than in the test.
+   *Second variant, run alongside it:* register a handler on the *next* `persisted` message that calls `srv.kill('SIGKILL')` synchronously inside the handler. This is a **best-effort narrow** window, not a deterministic one — the signal is delivered from another process after the frame has traversed the socket and the test has decoded it, so the server executes concurrently for that interval — and it is kept because it is the only variant that also exercises the real kernel-delivered-signal path. Assertions are identical; only the first variant may be described as "nothing ran after the ack".
+5. Record `{seq, sv}` from the ack.
+6. Await the child's `exit` event and assert the exit signal is `SIGKILL` (not a graceful exit — a graceful exit would mean the drain ran and the test proves nothing).
+7. Start a new child server on the same schema.
+8. Open a *fresh* `NoteClient` as `editorA` (new `Y.Doc`, so the assertion cannot be satisfied by client-side memory).
+9. Assert: `markerCount('ACK') === 1`; `text.toString()` contains the marker exactly where it was inserted; `note_docs.head_seq >= seq`; a `note_updates` row with `seq` exists and `sv_after` equals the acked `sv`; the new client's baseline `persisted.sv` dominates the pre-kill `sv`.
+10. Assert `assertNoteInvariants` and that no `note_revisions` row claims a `seq` above `head_seq`.
+11. Steps 1–10 are the body of one `it.for(range(IRIDIUM_CHAOS_ITERATIONS))` case, so each iteration is its own Vitest test bounded by the project's `testTimeout` (see "Iteration budget"); the case reuses one server pair per iteration but seeds a fresh note every 5 iterations so the update-log length varies.
+
+### CH-2 — Failed persistence never acknowledges (HP-1; `collab.durable-ack.chaos`, case *store failure never acks*)
+
+Run once per failure mode: `FAULT.storeThrow`, MySQL proxy `setEnabled(false)`, `reset_peer` toxic, `timeout` toxic.
+
+1. Open `editorA`; wait for the baseline.
+2. Arm the failure (for `store.throw`: `await srv.faults.arm(FAULT.storeThrow)`; for the proxy: `await env.mysqlViaToxiproxy.setEnabled(false)`).
+3. Insert a marker and wait for `maxDebounce + 2 s`.
+4. Assert: **no** `persisted` message carrying a `seq` greater than the baseline arrived (checked against the complete `stateless` log, not a single listener); a `persist-failed {reason}` message arrived with the mapped reason (`db_unavailable` for a disabled proxy, `db_error` for `store.throw`); the client `saveState === 'save-failed'`; the `collab_persist_failures_total` metric increased; `/readyz` reports 503 while the DB is unreachable and 200 again afterwards.
+5. Assert the document is still loaded server-side (`/admin/system` reports `docsLoaded >= 1`) — Hocuspocus keeps a document whose store hook threw, and the writer retries with backoff; losing the document would lose the edit.
+6. Clear the failure. Assert within the retry budget: a `persisted` arrives, the client reaches `saved`, exactly one `note_updates` row exists for the marker (the retry did not double-write), and `sv_after` dominates the client's local vector.
+7. Kill and restart; assert the marker survives exactly once.
+
+### CH-3 — Crash before COMMIT (HP-2; `collab.durable-ack.chaos`, case *crash before commit leaves no row and no ack*)
+
+1. Arm `FAULT.storeCrashBeforeCommit` (one-shot).
+2. Open `editorA`, insert marker `BC`.
+3. Await the child's `exit` (signal `SIGKILL`).
+4. Assert from the client side: no `persisted` for that update; `saveState` is `disconnected` (the socket died with the process), and the update is still in the client's `Y.Doc`.
+5. Restart; assert `SELECT MAX(seq) FROM note_updates WHERE note_id = ?` is unchanged from before step 2, and `note_docs.head_seq` is unchanged.
+6. Reconnect the *same* `Y.Doc` (not a fresh one — this is the "pending edits survive the session" path of spec §5). Assert the client resends, the marker commits once, and the client reaches `saved`.
+7. Reconnect a *fresh* `Y.Doc` in a second case and assert the marker is absent — the edit was never acknowledged, so losing it is correct, and the test documents that boundary rather than leaving it ambiguous.
+
+### CH-4 — Crash after COMMIT, before ack (HP-1, HP-2; `collab.durable-ack.chaos`, case *crash after commit before ack*)
+
+1. Arm `FAULT.storeCrashAfterCommitBeforeAck` (one-shot).
+2. Open `editorA`, insert marker `AC`, and record the client's local state vector.
+3. Await `exit`.
+4. Assert: the client never saw `saved` (the ack never left the server) — `states` contains no `saved` after the marker's insertion.
+5. Restart. Assert the row **does** exist (`note_updates` contains the marker's update; decode it with `Y.mergeUpdates` into a scratch doc and assert the marker is present) and `note_docs.head_seq` advanced.
+6. Reconnect the same `Y.Doc`; assert the `baseline` reply's `sv` dominates the recorded local vector and the client flips to `saved` **without** writing a new row (`head_seq` unchanged, row count unchanged). This is the exact property that makes the indicator conservative rather than lying in either direction.
+
+### CH-5 — Saved never precedes COMMIT (HP-1; `collab.durable-ack.chaos`, case *saved never precedes commit*)
+
+1. Arm `FAULT.storeSlow` with 3 000 ms.
+2. Open `editorA` and a second, independent MySQL connection from the test (`srv.db`, isolation `READ COMMITTED`).
+3. **Before** inserting, start a poller on that connection that runs `SELECT seq FROM note_updates WHERE note_id = ? AND seq > ?` every 10 ms and records `clock.monotonicMs()` at the first sighting of the new row as `firstVisibleAt`. An uncommitted row is invisible to another session, so `firstVisibleAt` is an upper bound on the COMMIT. The oracle is deliberately built out of timestamps rather than a read inside the ack handler: every MySQL client in the stack (mysql2 through Kysely) returns a promise, so a synchronous read "before any await" cannot be written, and awaiting one inside the handler would let the COMMIT land between the ack and the read — which would make the assertion always pass and prove nothing.
+4. Insert a marker, recording `insertAt = clock.monotonicMs()`. In the `persisted` handler record `ackAt = clock.monotonicMs()` synchronously: a timestamp, no I/O, no await.
+5. Assert `ackAt >= firstVisibleAt` — the ack never precedes the row's first visibility to another session — and `firstVisibleAt - insertAt >= 3000`, which proves the injected delay was actually in force so the window the test aims at existed. Assert `saveState` was `syncing` for at least 3 000 ms and that the `saved` transition timestamp is at or after `firstVisibleAt`.
+6. Repeat with `store.slow:50` and 200 iterations to catch a race that only appears at small windows.
+
+### CH-6 — Database outage, recovery, and pool behaviour (HP-1, HP-5; `collab.db-outage.chaos`)
+
+1. Three editors are connected and editing at ~2 edits/s each.
+2. `setEnabled(false)` on the `mysql` proxy for 30 s.
+3. Assert during the outage: every client reaches `save-failed`; editing is still possible locally (the spec pauses editing on *disconnect*, not on save failure); no client is disconnected (the WebSocket is healthy); `/healthz` is 200 and `/readyz` is 503; `collab_writer_backlog` grows; no unhandled rejection appears in stderr; the mysql2 pool does not exhaust (`db_pool_in_use` stays ≤ its size).
+4. `setEnabled(true)`. Assert within 30 s: all three reach `saved`; the merged text equals the three clients' converged text; the number of `note_updates` rows is ≤ the number of coalesced bursts and ≥ 1; no duplicate content.
+5. Variant with `reset_peer` (`attributes: { timeout: 0 }`) instead of disabling, to exercise mid-statement connection kills, and a variant with `timeout` (`attributes: { timeout: 5000 }`) to exercise half-open connections. Both must produce `persist-failed`, never a false `persisted`.
+
+### CH-7 — Network degradation on `/collab` (HP-5; `collab.network-degradation.chaos`)
+
+1. Point three `NoteClient`s at the `collab` proxy instead of the server port.
+2. Apply, one case each: `latency 800 ms ± 400`, `bandwidth 30 kB/s`, `slicer` (average_size 128, delay 10 ms), `limit_data 64 kB`, `reset_peer`.
+3. Assert per case: convergence still holds after removing the toxic and draining; `saveState` never shows `saved` while a local update is unacknowledged; the provider's reconnect backoff is bounded (asserted from the connection attempt timestamps: exponential, capped at 30 s, jittered); `messageReconnectTimeout` triggers a reconnect rather than a permanent hang; on `limit_data` the connection closes and the client shows `disconnected` with pending edits retained and the before-unload warning armed.
+4. Assert that a reconnect after any of these performs exactly one authorization round trip with a fresh ticket (no ticket reuse) and one `baseline`.
+
+### CH-8 — Graceful shutdown (HP-2; `collab.graceful-shutdown.chaos`)
+
+1. Three editors on two notes, all with pending unacknowledged updates (arm `FAULT.storeSlow` at 1 500 ms to guarantee a non-empty queue).
+2. Send `SIGTERM` to the child.
+3. Assert: each client receives `closing {reason:'shutdown', graceMs}` before its socket closes; the process exits within `SHUTDOWN_DRAIN_MS` (20 s) with code 0; `/readyz` returned 503 during the drain.
+4. Assert every pending update committed: for each note, `head_seq` equals the sum of committed coalesced bursts and the reconstructed text equals each client's final text; an `unload`-kind revision row exists at `head_seq` for each note.
+5. Restart and reconnect fresh clients; assert the text matches and marker counts are 1.
+6. Negative variant: with the MySQL proxy disabled, `SIGTERM` must still exit within the drain deadline (not hang), must log the unflushed note ids at `error` level, and must **not** emit `persisted` for anything it failed to write; a restart then recovers the last acknowledged state and the lost updates are the unacknowledged ones only.
+
+### CH-9 — Writer backpressure (HP-5; `collab.backpressure.chaos`)
+
+1. Arm `FAULT.storeSlow` at 5 000 ms so the FIFO cannot drain.
+2. Drive updates from two clients until the queue bound (5 000 updates or 32 MiB) is crossed.
+3. Assert: the document becomes read-only for **all** connections; each client receives `persist-failed {reason:'backpressure', retryInMs}`; further inbound updates are answered `SyncStatus(false)`; the `collab_writer_backlog` metric and the readiness backlog-age check reflect it; no update is silently dropped.
+4. Remove the fault. Assert the queue drains, the document becomes writable again, clients recover to `saved`, and the total committed content equals the union of the accepted updates (nothing accepted was lost, nothing rejected was applied).
+5. Assert global fairness: a second note on the same server remains writable throughout with normal latency.
+
+### CH-10 — Admission budget (HP-5; `collab.admission-budget.integration` for the limit, `collab.admission.chaos` for behaviour under churn)
+
+1. Start the server with `COLLAB_MAX_LOADED_DOCS=8` and `COLLAB_MAX_STATE_BYTES_TOTAL=2MiB`.
+2. Open 8 documents; assert all succeed.
+3. Open a 9th; assert `onAuthenticate` refuses with close reason `capacity`, an `audit`/metric records the refusal, and the client surfaces "Server busy — retrying" with a bounded retry.
+4. Close one document; assert the 9th now succeeds — there is no eviction, only refusal and retry (skeleton A50).
+5. Variant: exceed the byte budget with one large document instead of a count; same outcome.
+6. Under churn (50 open/close cycles across 20 notes with 4 workers), assert the loaded-document count returns to 0, no document leaks, and `collab_documents_loaded` matches `getDocumentsCount()`.
+
+### CH-11 — Compaction and projection failures are isolated (`collab.compaction-failure.chaos`)
+
+1. Arm `FAULT.compactThrow`.
+2. Edit and wait past `maxDebounce`.
+3. Assert: `persisted` still arrives and the client reaches `saved` (durability does not depend on projection); `projected` does not arrive; `note_docs.projected_seq` is unchanged; `GET /notes/:id/markdown` returns the last committed projection with a `stale` indication and the correct `ETag`; MCP `get_note` returns the stale projection with `stale: true` rather than failing; `/readyz` stays 200 (a projection lag is not an outage) until the lag exceeds the alert threshold, at which point the metric — not readiness — fires.
+4. Clear the fault, request `flush {}`, and assert `projected` arrives, `projected_seq === head_seq`, and `note_search`/`note_links` are updated in the same transaction as `note_projections`.
+5. Variant with a projection worker killed mid-run (`kill -9` the piscina worker via `/admin/system` data): the pool respawns, the note is retried, and no partial projection is committed.
+
+### CH-12 — Content-invalid detection and repair (`collab.content-invalid.chaos`)
+
+1. Use `sendRaw` to apply an update that inserts `\r` into `Y.Text`, and a second that applies a formatting attribute — i.e. behave like a hostile or buggy client that is not the Iridium editor.
+2. Force a compaction.
+3. Assert: the compaction scan sets `note_projections.status='invalid_content'` and `notes.content_invalid=1`; a `content-invalid {reason}` stateless message reaches every connection; the editor goes read-only for that note; an audit event is written; durability is unaffected (the update is in the log).
+4. Run `iridium doctor --repair-content` and assert it writes a repair update (`origin='repair'`), clears the flag, records a revision, and the resulting text has no `\r` and no attributes.
+
+### CH-13 — Oversize note (HP-5; `collab.oversize.chaos`)
+
+1. Create a note just under the soft cap (1 000 000 UTF-16 units) through the import path.
+2. Push it over with collaborative edits.
+3. Assert: a `size-exceeded {size, max}` message arrives; `notes.oversize=1` after compaction; the note becomes read-only until reduced; reducing it below the cap clears the flag at the next compaction.
+4. Attempt to create/import a note above the hard cap (2 097 152); assert `413` with `note_oversized` at create/import/restore/repair, before any Yjs state is built.
+5. Assert a single update above 1 MiB closes the connection `too-large` and a frame above the 2 MiB `maxPayload` is refused by `@fastify/websocket` before the application sees it.
+
+### CH-14 — Revocation under load (HP-3; `collab.revocation-race.chaos`)
+
+Covered in the acceptance inventory; the chaos-specific part is the timing bound: with 200 connections across 20 notes and a 400 ms MySQL latency toxic, a membership removal must still close the victim's connections within 1 s of COMMIT, measured from the `audit_events.occurred_at` of the membership change to the client's observed close event. 50 iterations nightly.
+
+### CH-15 — Restart under load (HP-2; `collab.restart-under-load.chaos`)
+
+1. 40 clients across 10 notes, each editing at 2 edits/s, for 20 s.
+2. `SIGKILL` the child at a random point in the window (uniform over the 20 s), 40 iterations nightly.
+3. Restart; reconnect all 40 with fresh `Y.Doc`s.
+4. Assert per note: every update that produced a `persisted` before the kill is present; marker counts are 1; `assertNoteInvariants` passes; text length is monotonic with respect to the acknowledged sequence (no truncation); no note is left in `content_invalid` or `oversize`.
+
+### CH-16 — A second process refuses to serve (HP-2; `collab.second-process-refused.chaos`)
+
+Spec §6 starts the deployment with one collaboration-server process owning the active documents. Before the boot lease of "Single-process document ownership" existed, two copies of the binary against one database were caught only after the damage, as a `head_seq` compare-and-set mismatch surfacing through `persist.cas_mismatch`. This is the procedure that proves the refusal instead, and it is a chaos case rather than an integration one because it needs **two real processes**, which only this project starts.
+
+1. Start server `A` as a child process on schema `iridium_chaos`, open `note N` with two clients, type, and wait for `persisted`. Assert `A` holds the lease (`IS_USED_LOCK('iridium_collab_owner')` from the test's own connection returns `A`'s connection id).
+2. Start server `B` as a second child process on the **same** schema, same attachments directory, same configuration — the operator error this guards against, not an exotic one.
+3. Assert `B` refuses to serve documents rather than racing: `GET /readyz` on `B` is `503` with `collab_owner_lease: false`; a `/collab` upgrade to `B` for `note N` closes with code `4503` and reason `no-owner-lease`; `B` logs `collab.owner_lease.denied`; `B`'s `/healthz` is still green and `GET /notes/:noteId/markdown` on `B` still answers `200` from the committed projection, because refusing documents is not refusing to exist.
+4. Assert nothing raced: across the window, `note_updates` gained only `A`'s rows in `seq` order, `note_docs.head_seq` advanced only through `A`'s transactions, `iridium_persist_failures_total{reason="cas_mismatch"}` is `0` on both processes, and `assertNoteInvariants(N)` passes. The clients connected to `A` are undisturbed throughout — a second process must not degrade the first.
+5. `SIGKILL` `A`. Assert that `B` acquires the lease on its next readiness evaluation once MySQL reaps `A`'s session, that `B`'s `/readyz` turns green, and that reopening `note N` through `B` yields exactly the content that produced the last `persisted` before the kill — the HP-2 oracle, now across a *process handover* rather than a restart of the same process.
+6. The reverse order too: start `B` first and `A` second, so the refusal is a property of the lease and not of start order.
+
+PR budget 1 iteration (steps 1–5 once, no toxics); nightly 20 iterations with a random 0–500 ms MySQL latency toxic, which is where a lease acquired before the drain completed would show up as a `cas_mismatch` in step 4.
+
+### Iteration budget
+
+**An iteration is a test case, not a loop inside one.** Every budgeted suite is generated with `it.for(range(iterations))` (Vitest's `test.for`), so the project's `testTimeout: 180_000` bounds **one** iteration and the iteration index is part of the test name (`CH-1 kill after ack — iteration 137/200`). Written as a loop, three of the nightly budgets would exceed the timeout by an order of magnitude and the lane would report a timeout instead of a durability regression — the one failure mode a durability suite must not have. `IRIDIUM_CHAOS_ITERATIONS` sets the count (20 on PR, 200 nightly); a file never hard-codes it.
+
+Two suites need more than 180 s for a single iteration and declare it at the test, never by raising the project default: CH-14 (`it('revocation closes 200 connections within 1 s of COMMIT', { timeout: 600_000 }, …)`, because one iteration opens 200 connections across 20 notes behind a 400 ms latency toxic) and CH-15 (`{ timeout: 600_000 }`, because one iteration is a 20 s editing window plus a kill, a restart and 40 reconnects). The `chaos` project sets no cap below those, and `guards.no-sleep.guard` still applies inside them.
+
+Because `fileParallelism: false`, the lane's wall clock is the sum of its iterations. `chaos-extended` is budgeted at ≤ 3 h and the job declares `timeout-minutes: 240`; exceeding the job timeout is a failure that re-plans the budget (splitting the suite across two scheduled jobs), never a silent truncation and never a quiet reduction of the iteration counts.
+
+| Suite | PR (`chaos-core`) | Nightly (`chaos-extended`) |
+|---|---|---|
+| CH-1 kill-after-ack | 20 iterations, no toxics | 200 iterations, random 500–2 000 ms MySQL latency |
+| CH-2…CH-5 ack ordering | 1 iteration per failure mode | 20 per mode; CH-5 also 200 × `store.slow:50` |
+| CH-6 DB outage | disabled-proxy case only | all four toxic types |
+| CH-7 network degradation | `latency` only | all five toxics |
+| CH-8 shutdown | happy path | plus the DB-down variant |
+| CH-9…CH-13 | 1 iteration each | 5 iterations each |
+| CH-14 revocation race | 10 iterations | 50 iterations with 200 connections |
+| CH-15 restart under load | skipped (covered by CH-1) | 40 iterations |
+| CH-16 second process refused | 1 iteration, no toxics | 20 iterations with random 0–500 ms MySQL latency |
+| Backup/restore drill (`ops.backup-restore.drill`) | skipped | every night + every release |
+
+A chaos failure is never retried. The suite is designed so that a failure is reproducible from the artifacts: the fault list, the toxic list and the seed fully determine the scenario, and the iteration index is printed with every assertion.
+
+---
+## Property and model suites
+
+fast-check 4.10.0 with `@fast-check/vitest` 0.5.0 is the only property runner. Pure properties are co-located as `*.prop.spec.ts` under `src/` and run in the `unit` project; properties that need MySQL live in `apps/server/test/property/` and run in the `property` project.
+
+### Shared policy
+
+Two budgets, because the two cost classes differ by three orders of magnitude per run: a pure property is CPU only, a DB-backed model command is a MySQL round trip inside a transaction. Both classes treat a truncated run as a failure.
+
+```ts
+// packages/testkit/src/property/config.ts
+const shared = {
+  size: (process.env.IRIDIUM_PROP_SIZE ?? '=') as fc.SizeForArbitrary,
+  verbose: 1,
+  reporter: printSeedAndPath,       // prints { seed, path, endOnFailure } for every failure
+  markInterruptAsFailure: true,     // a truncated run is a failure, never a silent pass
+};
+
+/** `*.prop.spec.ts` in the `unit` project: pure logic and the in-memory model mirrors. */
+export const PROP = {
+  ...shared,
+  numRuns: Number(process.env.IRIDIUM_PROP_RUNS ?? 200),          // PR 200, nightly 5000
+  interruptAfterTimeLimit: 60_000,
+};
+
+/** `apps/server/test/property/**`: the same models driven against real MySQL. */
+export const PROP_DB = {
+  ...shared,
+  numRuns: Number(process.env.IRIDIUM_PROP_DB_RUNS ?? 20),        // PR 20, nightly 200
+  maxCommands: Number(process.env.IRIDIUM_PROP_DB_COMMANDS ?? 60), // PR 60, nightly 300
+  interruptAfterTimeLimit: 600_000,
+};
+```
+
+`markInterruptAsFailure: true` is the load-bearing line. With `false`, fast-check abandons the run at the time limit and reports success if it has not yet found a counterexample, so a suite that is too slow to finish reports green after a handful of runs — exactly the failure mode the duplication detector (oracle 5 of `convergence.model.prop`) exists to prevent. The `property` project's `testTimeout` is `900_000` in the root config so that a `PROP_DB` run reaches its own interrupt rather than the runner's timeout.
+
+| Rule | Why |
+|---|---|
+| Every failure prints `{ seed, path }` and the shrunk counterexample. | A nightly failure must be replayable verbatim on a laptop. |
+| A shrunk counterexample is pinned as a plain example-based test in the same file (`it('regression: seed 1234 …')`) **before** the fix is merged. | The property keeps searching; the regression test keeps the specific bug dead. |
+| `fc.commands` / `fc.modelRun` for stateful models; `fc.scheduler()` for interleavings; never ad-hoc randomness (`Math.random`) in a test. | Reproducibility. |
+| `maxCommands` and `size` are always bounded and stated; string arbitraries that feed the Markdown pipeline use `fc.string({ unit: 'grapheme' })` plus a curated alphabet including CR, LF, BOM, tab, NUL, combining marks, surrogate pairs, RTL marks and Markdown sigils. | Unicode bugs are the realistic bugs; unbounded generation blows the timeout. |
+| Properties never assert on internal call counts. | They must survive refactoring or they will be deleted the first time they get in the way. |
+| `numRuns` is raised, never lowered, and never per-file overridden downward. The only two budgets are `PROP` and `PROP_DB`; a file picks the one its cost class dictates and never edits the numbers locally. | A property that has to be weakened to pass is a bug report. Two named budgets keep "slow suite" from becoming a per-file negotiation. |
+
+### `convergence.model.prop` — the CRDT convergence model
+
+Location: `apps/server/test/property/convergence.model.prop.spec.ts` (MySQL-backed) with a mirror in `apps/server/src/collab/persistence/convergence.model.prop.spec.ts` that drives `SimNet` over the in-memory `CollabPersistence` double, so the same model runs in the `unit` project (its glob `apps/*/src/**/*.{unit,prop}.spec.ts` already collects it) and is inside Stryker's mutate scope. The mirror lives inside `apps/server` rather than in `packages/crdt` because `SimNet` drives the **real** `NoteWriter`, loader and compactor from `apps/server/src/collab/persistence/**` and comes from `@iridium/testkit`, which is a `devDependency` of `apps/server` and not of `packages/crdt`; a spec file in `packages/crdt` could reach neither, and `turbo boundaries` plus `knip --production` are specified to stop it trying. `packages/crdt`'s own property files cover only what the package owns: `codec`, `dominates`, `prefixSuffixDiff` and the struct scan.
+
+Design ported from Yjs's own `tests/testHelper.js` (`TestYInstance`/`TestConnector`/`applyRandomTests`/`compare`) into fast-check commands over a `SimNet` with N ∈ [2, 6] peers (nightly soak: 10 peers).
+
+| Command | Effect |
+|---|---|
+| `Insert{peer, pos, text}` | `text.insert(clamp(pos), text)` — text drawn from the unicode alphabet plus unique markers |
+| `Delete{peer, pos, len}` | `text.delete(clamp(pos), clamp(len))` |
+| `Undo{peer}` / `Redo{peer}` | the peer's own `Y.UndoManager` (trackedOrigins = that peer's origin only) |
+| `DeliverOne{peer}` | pop one message from that peer's inbound queue |
+| `DeliverAll` | drain every queue to quiescence |
+| `Disconnect{peer}` / `Reconnect{peer}` | drop the peer's queues; on reconnect perform a real y-protocols sync (step 1/step 2) against the server doc |
+| `ServerPersist` | run the real `NoteWriter` FIFO to completion (coalescing, CAS, `sv_after` capture) |
+| `ServerCompact` | run the real compactor: V2 snapshot, `snapshot_through_seq`, Markdown projection, checkpoint policy, content-invalid scan |
+| `ServerRestart` | discard the server `Y.Doc` and reload via the real loader (`applyUpdateV2(snapshot)` + tail `applyUpdate`) |
+| `ClientReload{peer}` | replace the peer's `Y.Doc` with a fresh one and sync from the server |
+| `PruneUpdateLog` | delete `note_updates` rows with `seq <= snapshot_through_seq` older than the retention window (the real maintenance job) |
+
+Oracles, evaluated after a final `DeliverAll` + `ServerPersist` + `ServerCompact`:
+
+1. **Text equality** — every peer's `text.toString()` is identical, and identical to the server doc's.
+2. **State-vector equality** — `Y.encodeStateVector` equal for every peer; each dominates every other (`dominates` both ways).
+3. **Merge equality** — a fresh doc built from `Y.mergeUpdates([...all note_updates.update_v1])` equals every peer's text; and `Y.encodeStateVectorFromUpdate(mergeUpdates(...))` equals the peers' vectors.
+4. **Delete-set and struct-store equality** — compared the way Yjs's `compare()` does, which catches divergence that text equality misses.
+5. **Marker at most once** — every unique marker inserted appears 0 or 1 times, never 2. This is the duplication detector, and it is the reason markers exist.
+6. **Initial content exactly once** — the imported template marker appears exactly once regardless of how many restarts and reloads occurred.
+7. **Undo isolation** — no `Undo{A}` removed a character inserted by B; verified by tracking insert provenance per `clientID` in the model.
+8. **Projection agreement** — `note_projections.markdown` at `projected_seq === head_seq` equals the converged text.
+9. **Persistence monotonicity** — `head_seq` never decreases; `snapshot_through_seq <= head_seq`; `projected_seq <= head_seq`.
+10. **No `\r`, no attributes** — `text.toDelta()` contains only `{insert: string}` entries; the text has no `\r`.
+11. **Pruning is safe** — after `PruneUpdateLog`, a `ServerRestart` still reproduces the same text (the snapshot covers what was pruned).
+
+Budgets: the MySQL-backed file runs at `PROP_DB` (PR `numRuns` 20 × `maxCommands` 60, nightly 200 × 300, peers 2–6, `size: '+2'` nightly); the `unit` mirror runs the identical command set at `PROP` (PR `numRuns` 200, nightly 5 000) over the in-memory `CollabPersistence` double, so the skeleton's 5 000-run strength is reached every night on the model even though 5 000 × 300 DB-mediated commands would not finish. Nightly adds a soak property with 10 peers × 2 000 commands and one `ServerRestart` every ~100 commands, run once (`numRuns: 1`) against MySQL.
+
+### `persistence.model.prop` — the writer/loader model
+
+Location: `apps/server/test/property/persistence.model.prop.spec.ts`, with the same kind of mirror at `apps/server/src/collab/persistence/persistence.model.prop.spec.ts` over the in-memory double (in the `unit` project, in Stryker's mutate scope). Model state is `{ head: bigint; throughSeq: bigint; projected: bigint; applied: Update[] }`; the real system under test is `NoteWriter` + loader + compactor against real MySQL (and against the in-memory `CollabPersistence` double in the mirror).
+
+Commands: `Enqueue(update)`, `Flush` (drain the FIFO), `EnqueueStale(olderUpdate)` (an update whose `sv_after` is dominated by the current head — simulates a delayed writer), `Compact`, `Load`, `Crash` (abandon in-flight work), `ConcurrentWriter` (a second writer instance for the same note, which must lose the `note_docs FOR UPDATE` + `head_seq` CAS), `PruneLog`, `TrashNote`.
+
+Invariants:
+
+1. `seq` is strictly increasing and gap-free per note.
+2. An older/stale store never overwrites newer state: after `EnqueueStale`, `head_seq` and the loaded text are unchanged (the CAS fails and the writer discards rather than retrying blindly).
+3. `Load` always returns a doc whose state vector dominates every committed update's `sv_after`.
+4. `Load` after `Crash` returns exactly the committed prefix — never more, never less.
+5. `ConcurrentWriter` never produces two rows with the same `seq` (the unique key plus the CAS make it impossible) and never both succeed.
+6. `Compact` is idempotent: running it twice at the same `head_seq` leaves `snapshot_through_seq`, `projected_seq` and `note_projections.content_hash` unchanged.
+7. `TrashNote` followed by `Enqueue` rejects with `note_trashed` and writes nothing.
+8. Coalescing preserves semantics: the merged row applied alone equals the individual rows applied in order.
+9. Every committed row's `actor_id`/`session_id` is the authenticated principal that produced it, never a Yjs `clientID`.
+
+An `fc.scheduler()`-driven variant interleaves `Enqueue`, `Compact`, `Load`, `Crash` and a client `Disconnect` to exercise orderings that a sequential model cannot reach, with `s.waitAll()` as the drain.
+
+### `hierarchy.model.prop` — the tree model against real MySQL
+
+Location: `apps/server/test/property/hierarchy.model.prop.spec.ts`. Commands `CreateCategory`, `CreateNote`, `Rename`, `Move`, `Trash{recursive?}`, `Restore`, `Purge`, each issued as a real REST call with a real `If-Match`, and each pair optionally interleaved through `fc.scheduler()`.
+
+Model: an in-memory tree with sibling-name sets. Oracles after every command and at the end:
+
+1. Every response is `2xx` or `409`/`412`/`404`/`422` with a documented `code` — never `5xx`.
+2. The DB tree is acyclic: the recursive CTE from the root reaches every non-purged row exactly once.
+3. Sibling names are unique per parent under `utf8mb4_0900_as_ci` among live rows.
+4. No node is its own ancestor; a move into a descendant always yields `invalid_move`.
+5. The model's expected tree and the DB tree agree whenever the model can predict the outcome (i.e. when only one of the two racing commands succeeded).
+6. `vaults.tree_version` strictly increases with successful mutations and never changes on a `409`.
+7. Every successful mutation has exactly one audit event; the chain verifies at the end.
+8. Derived paths from the CTE equal the model's paths.
+9. A trashed subtree's rows keep `deleted_at` and `expires_at`; restore reinstates exactly the subtree that was trashed.
+
+### `crdt.dominates.prop`
+
+Location: `packages/crdt/src/dominates.prop.spec.ts`. Properties of `dominates(a, b)` over generated state vectors and over vectors derived from real update sequences:
+
+- reflexive; transitive; antisymmetric up to equality;
+- `dominates(Y.encodeStateVector(doc), Y.encodeStateVectorFromUpdate(Y.encodeStateAsUpdate(doc)))` both ways;
+- applying an update to a doc makes the new vector dominate the old one, strictly when the update was not already contained;
+- a vector missing any single `clientID` clock does not dominate;
+- decoding is total: every vector produced by `Y.encodeStateVector` round-trips through the branded codec, and malformed bytes throw a typed error rather than returning a wrong answer.
+
+Also in this file: `encodeState`/`loadState` codec properties — V1 and V2 round-trip; `loadState` applied twice is idempotent; applying an already-contained update changes nothing; a V2 snapshot plus its tail reconstructs the same doc as the full V1 log.
+
+### `save-state.machine.prop`
+
+Location: `packages/collab-client/src/save-state.machine.prop.spec.ts`. The subject is the settled API of 05-collaboration-and-durability.md: `saveState(i: SaveStateInput): SaveState` — an ordered rule list, first matching rule wins, a pure function of an input snapshot with no memory and no timers — plus the input accumulator `reduceSaveInput(prev: SaveStateInput, e: SaveEvent): SaveStateInput` that lives in the same module and is the only thing in the client that turns provider events into snapshots.
+
+fast-check generates sequences of `SaveEvent` (`localUpdate`, `syncStatus(true|false)`, `persisted{seq,sv}`, `persistFailed{reason}`, `projected{seq}`, `role{role}`, `closing{reason}`, `close{reason}`, `socketOpen`, `socketClose`, `authenticated`, `synced`, `baselineSent`, `tick{ms}`); `reduceSaveInput` folds them into successive `SaveStateInput` snapshots (including `now` and `lastLocalEditAt`, so rule 8's 15 s dominance deadline is exercised); the properties below are asserted over the resulting `SaveState` sequence. Because the machine itself is memoryless, every property is phrased as a statement about inputs, which is the only form that can be true of a first-matching-rule function:
+
+1. `saved` occurs only for a snapshot whose `persisted.sv` dominates `localSv` with `unsynced === 0` — never from `synced: true` alone, never from `projectedSeq`, never from the passage of `now`. (This is HP-1 in pure form and the single most important property in the package.)
+2. From a `saved` snapshot, applying `localUpdate` (which advances `localSv` and `unsynced`) yields `syncing` on the very next snapshot, and never `saved`, until a dominating `persisted` arrives.
+3. While `persistFailed` is newer than `persisted`, `saveState` is `save-failed` for every snapshot, whatever else changes; it leaves `save-failed` only when a `persisted` with a dominating `sv` or a `closeReason` arrives.
+4. Whenever `¬dominates(persisted.sv, localSv) ∨ unsynced > 0`, the exported before-unload predicate is true — in every state, including `disconnected`, and with no dependence on rule order.
+5. For a snapshot with `role: 'viewer' ∧ unsynced > 0` the state is `rejected`; the first snapshot after `role{role:'editor'}` is not `saved` unless a `persisted` dominating `localSv` has also arrived, and the text remains exportable throughout.
+6. Once `closeReason === 'note-trashed'`, every later snapshot yields `trashed`; once `closeReason ∈ {revoked, unauthorized, vault-archived, capacity, awareness-spoof, protocol-error}`, every later snapshot yields `revoked`. `reduceSaveInput` never clears `closeReason` for that session, which is where the "terminal" property actually lives.
+7. Every one of the ten `SaveState` values has a label in `i18n/en.ts` (a table test over the union), and every rule in the 05 table is reachable by at least one generated sequence (a coverage assertion over the rule index `saveState` returns alongside the state under `IRIDIUM_E2E`-free test builds).
+8. `saveState` is total: for every generated snapshot it returns a member of the union, and the exhaustive `switch` over `closeReason` in `reduceSaveInput` carries a `never` check, so a new close reason does not compile until it is classified.
+
+### Markdown properties
+
+Location: `packages/markdown/src/**`. The pipeline itself is specified in 08-markdown-pipeline-import-export.md; these are the properties that guard it.
+
+| Property | Statement |
+|---|---|
+| `markdown.roundtrip.prop` | For arbitrary byte sequences that are valid UTF-8, `restoreSource(normalizeSource(bytes), { eol, bom })` is byte-identical to `bytes`, where `eol`/`bom` are what `normalizeSource` reported. Generators cover CRLF, CR, LF, mixed EOL, leading BOM, trailing newline present/absent, tabs, trailing whitespace, NUL (→ U+FFFD, recorded as a finding so the round trip is documented as lossy for exactly that byte and nothing else), lone surrogates (rejected at the import boundary with a report entry), and very long lines. |
+| `markdown.no-rewrite.prop` | `parseNote(src)` followed by any preview or projection operation never mutates `src`; and `project(parseNote(src)).markdown === normalizeSource(src).text`. Opening or previewing a note cannot change its content (spec §3). |
+| `markdown.sanitize.prop` | For arbitrary Markdown (including generated raw-HTML fragments, URL-ish strings and attribute-ish strings), the sanitized hast contains no element outside the allowlist, no attribute outside the allowlist, no `href`/`src` whose scheme is outside `{http, https, mailto}` ∪ relative, no `style` attribute, and no `id`/`name` that could clobber `document.*`. Independently re-verified by walking the produced hast with a second, deliberately naive checker written in the test, so a bug in the schema builder cannot hide the bug in the schema. |
+| `markdown.frontmatter.prop` | Frontmatter is either parsed into `frontmatter` (YAML 1.2 core schema) or reported in `frontmatter_error`, never silently dropped; `frontmatter_raw` always equals the original slice byte-for-byte; a `---` that is a thematic break is never treated as frontmatter. |
+| `markdown.links.prop` | `resolveLink` classifies every generated target into exactly one of `resolved \| ambiguous \| broken \| external`; offsets `start_offset`/`end_offset` always slice back to the original link text; a relative link never escapes the vault (`../../etc/passwd` is `broken`, never `resolved`). |
+| `markdown.search-query.prop` | `parseQuery` never produces a boolean-mode string that MySQL rejects (verified in the `property` project by executing it), and never produces an unquoted operator from user input. |
+| `markdown.obsidian-detector.prop` | The detector's findings are a function of the source only, are stable under re-running, and never rewrite the source; a document with no Obsidian constructs yields an empty finding list. |
+
+`markdown.commonmark.unit` runs all CommonMark 0.31.2 examples from the vendored `spec.json` and the cmark-gfm extension examples; deliberate, documented deviations (there are only the ones listed in 08-markdown-pipeline-import-export.md) live in an explicit allowlist file with a reason per entry, and an example that starts passing must be removed from the allowlist (the test fails on a stale allowlist entry).
+
+### `token.effective-permissions.prop`
+
+Location: `packages/contracts/src/token.effective-permissions.prop.spec.ts` (pure) plus `apps/server/test/property/token.effective-permissions.prop.spec.ts` (against real memberships). Generates a random owner role set across vaults, a random token scope set, a random vault allowlist or `all_vaults`, and a random target `(vaultId, permission)`.
+
+Properties:
+
+1. The token's effective permission set is a subset of the owner's live explicit permission set, for every vault, always.
+2. `is_server_admin` never widens a token (deviation F4): a token owned by a server admin with `all_vaults` reaches exactly the vaults where the admin holds an *explicit* membership.
+3. An expired, revoked, or owner-disabled token has the empty permission set.
+4. `vaults.settings.mcp_enabled === false` or `server_settings.mcp_enabled === false` empties the set on MCP surfaces while leaving REST PAT reads governed by the same membership rule.
+5. Rotation: during the overlap window both secrets resolve to the identical permission set; after it, the old one resolves to the empty set.
+6. The set is monotone in the owner's role: raising the owner's role never removes a permission from the token.
+
+### Other pure properties
+
+| File | Statement |
+|---|---|
+| `packages/contracts/src/ids.prop.spec.ts` | UUIDv7 generation is monotonic within a millisecond, 16 bytes, version/variant bits correct, canonical-string round trip is lossless and lowercase, and `BINARY(16)` ordering matches timestamp ordering |
+| `packages/contracts/src/tokens.format.prop.spec.ts` | any single-character mutation of a credential string fails the CRC or the prefix check; parsing is total; the secret never appears in a parse error |
+| `packages/contracts/src/paths.prop.spec.ts` | `safePath` accepts only names the tree can store; the rejected set is closed under the transformations an attacker controls (percent-encoding, Unicode normalisation, case, trailing dots/spaces, alternate separators) |
+| `packages/contracts/src/deep-links.prop.spec.ts` | `iridium://` parsing is total, rejects unknown hosts/paths, never yields a navigable URL, and round-trips the fields it accepts |
+| `apps/server/src/mcp/cursor.prop.spec.ts` | a cursor is verifiable only with the right key, token id and filter hash; mutating any byte invalidates it; expiry is enforced; a valid cursor always decodes to a keyset that produces a strictly advancing page |
+| `apps/server/src/collab/persistence/writer.backoff.prop.spec.ts` | retry backoff is bounded, jittered, monotone in attempt count, and never exceeds the configured ceiling; a permanent error stops retrying and surfaces `persist-failed` |
+| `apps/server/src/audit/chain.prop.spec.ts` | the HMAC chain detects insertion, deletion, reordering and mutation of any row; two chains are independent; `verify-chain` is linear and streaming |
+
+Each file's canonical *name* follows the Location convention and is resolved in "Inventory completeness", which is the authority: `packages/contracts/src/ids.prop.spec.ts` is `contracts.ids.prop` and `packages/contracts/src/paths.prop.spec.ts` is `contracts.paths.prop` (the package supplies the area prefix the basename omits), while `tokens.format.prop` already carries its own area in the basename. The bare `paths.prop` and `ids.prop` spellings used by 12-milestones.md are superseded — see section 7 and "Superseded spellings".
+
+---
+## Hostile content and Electron security suites
+
+HP-4 is the property that a hostile note is inert everywhere: in the sanitizer, in the browser preview, in the Electron renderer, and in the server's projection worker. Four layers assert it independently, because each has a different escape route.
+
+### The hostile corpus
+
+`packages/testkit/src/fixtures/hostile/` holds one `.md` file per vector plus a single `expectations.json` mapping each file to what must *not* appear. The corpus is data, not code, so the same files feed the unit, component, integration and E2E layers, and adding a vector automatically raises coverage in all four. Every file is tagged with its vector class:
+
+| Class | Representative entries |
+|---|---|
+| Script injection | `<script>`, `<script src>`, `<script type="module">`, `</script >` with odd whitespace, nested `<scr<script>ipt>`, `<svg><script>`, `<math><mtext><script>`, `<template><script>` |
+| Event handlers | `onerror`, `onload`, `onfocus autofocus`, `onanimationstart`, `onbeforetoggle`, uppercase/mixed-case variants, attributes with newlines/tabs inside the name |
+| URL schemes | `javascript:`, `JaVaScRiPt:`, `java\tscript:`, `java&#9;script:`, `%6a%61vascript:`, `data:text/html`, `data:image/svg+xml`, `vbscript:`, `file:`, `blob:`, `about:`, `chrome:`, `iridium-attachment:` from note content, protocol-relative `//evil.example` |
+| Sinks | `<a href>`, `<img src>`, `<img srcset>`, reference definitions, autolinks, `<iframe>`, `<embed>`, `<object>`, `<form action>`, `<base href>`, `<meta http-equiv="refresh">`, `<link rel="import">`, `<portal>` |
+| DOM clobbering | `id="document"`, `name="body"`, `id="__proto__"`, two elements with `id="x"` and `name="x"`, `<form id="location">` |
+| CSS injection | `style="background:url(javascript:…)"`, `<style>@import</style>`, `expression()`, `-moz-binding`, class names starting `hljs-` forged by note content |
+| SVG/MathML | SVG with `<use href="#x">` and an external reference, `<animate attributeName="href">`, `<foreignObject>` containing HTML, MathML `<maction actiontype>` |
+| Markdown-specific | HTML inside code fences and inline code (must stay literal), HTML inside blockquotes and list items, autolink literals producing `javascript:`, footnote and definition labels carrying scripts, a link title containing `"` and `>`, an image `alt` containing markup, nested emphasis that resolves differently in different parsers |
+| Frontmatter | YAML with `!!python/object`, anchors/aliases with a billion-laughs expansion, a `title` containing markup, a duplicate key, a tab-indented block |
+| Unicode | RTL override in a link text, zero-width joiners inside `javascript`, homoglyph domains, lone surrogate in an attribute, U+0000 in a URL |
+| Attachment abuse | a Markdown image pointing at a `.svg` attachment, at an `.html` attachment, and at an attachment id from a foreign vault |
+
+`expectations.json` per file lists forbidden tag names, forbidden attribute names, forbidden URL scheme prefixes, and (for the E2E layers) forbidden observable side effects: dialogs, navigations, new windows, network requests to the sink host, and `window.iridium` access.
+
+### Layer 1 — `markdown.xss-corpus.unit`
+
+For every corpus file: `toPreviewTree(source)` and assert on the **hast**, not on an HTML string, because hast is the security boundary (`rehype-sanitize` runs last). Assertions walk the tree and check:
+
+- no element name outside the allowlist of `iridiumSanitizeSchema`;
+- no attribute name outside the per-element allowlist; no `style` anywhere; no `srcset`; no `on*` in any casing;
+- every `href` parses with `new URL(value, 'https://base.invalid/')` to a scheme in `{http:, https:, mailto:}` or is relative; every `src` to `{http:, https:}` or relative;
+- no `id`/`name` value in the DOM-clobbering denylist, and every heading id carries the `user-content-` prefix;
+- code fences and inline code contain the original text verbatim (hostile markup inside a fence must survive as text, which is the *positive* half of the property);
+- the tree is finite and the pass completed within the pathological budget.
+
+A second, independent verifier written inside the test (a naive recursive walker with its own hard-coded denylist) re-checks the same tree, so a bug in the schema-building code cannot mask itself.
+
+`markdown.sanitize.prop` generalises this to generated inputs (see "Property and model suites").
+
+### Layer 2 — `preview.inertness.component`
+
+Real Chromium, Vitest Browser Mode. For every corpus file, render through `@iridium/markdown-react` into a live DOM and assert:
+
+- `document.querySelectorAll('script, iframe, object, embed, form, base, meta, link, style, portal').length === 0` inside the preview root;
+- no element has an attribute whose name starts with `on`;
+- no `a[href]`/`img[src]` resolves to a forbidden scheme (read back from the DOM, i.e. after the browser's own parsing, which is where `java\tscript:` tricks either die or do not);
+- `window.__xssFired` is undefined — every corpus file that can attempt execution sets a global as its payload, so execution is detectable rather than inferred;
+- no network request left the page: a `page`-level request interceptor counts requests to the sink host and asserts zero, which catches `<img src>`-style exfiltration that no DOM assertion would;
+- clicking every rendered link does not navigate: vault links call the router, anchors scroll, external links call the injected `host.shell.openExternal` spy with an `https:`/`mailto:` URL and nothing else, and `window.open` is never called;
+- `document.getElementById('document')`-style clobbering does not shadow anything the preview code relies on (asserted by reading `document.body.tagName` and `document.location.href` after render);
+- no `dangerouslySetInnerHTML` exists on the preview path (a static guard in `guards.no-inner-html.guard.spec.ts` greps for it in `packages/markdown-react` and `packages/ui`).
+
+### Layer 3 — `projection.hostile.integration`
+
+The server projects the same corpus in its piscina worker. Assertions: every file produces a `note_projections` row with `status` in `{ok, too_large, too_complex, timeout}`; `body_text` in `note_search` contains no markup and no script text; `note_links` classifies every hostile target as `external` or `broken`, never `resolved`; `markdown` equals the source; the worker never crashes the main process, and a file that exceeds the budget results in `status='too_complex'` with the raw Markdown still served by REST and MCP (so a hostile note cannot make a vault unreadable).
+
+`markdown.pathological.unit` covers the DoS half with the `fixtures/pathological/` set: 10 000-deep blockquote nesting, 64-column list indentation ladders, a 20 000-line paragraph, a table with 10 000 columns, unclosed emphasis runs designed to be quadratic in micromark, an autolink-literal-heavy document, 1 MiB of backslashes, and nested link/emphasis combinations. Each asserts the pre-scan rejects it before parsing, or the parse completes inside the stated budget (server 10 s, client 2 s) — with the measured time recorded to a JSON artifact so nightly can trend it.
+
+### Layer 4 — web E2E: `security.hostile-markdown.e2e`
+
+Runs against the built bundle with the production nonce CSP. A hostile note is imported through the real import job into the fixture vault; the editor opens it in reading and split modes.
+
+1. Install page-level observers before navigation: `page.on('dialog')` (fail), `page.on('popup')` (fail), `page.on('framenavigated')` (fail unless it is the expected route), `page.on('console')` collecting CSP violation reports, and a route handler counting requests to `https://sink.invalid/**` (fail if > 0).
+2. Assert the CSP response header exactly matches the policy printed in 07-client-applications.md §6.2 — that string is the single normative one for `/app/*`, including `script-src 'self'` with **no** nonce (the SPA ships no inline script), the `style-src` nonce, `img-src 'self' data: blob: https:`, `font-src 'self'` and `manifest-src 'self'` — with the nonce matched by pattern and the `wss://<PUBLIC_HOST>` origin substituted from the test environment. The expected string is read from one committed fixture shared with `security.headers.integration`, never retyped here or in 02-system-architecture.md, so there is exactly one place a policy change has to be made. Under `default-src 'none'` an omitted `font-src` would block the self-hosted fonts of 07 §6.1, which is precisely the class of drift this assertion exists to catch.
+3. Assert a CSP violation is reported for at least one corpus file that attempts an inline script (proving the CSP is live, not merely present) and that **no** violation is reported for the application's own scripts and styles (proving the nonce plumbing works, including `EditorView.cspNonce`).
+4. Assert the DOM assertions of layer 2 in the real page.
+5. Switch to source mode and back; assert the note's text is unchanged byte-for-byte (`GET /notes/:id/markdown` before and after), because rendering must not rewrite content.
+6. Assert `window.iridium` is `undefined` in the web host (it exists only in Electron).
+
+### Layer 5 — Electron security suite
+
+All assertions run through `electronApp.evaluate` in the main process or through the narrow preload surface; nothing weakens the shell to make a test possible. `electron-playwright-helpers` 3.1.2 is used only for `stubDialog`/`stubMultipleDialogs`, `clickMenuItemById`, `getApplicationMenu` and `waitForWindowByTitle`; its `ipcRenderer*`/`ipcMain*` helpers are banned by an oxlint `no-restricted-imports` entry naming those exports, because they require `nodeIntegration: true`.
+
+**`desktop.hardening.e2e.spec.ts`**
+
+| Assertion | How |
+|---|---|
+| `webPreferences` as specified | `app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences())` compared to a committed file snapshot: `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, `nodeIntegrationInWorker: false`, `webviewTag: false`, `navigateOnDragDrop: false`, `safeDialogs: true`, `partition: 'persist:iridium'`, `devTools` false in a packaged build |
+| `app.enableSandbox()` in effect | every renderer `webContents` reports `sandbox: true`; `process.sandboxed` is `true` inside the preload |
+| No Node in the renderer | in-page: `typeof require === 'undefined'`, `typeof process === 'undefined'`, `typeof module === 'undefined'`, `typeof global === 'undefined'`, `typeof Buffer === 'undefined'` |
+| Preload surface is exactly the contract | in-page deep key/arity snapshot of `window.iridium` compared with the committed snapshot; no `ipcRenderer`, no `send`, no `invoke`; every event callback receives no `event` argument (asserted by arity and by a payload probe) |
+| Renderer origin | `location.origin === 'app://iridium'` in a packaged/unpackaged-production launch; the `app://` protocol is registered as `standard, secure, supportFetchAPI, corsEnabled, stream, codeCache` |
+| CSP per load | the `protocol.handle` response headers include the expected CSP; an in-page `fetch` of a cross-origin URL fails by CSP `connect-src` |
+| `will-navigate` denied | `app.evaluate` installs a spy, then the page attempts `location.href = 'https://evil.invalid'` — navigation is prevented, the window stays on `app://iridium` |
+| `setWindowOpenHandler` denies | `window.open('https://evil.invalid')` returns null, no `popup` event, and `shell.openExternal` was not called |
+| `shell.openExternal` validated | clicking an external link calls `openExternal` with an `https:`/`mailto:` URL; a corpus link with `file:`/`javascript:`/`smb:` results in no call at all (asserted with a main-process spy) |
+| Permissions deny-by-default | `setPermissionRequestHandler`/`setPermissionCheckHandler`/`setDevicePermissionHandler` reject camera, microphone, geolocation, midi, hid, serial, usb, openExternal-from-content, and pointer lock; allow only clipboard-sanitized-write, notifications, fullscreen — driven from a table so a new permission defaults to denied |
+| Traversal guard on `app://` | `fetch('app://iridium/../../../etc/passwd')` and Windows-style variants return 404; the SPA fallback returns `index.html` only for extension-less paths |
+| Fuses | `npx @electron/fuses read` on the built binary in `release.yml` matches the table of skeleton A53; the E2E variant differs only by `enableNodeCliInspectArguments` (a diff assertion, not a hand-written second list) |
+| Single instance / updater under test | `IRIDIUM_E2E=1` disables the updater and the single-instance lock; a separate assertion confirms that *without* that flag a second launch focuses the first window instead of opening a second |
+
+**`desktop.hostile-markdown.e2e.spec.ts`** — the same corpus as the web suite, plus the desktop-only escapes: no dialog opens (`stubAllDialogs` records zero calls), `window.iridium` is not reachable from note content (the preview is rendered by the app, so the test asserts the preview root has no script node *and* that a corpus payload attempting `window.parent.iridium` finds nothing), no navigation to `file:`, dragging a hostile link into the window does not navigate (`navigateOnDragDrop: false`), and a `meta refresh` in a note does not move the renderer.
+
+**`desktop.ipc-contract.e2e.spec.ts`** — for every channel in `@iridium/contracts/desktop-ipc.ts`: a valid payload succeeds; an invalid payload is rejected with a typed error and logs one line; a payload sent from a foreign `senderFrame.origin` is rejected (simulated by opening a second `BrowserWindow` on a `data:`/`https:` URL in a test-only main-process hook that the production code path still origin-checks); and a channel not in the contract has no handler. The channel list is read from the contract module, so a new channel without a test fails the suite.
+
+**`desktop.deep-link-fuzz.e2e.spec.ts`** — 500 generated `iridium://` URLs (fast-check generators reused from `deep-links.prop`) delivered through `app.evaluate(() => app.emit('open-url', …))` and, on Windows/Linux, through `second-instance` argv. Assertions: the app never navigates, never throws an unhandled rejection, never adds a server profile without a prompt, and either routes to a valid in-app location or ignores the URL; `iridium://auth/callback` is accepted as a reserved no-op in MVP.
+
+**`desktop.attachments-no-token-in-renderer.e2e.spec.ts`** — attachments render through `iridium-attachment://`; the renderer never holds a session token (`window.iridium` exposes no `secrets`; `localStorage`/`sessionStorage`/IndexedDB/cookies in the renderer partition contain no `irid_` string — asserted by enumerating all of them), and the main process is the only holder (asserted by finding the credential in the main process's safeStorage-backed store through a main-process read).
+
+**`desktop.tls-pin.e2e.spec.ts`** — a profile with a `pinnedCertSha256` accepts the matching certificate and rejects a mismatching one with the documented error, scoped to that host only (a second host with no pin still works). Runs against a local HTTPS server with a generated certificate, on all three OSes, and doubles as the enterprise-CA trust check.
+
+---
+## Contract and conformance suites
+
+Everything Iridium exposes on a wire has a committed artifact, and drift from that artifact is a build failure. The artifacts are `packages/contracts/openapi/openapi.json`, `packages/contracts/mcp/tools.schema.json`, the generated `packages/api-client/src/generated/paths.d.ts`, the generated Kysely `Database` interface, the generated desktop IPC typings, `docs/non-goals.json`, `docs/acceptance-map.json`, and the committed snapshots for `webPreferences` and the preload surface. `pnpm gen && git diff --exit-code` in the `static` job is the drift gate; the suites below assert that the running server actually obeys them.
+
+### REST — OpenAPI contract
+
+**Generation.** `apps/server` builds its OpenAPI 3.1 document from the zod route schemas (`fastify-type-provider-zod` 7.0.0 + `@fastify/swagger` 9.8.1) and `pnpm gen` writes `app.swagger()` to `packages/contracts/openapi/openapi.json`. `@redocly/cli 2.52.1 lint --extends recommended` runs in `static`. Every operation carries an `operationId`, and every relationship that Schemathesis can follow is declared as an OpenAPI `links` entry — without links, stateful fuzzing has no coverage. The declared link graph is: `createVault → getVault → createNode → getNode → getNoteMarkdown → listRevisions → getRevision`, `createVault → putMember`, `createNode → patchNode → trashNode → restoreNode`, `createImport → uploadImport → scanImport → getImport → commitImport`, `createExport → getExport → downloadExport`, `createToken → getTokenSnippets → deleteToken`.
+
+**`apps/server/test/contract/openapi.contract.spec.ts`** is the document-level suite: it dereferences the committed spec, asserts every operation has an `operationId`, a documented success status, a documented `400`/`401`/`403`/`404`/`409`/`412`/`413`/`422`/`429`/`500` set appropriate to its method, `additionalProperties: false` on every request and response object, an `ETag` declaration on every versioned read and an `If-Match` parameter on every route the skeleton marks as requiring it, and that the declared `links` graph below is present and resolvable. **`toMatchOpenApi(operationId, status)`** is then applied to **every** REST response in the `integration`, `contract` and Playwright suites — not to a sample. `packages/testkit/src/matchers/to-match-openapi.ts` dereferences the spec once per worker with `@apidevtools/swagger-parser 13.0.0`, compiles one ajv 8.20.0 validator per `(operationId, statusCode, contentType)` with `ajv-formats`, and asserts:
+
+1. the operation exists in the spec (an unknown `operationId` fails the test, which is how a route added without a schema is caught);
+2. the observed status code is documented for that operation;
+3. the `content-type` matches the documented media type;
+4. the body validates, with `additionalProperties: false` enforced by the generator so an extra field is a failure, not a shrug;
+5. documented response headers are present (`ETag` on versioned reads, `Location` on creates, `Retry-After` on `429`, `WWW-Authenticate` on `401`).
+
+`apps/server/test/contract/openapi.coverage.contract.spec.ts` closes the loop from the other side: it records every `(operationId, status)` pair asserted across the whole `integration` + `contract` run (workers write to a shared JSON file that the `merge-reports` job aggregates) and fails when a documented `(operationId, status)` pair was never exercised. Additions to the spec therefore require a test; the `static` job's Redocly lint and this coverage check together make the OpenAPI document honest in both directions.
+
+`apps/server/test/contract/problem-details.contract.spec.ts` asserts the error shape for every `ProblemDetails.code` in the contracts enum: each code is produced by at least one request, always with `type`, `title`, `status`, `code`, `requestId`, optional `detail`/`current`, `content-type: application/problem+json`, and never with a stack trace, SQL text, file path or credential in any field.
+
+### REST — Schemathesis black-box fuzzing
+
+Schemathesis 4.26.1 runs against a disposable deployment (a container-mode server on a throwaway schema, seeded with a vault the fuzz principal can write to; the fuzz principal is never a server admin, so destructive admin routes stay out of reach).
+
+| Lane | Command |
+|---|---|
+| PR (`integration` job) | `schemathesis run http://127.0.0.1:4000/openapi.json --checks all --stateful=links --max-examples=50 --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN" --header "X-Iridium-Client: web" --exclude-path-regex '^/(admin\|__test__)' --report junit` |
+| Nightly (`schemathesis-full`) | the same with `--max-examples=500`, `--exclude-path-regex '^/__test__'` (admin routes included, against a throwaway deployment), and a second run with a **non-member** token to assert the isolation contract from outside |
+
+Checks enabled: `not_a_server_error`, `status_code_conformance`, `content_type_conformance`, `response_schema_conformance`, `response_headers_conformance`, `negative_data_rejection`, `positive_data_acceptance`, `use_after_free`, `ensure_resource_availability`, `missing_required_header`, `unsupported_method`. A `5xx` is always a failure. Known-and-accepted findings live in `apps/server/test/contract/schemathesis-exclusions.toml` with a reason and an owner per entry; the file is reviewed at every milestone exit and must be empty before M8 ships.
+
+### MCP — contract, dual era, conformance
+
+The MCP surface is specified in 06-mcp-and-agent-access.md; this section is how it is proven.
+
+**In-process dual-era tests (`apps/server/test/mcp/*.mcp.spec.ts`)** use the official v2 path: `const handler = createMcpHandler(buildIridiumMcpServer)` and `new StreamableHTTPClientTransport(new URL('http://test.local/mcp'), { fetch: (u, i) => handler.fetch(new Request(u, i)) })`, with `Authorization: Bearer <pat>` in `requestInit.headers`. Every suite runs twice: once with the client's default negotiation (legacy `initialize`) and once pinned to `2026-07-28`, driven by a `describe.each([['legacy'], ['2026-07-28']])`. A parallel set of tests goes through the **real** `/mcp` Fastify route over a socket, because `reply.hijack()`, host/origin validation, body limits and rate limiting only exist there.
+
+| Test | Assertions |
+|---|---|
+| `mcp.dual-era.contract` | both eras initialize, negotiate, list tools identically, and return identical `structuredContent` for the same call; the era only changes envelope details |
+| `mcp.tools-schema.contract` | the generated `tools.schema.json` equals the schemas the live server registers, including `title`, `description` (≤ 2 KB), `annotations`, `outputSchema`, parameter names matching `[A-Za-z0-9_.-]`, and the registration **order** (deterministic `tools/list`). It is also the drift gate between the two chapters that document the same six tools: `packages/contracts/src/mcp/tools.ts` is the single source, 06-mcp-and-agent-access.md D06-08 and 09-api-reference.md §4.4 reproduce that field set, and a field named in either chapter but absent from the zod schema (or present there and undocumented) fails **this** test rather than being a documentation nicety — which is why the types that differ between a JSON integer and a decimal string are asserted explicitly: `revision_id` is a string matching `^[0-9]+$` (the column is `BIGINT UNSIGNED`) while `revision` is a number, and `snippet_chars` carries the limits-policy bounds `80…1000` |
+| `mcp.output-schema.mcp` | every tool result validates against its own `outputSchema` with ajv; `structuredContent` is always present; `get_note`'s text block is Markdown and is **not** duplicated as JSON (deviation F7) |
+| `mcp.scopes.mcp` | a read-only PAT sees exactly six tools; no write tool exists to be called; `include_trashed` requires `history:read` |
+| `mcp.isolation.mcp` | forbidden and missing share one `isError` text; `resources/read` of a foreign URI → `-32602` with `data.uri` |
+| `mcp.revocation.mcp` | the full revocation matrix (see the acceptance inventory) |
+| `mcp.cursor.mcp` | a foreign cursor, an expired cursor, a cursor whose `tv` no longer matches `tree_version`, and a cursor minted for a different filter hash each produce the documented `isError`; a valid cursor pages the whole corpus exactly once with no duplicates and no gaps (asserted by set equality against a direct DB read) |
+| `mcp.rate-limit.mcp` | all four layers of 06-mcp-and-agent-access.md's rate-limit table at their documented enforcement points: the 120/min token burst and the 600/min `/mcp` process ceiling charged by `chargeRateLimit` in the `preHandler` after `patAuth`, the hourly `rate_limit_per_hour` budget with weights (`search_notes` costs 3, discovery methods 0), and the 60/min per-IP **failure** budget checked by `mcpIpGate` in `onRequest` before `patAuth` and consumed by `patAuth` only on a failed verification — so a flood of invalid tokens is cut off before any database read while a successful verification consumes nothing from it. Outcomes are asserted per layer: an hourly-exhausted `tools/call` answers `200` with an `isError` result and a retry hint (an HTTP 429 on a tool call is read as a transport failure by several clients), while the burst layer, the process ceiling and an hourly-exhausted **non**-`tools/call` method answer HTTP `429` with `retry-after` and the `x-ratelimit-*` headers. Headers are present on both paths, and an `access_log` row exists per call including the limited ones (`status='rate_limited'`) |
+| `mcp.resources.mcp` | the per-vault index resource is listed for every accessible vault; `iridium://vault/<id>/note/<id>?rev=<n>` resolves to the same note as the bare URI with `revision` pinned to `<n>`, and a non-integer `rev` or an unknown query parameter is not-found rather than a silent read of the current revision — the registered template is the bare `iridium://vault/{vault_id}/note/{note_id}` and `readNoteResource` re-parses the URI with `new URL(uri)` (06-mcp-and-agent-access.md D06-21), so this case is what proves the handler-side parse rather than the template; completion on `vault_id` and on note title prefix returns only accessible entries; `ttlMs: 0, cacheScope: 'private'` on list/read results and `ttlMs: 300000` on `tools/list` |
+| `mcp.fail-closed.mcp` | with `server_settings.mcp_enabled = false`, `/mcp` refuses every request; with the DB unreachable, `/mcp` returns a transport-level failure and never a partially-successful tool result |
+| `mcp.factory-error.mcp` | a throw inside `buildIridiumMcpServer` produces a clean JSON-RPC error, closes the hijacked response, logs one line, and leaks no stack trace |
+| `mcp.auth.mcp` | missing/invalid/expired/revoked token → `401` with `WWW-Authenticate: Bearer realm="iridium", error="invalid_token"`, a body hint naming Settings › Integrations, and **no** `resource_metadata` parameter; a cookie is ignored; any browser `Origin` header → `403` |
+| `mcp.instructions.mcp` | the `instructions` string is present, matches `apps/server/src/mcp/instructions.md`, and stays under the documented size |
+
+**Conformance.** `npx @modelcontextprotocol/conformance server --url http://127.0.0.1:<port>/mcp --suite active --requirements 2026-07-28 --expected-failures apps/server/test/mcp/conformance-baseline.yaml` runs in the `integration` job (active suite) and nightly (`--suite all`). `apps/server/test/mcp/conformance-baseline.yaml` is committed **empty** and `mcp.conformance.mcp.spec.ts` fails on any entry at all, from M3 onward (skeleton A51, and the M3 exit criterion of 12-milestones.md §7.4). A genuine upstream defect is handled by pinning the conformance version with an ADR and a tracking issue — never by accepting a deviation from a protocol requirement, because a baselined requirement is indistinguishable from a requirement we do not meet. The conformance results directory (`results/server-<scenario>-<ts>/checks.json`) is uploaded as an artifact.
+
+**Inspector smoke.** The token is passed in a config file, never with `--header`: Inspector 2.6.0 in `--cli` mode without a TTY fails fast with `auth_required` (exit 3) when the credential arrives as a header, so `apps/server/test/mcp/ci-servers.json` is generated per run with the PAT and the ephemeral port. The three invocations are
+
+```
+npx @modelcontextprotocol/inspector --cli --config apps/server/test/mcp/ci-servers.json --server iridium --method tools/list --format json
+npx @modelcontextprotocol/inspector --cli --config apps/server/test/mcp/ci-servers.json --server iridium --method tools/call --tool-name get_note --tool-arg note_id=<id> --format json
+npx @modelcontextprotocol/inspector --cli --config apps/server/test/mcp/ci-servers.json --server iridium --method resources/read --uri iridium://vault/<vaultId>/note/<noteId> --format json
+```
+
+asserting exit code 0 and the JSON shape of each (`tools/list` must contain `search_notes`); then the negative cases that pin the documented exit codes: a revoked token in the config file → exit 3, a tool that returns `isError` → exit 5. `--stored-auth-only` is the alternative the CLI documents for non-interactive runs and is recorded here as the fallback if the config-file form ever regresses.
+
+**Bridge parity (`packages/mcp-bridge/test/bridge.parity.contract.spec.ts`).** An MCP client over `StdioClientTransport` spawning the built `iridium-mcp` binary is compared against the same client over `StreamableHTTPClientTransport` straight to `/mcp`. Every one of `tools/list`, `tools/call` (all six tools, several argument shapes), `resources/list`, `resources/templates/list`, `resources/read`, `completion/complete` must produce **byte-identical** results after normalising request ids. Additional bridge assertions: a `401` upstream surfaces as a usable error on stdio rather than a hang; SIGTERM to the bridge closes the upstream connection; a token read from the environment is never echoed to stdout or stderr; stdout carries only JSON-RPC frames (a stray `console.log` is a test failure).
+
+**Real-client matrix (nightly `mcp-clients`).** Pinned versions, each performing an add-and-list plus one tool call against a live server, with the exact commands recorded in `docs/ops/mcp-clients.md`: Claude Code ≥ 2.1.232 (`claude mcp add --transport http iridium <origin>/mcp --header …` then `claude -p --strict-mcp-config` calling `list_vaults`), VS Code (`.vscode/mcp.json` with a `promptString` input), Cursor (`~/.cursor/mcp.json` with `${env:…}`), Windsurf (`serverUrl`), and the `iridium-mcp` bridge as a stdio client. The **same** nightly job also runs the whole stack behind both reference proxy configurations (`infra/caddy/Caddyfile` and `infra/nginx/iridium.conf`) as `proxied-stack.mcp-headers`, asserting `Authorization` header passthrough, `MCP-Protocol-Version`/`Mcp-Method`/`Mcp-Name` preservation, `flush_interval -1` streaming behaviour and long idle timeouts on `/mcp` and `/collab` — the failure mode this catches (a proxy stripping the header) is invisible to every in-process test. It shares `mcp-clients` rather than taking a lane of its own because both halves need the same live server behind a proxy, and because a lane name is a milestone-gate citation (12-milestones.md §12.4 names `nightly.yml › mcp-clients`).
+
+### Desktop IPC contract
+
+`@iridium/contracts/desktop-ipc.ts` is the source; `pnpm gen` emits the preload and main typings from it. `desktop.ipc-contract.e2e` (see the Electron suite) covers runtime behaviour; `contracts.desktop-ipc.unit.spec.ts` covers the static half: every channel name matches `iridium:<domain>:<verb>`, every channel has both a request and a response schema (or is declared event-only), every event channel matches `iridium:event:<name>`, and the union of channels in the contract equals the union registered by `apps/desktop/src/main/ipc/index.ts` (imported in a Node context with a stubbed `electron`).
+
+### Compatibility contract
+
+`compat.n-minus-1.integration.spec.ts` keeps a committed copy of the previous release's `openapi.json` and stateless-message schemas under `apps/server/test/contract/baselines/<apiVersion>/`. It asserts the additive-only rule of skeleton A54 mechanically: every path, operation, required request field, response field, stateless message type and IPC channel present in the baseline is still present with compatible types; a removal or a tightened validation fails the test with a message naming the change and telling the author to bump `apiVersion` and `minClientVersion` instead. The same test asserts `GET /meta` reports an `apiVersion` consistent with the baselines on disk.
+
+### License and supply-chain scan
+
+`scripts/check-licenses.ts` walks the production dependency closure of `apps/server`, `apps/web`, `apps/desktop` and `packages/mcp-bridge` (`pnpm licenses list --json --prod --filter …`), resolves each package's SPDX expression, and fails on anything outside the allowlist **MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense**, or matching the denylist **GPL-*, AGPL-*, LGPL-*, BUSL-*, SSPL-*, UNLICENSED, or a missing/unparseable license**. Dual-licensed packages pass if any branch is allowlisted. Exceptions live in `scripts/license-exceptions.json` with a package, version range, license, reason and approver, and the scan fails on an exception whose version range no longer matches (so an exception cannot silently widen). The scan runs in `static` on every PR and blocks the merge; `release.yml` re-runs it against the exact published closure and attaches the resulting report next to the SBOM (syft) and vulnerability scan (grype). `pnpm audit --audit-level high` and the `pnpm why` single-version check for `yjs`/`lib0`/`y-protocols`/`@codemirror/state`/`@codemirror/view` run in the same job.
+
+---
+## Performance budgets and how they are measured
+
+Budgets are numbers with a named measurement procedure and a named owner lane. A budget with no measurement is not a budget, so every row below says exactly which suite produces the number and where the number is stored. The reference hardware for server budgets is 4 vCPU / 8 GiB with MySQL on the same host (the single-node reference deployment of 11-operations-and-deployment.md); the runner class is recorded with every result, and a budget is only compared against results from the same class.
+
+### Server and collaboration SLOs (k6, nightly, M8 gate)
+
+| Metric (k6 name) | Budget | Measured by |
+|---|---|---|
+| `ws_connecting` | p95 < 500 ms | time from socket open to Hocuspocus auth-accepted, at 50 connections/s arrival |
+| `yjs_propagation_ms` | p95 < 250 ms | a probe VU inserts `⟦T:<Date.now()>⟧`; the receiving VU records the delta on observe |
+| `durable_ack_ms` | p95 < 1 s | insert → the `persisted` stateless message whose `sv` dominates the local vector |
+| `projection_lag_ms` | p95 < 12 s | insert → the `projected` message for that `seq` (bounded by `maxDebounce` 10 s + compaction) |
+| `mcp_get_note_ms` | p95 < 300 ms | HTTP scenario calling `tools/call get_note` on a 40 KB note |
+| `rest_note_markdown_ms` | p95 < 150 ms | `GET /notes/:id/markdown` with a warm projection |
+| `rest_search_ms` | p95 < 400 ms | `GET /vaults/:id/search?q=` over the 5 000-note load corpus |
+| `checks` | > 0.99 | every k6 `check()` across the run |
+| `dropped_iterations` | 0 | k6 counter; a dropped iteration means the generator, not the server, ran out of headroom and the result is void |
+| server RSS | < 1.5 GB | sampled from `/metrics` (`process_resident_memory_bytes`) every 5 s at peak |
+| `collab_writer_backlog` | max < 500 updates | `/metrics` at peak |
+| `collab_persist_failures_total` | 0 | `/metrics` delta over the run |
+| MySQL `Innodb_row_lock_waits` | no growth beyond the warm-up | `SHOW GLOBAL STATUS` before/after |
+
+**Scenarios** (`apps/server/test/load/`):
+
+| Scenario | Shape |
+|---|---|
+| `steady-editing` | `ramping-vus` 0 → 300 over 2 min, hold 8 min; 60 documents × 5 editors; 5 operations/s/client; awareness churn at 4 Hz |
+| `connection-storm` | `constant-arrival-rate` 50 connections/s for 60 s against 60 documents, each connection syncing then disconnecting |
+| `read-heavy` | HTTP: `GET /vaults/:id/nodes`, `/notes/:id`, `/notes/:id/markdown`, `/vaults/:id/search` at 200 rps |
+| `mcp-agent` | HTTP: `tools/call list_notes` + `get_note` + `search_notes` at 20 rps per token across 5 tokens, exercising the per-token rate limiter at its edge |
+| `fresh-flush` | 6/min/note `flush` requests while `steady-editing` runs, to confirm the human-facing freshness path does not starve the writer |
+| `soak` (weekly) | 100 VUs × 20 documents for 4 h; additional budget: RSS growth < 5 % after the first 30 min, `collab_documents_loaded` returns to 0 after the run, no MySQL connection leak |
+
+**Generator.** The primary implementation is a k6 2.2.0 script bundled with esbuild (`--bundle --format=cjs --platform=browser --external:k6*`) importing `yjs` 13.6.32, `y-protocols/sync` 1.0.7 and `lib0/encoding|decoding` 0.2.117, speaking the real Hocuspocus wire protocol over `k6/websockets` with `ArrayBuffer` frames. This is spike **S6** of the M0 register (skeleton A51/M0) because k6's Sobek engine has no Node module resolution and lib0 touches `performance`/`crypto` globals; it ends in `docs/spikes/S06-k6-yjs-bundle.md` (12-milestones.md §4.4). The recorded fallback, executed if the spike fails, is a Node `worker_threads` generator in the same directory driving `@iridium/collab-client`'s `NoteSession` with the `ws` polyfill — lower throughput per core, identical protocol fidelity, and it reuses the harness the tests already trust. Either way the generator emits the same metric names, so the thresholds and the baseline file do not change with the implementation.
+
+**Result handling.** Each nightly run writes `reports/load/<date>-<runner-class>.json` (k6 summary export) and is compared against `apps/server/test/load/baseline.json` by `scripts/check-load-budget.ts`: a threshold breach fails the job; a p95 regression greater than 20 % against the baseline with no threshold breach fails the job with a "regression" message; an improvement greater than 20 % prints a reminder to re-baseline. The baseline is updated only by an explicit commit with the run artifact attached, never automatically.
+
+### Client budgets (Playwright `perf.workspace.e2e`, PR-advisory, nightly-blocking)
+
+Measured on the demo fixture vault (42 notes) plus a generated 10 000-node tree, in the `chromium` project with CPU throttling off (the budget is about our code, not about simulating slow hardware; the throttled variant runs nightly at 4× with doubled budgets recorded separately).
+
+| Budget | Value | Measurement |
+|---|---|---|
+| First workspace paint, warm cache | < 1.5 s | `performance.getEntriesByName('iridium:workspace-ready')` — a `performance.mark` the UI emits when the tree and the last-open note are interactive; taken as the median of 5 loads |
+| Note open (tree click → editor ready) | < 300 ms for a 100 KB note | mark pair `iridium:note-open:start` / `iridium:note-open:ready`, median of 10 |
+| Preview render | p95 < 100 ms for a 100 KB note | the preview worker posts its own duration; the test collects 20 renders |
+| Preview worker cold start | < 250 ms | first render after page load |
+| Tree scroll | ≥ 55 fps over a 2 s programmatic scroll of the 10 000-node tree | `page.evaluate` frame timestamps via `requestAnimationFrame`; asserted on the 5th-percentile frame interval |
+| Typing latency | p95 keystroke → DOM update < 32 ms in a 100 KB note with 3 remote participants | CDP `Input.dispatchKeyEvent` timestamps against a `MutationObserver` |
+| Quick switcher | first results < 100 ms over 10 000 nodes | mark pair |
+| Renderer bundle | ≤ 900 KB gzip total, and ≤ 350 KB gzip for the initial route chunk | `scripts/check-bundle-budget.ts` over `apps/web/dist` and `apps/desktop/dist/renderer`, reading the Vite manifest, summing gzip sizes per entry, and comparing against `bundle-budget.json` |
+| Desktop cold start (launch → first window interactive) | < 3 s on the reference runner | `desktop.perf.e2e` using `_electron.launch` timestamps and the same `workspace-ready` mark |
+| Memory after 30 note opens | heap growth < 50 MB, zero retained `EditorView` instances | CDP heap snapshot diff plus a `WeakRef` registry the editor host exposes only under `IRIDIUM_E2E=1` |
+
+The bundle budget is the only client budget that blocks a PR, because it is deterministic. The timing budgets are advisory on PRs (reported as a comment-free artifact and a warning annotation) and blocking in the nightly `perf` job, where the runner is consistent; this split is deliberate, since a PR-blocking timing gate on shared runners would be a flakiness generator and would get disabled, which is worse than an honest nightly gate.
+
+### Server-side micro-budgets asserted in the normal suites
+
+These are cheap, deterministic and therefore blocking on every PR, inside the integration suite that already exercises the code:
+
+| Budget | Where asserted |
+|---|---|
+| Markdown pre-scan ≤ 4 ms/MiB | `markdown.pathological.unit`, measured over the pathological corpus |
+| Projection of a 100 KB note < 250 ms in the worker | `projection.performance.integration` |
+| Projection timeout honoured at 10 s (server) / 2 s (client) | `projection.hostile.integration`, `preview.worker-timeout.component` |
+| One recursive-CTE path resolution for a 10 000-node vault < 50 ms | `tree.paths.integration` with the generated `tree-10k` fixture |
+| `GET /vaults/:vaultId/nodes` p95 **recorded, not capped**, at 20 000 nodes, so skeleton A12's path-cache trigger (p95 > 200 ms) is observable rather than guessed | `tree.paths.integration` with the generated `tree-20k` fixture; the measurement is printed and written to `reports/perf/*.jsonl` like every other budgeted number, and 12-milestones.md §6.4 gates M2 on it being recorded |
+| `GET /vaults/:id/nodes` (500-item page) < 100 ms warm | `tree.crud.integration` |
+| Search query build + FULLTEXT over 5 000 notes < 200 ms | `search.performance.integration` |
+| Writer transaction (single coalesced update) < 15 ms at `innodb_flush_log_at_trx_commit=1` on the CI runner | `persistence.performance.integration`, asserted as a p95 over 200 commits with a 3× tolerance factor recorded in the test |
+| `authorize()` < 50 µs, no I/O | `authz.performance.unit` (pure, so the number is stable) |
+| Audit chain append adds < 5 ms to a mutating transaction | `audit.chain.integration` |
+| `iridium restore --verify` of the drill corpus completes and the server serves within the documented window | `ops.backup-restore.drill` records the duration to the artifact; no hard budget, but a 50 % regression fails |
+
+Each of these asserts against a generous constant with a stated tolerance, because their purpose is to catch an algorithmic regression (an N+1 query, a lost index, a synchronous hash in a hot path), not to benchmark the runner. When one fires, the fix is a measurement in the nightly `perf` job, never raising the constant without an explanation in the commit.
+
+### Trend artifacts
+
+Every performance-producing suite writes a line to a JSONL artifact (`reports/perf/*.jsonl`) with the metric name, value, git sha, runner class and date. The nightly job uploads them, and `scripts/perf-trend.ts` renders a plain-text table into the nightly job summary. There is no dashboard to maintain and no external service: the artifacts and the summary are the record, and the only automation that acts on them is the two budget-checking scripts above.
+
+---
+## CI lanes
+
+Three workflows, all with every `uses:` pinned to a commit digest (Renovate `helpers:pinGitHubActionDigests` + `docker:pinDigests` keep them current; the tag is kept in a trailing comment for readability) and every container image pinned to an exact tag plus digest.
+
+### `ci.yml` — every push and pull request
+
+```yaml
+name: ci
+on: { push: { branches: [main] }, pull_request: {} }
+concurrency: { group: ci-${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }
+permissions: { contents: read }
+env: { TURBO_TELEMETRY_DISABLED: '1', DO_NOT_TRACK: '1', IRIDIUM_MYSQL_IMAGE: 'mysql:9.7.2-oraclelinux9' }
+jobs:
+  static: { runs-on: ubuntu-latest }
+  unit: { needs: static, strategy: { matrix: { os: [ubuntu-latest, windows-latest] } } }
+  integration: { needs: static, runs-on: ubuntu-latest }          # Docker → Linux only
+  chaos-core: { needs: static, runs-on: ubuntu-latest }
+  e2e-web: { needs: static, runs-on: ubuntu-latest, strategy: { matrix: { shard: [1, 2, 3, 4] } } }
+  e2e-electron: { needs: static, strategy: { matrix: { os: [ubuntu-latest, windows-latest, macos-latest] } } }
+  mutation-scoped: { needs: static, runs-on: ubuntu-latest, if: <mutate-scope paths changed> }
+  merge-reports: { needs: [unit, integration, chaos-core, e2e-web, e2e-electron], if: always() }
+```
+
+| Job | Runner | Steps | Blocks merge |
+|---|---|---|---|
+| `static` | ubuntu | `pnpm install --frozen-lockfile` → `tsc -b --builders 8` → `oxlint --type-aware` → `oxfmt --check` → `knip --production` → `turbo boundaries` → `@redocly/cli lint` → `pnpm gen && git diff --exit-code` → `pnpm audit --audit-level high` → `pnpm why` single-version check → `scripts/check-licenses.ts` → `scripts/check-bundle-budget.ts` (after a build) → the exclusion-hygiene scripts (`check-quarantine.ts`, `check-fixture-size.ts`, `check-stryker-disables.ts`, `check-exclusion-owners.ts`) → `scripts/build-acceptance-map.ts --check` and `scripts/check-test-name-references.ts` → `vitest --config vitest.config.ts --project guard` (selection is by path, not by `--testNamePattern`, which filters by test title and would silently skip every guard whose name does not begin `guards.` — the drift, boundary, preload-surface and `webPreferences` guards among them; running the project first means a boundary or drift violation fails before any heavier lane starts) | yes |
+| `unit` | ubuntu + windows | `vitest --config vitest.config.ts --project unit --project component --coverage --reporter=blob` with `IRIDIUM_PROP_RUNS=200`; Windows runs `--project unit` only (Browser Mode needs a Playwright browser that is installed on ubuntu; the path/name/EOL logic that actually needs Windows is all in `unit`) | yes |
+| `integration` | ubuntu | Docker available: `turbo run build --filter=@iridium/server` (child mode needs `apps/server/dist/main.mjs`) → `docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .` (container mode needs an image) → `vitest --config vitest.config.ts --project integration --project contract --project mcp --coverage --reporter=blob` → Schemathesis light against the container-mode server → MCP conformance `--suite active` → Inspector CLI smoke | yes |
+| `chaos-core` | ubuntu | build `apps/server` → `vitest --project chaos` with `IRIDIUM_CHAOS_ITERATIONS=20` and the PR toxic subset | yes |
+| `e2e-web` | ubuntu | `services: mysql:9.7.2-oraclelinux9` (health-checked) → build web + server → `playwright test --project=chromium --shard=${{matrix.shard}}/4 --reporter=blob` | yes (all four shards) |
+| `e2e-electron` | ubuntu (xvfb) + windows + macos | MySQL from `shogo82148/actions-setup-mysql@v1` (`mysql-version: '9.7'`) → build desktop (unpackaged) → `playwright test --project=electron --grep @smoke`; ubuntu wraps in `xvfb-run --auto-servernum` after `npx playwright install-deps chromium` | yes |
+| `mutation-scoped` | ubuntu | only when a path in Stryker's `mutate` globs changed: `stryker run` from `tooling/mutation` with `incremental` restored from cache | yes when it runs |
+| `merge-reports` | ubuntu | `download-artifact --merge-multiple` → `vitest --merge-reports --coverage` (this is where coverage thresholds are evaluated, because no single job sees all of them) → `playwright merge-reports` → `scripts/check-openapi-coverage.ts` → `IRIDIUM_TEST_HOST_CONTRACT_REPORTS=reports/host-contract vitest --project guard` (rule 5 of the acceptance map: every `hostContractCases()` case passed in every due harness) → upload the HTML reports and the perf JSONL | yes |
+
+Critical path target ≤ 15 min. `forbidOnly: true` in the Playwright config and oxlint's `no-focused-tests` make a stray `.only` a failure rather than a silently narrowed run.
+
+### `nightly.yml` — scheduled
+
+```yaml
+on: { schedule: [{ cron: '0 3 * * *' }], workflow_dispatch: {} }
+```
+
+| Job | What it adds beyond PR |
+|---|---|
+| `property-long` | `IRIDIUM_PROP_RUNS=5000`, `IRIDIUM_PROP_DB_RUNS=200`, `IRIDIUM_PROP_DB_COMMANDS=300`, `IRIDIUM_PROP_SIZE=+2`, plus the 10-peer × 2 000-command convergence soak |
+| `chaos-extended` | 200 kill iterations, every toxic type, CH-15 restart-under-load, CH-14 at 200 connections |
+| `mutation` | full Stryker run over the whole mutate scope with `incremental` seeded from the cache; thresholds enforced |
+| `schemathesis-full` | `--max-examples=500`, admin routes included, plus the non-member-token isolation run |
+| `load` | k6 (or the Node fallback) over all scenarios; budget check against `baseline.json`; weekly the 4 h soak |
+| `perf` | the blocking client-budget run plus the 4× CPU-throttled variant |
+| `backup-restore-drill` | `ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos`, `ops.key-rotation.drill`, and an `upgrade-rehearsal` step running `ops.upgrade-rehearsal.drill` against the M1-era upgrade fixtures — the five operator rehearsals share one job because each one provisions its own MySQL container and they must not contend for Docker |
+| `mysql-84` | the whole `integration` + `property` + `chaos-core` set with `IRIDIUM_MYSQL_IMAGE=mysql:8.4.11`, plus the migrations/codegen diff on 8.4 (skeleton G3) |
+| `browser-smoke` | Playwright `firefox-smoke` and `webkit-smoke` projects over the `@smoke`-tagged web suite |
+| `e2e-electron-full` | the full Electron suite (not just `@smoke`) on all three OSes, including `tls-pin`, `deep-link-fuzz` at 500 URLs and `desktop.perf` |
+| `mcp-clients` | the pinned real-client matrix and the proxied-stack header-passthrough test (`proxied-stack.mcp-headers`, run through both the Caddy and the nginx reference configurations) |
+| `compose-boot` | `infra/compose.prod.yaml` brought up on a clean VM following `docs/ops/deployment.md` verbatim, then a three-editor smoke and a `claude mcp add` against it |
+| `conformance-all` | `@modelcontextprotocol/conformance --suite all`, with new failures reported but only the `active` suite blocking |
+| `flake-hunt` | `playwright test --repeat-each=3` over the whole web suite and three consecutive `vitest --project integration` runs on `main`; any test that both passes and fails within the job is reported with its trace |
+| `node-26` | the `unit` + `integration` projects on Node 26 (a forward-compatibility lane, non-blocking until Node 26 becomes the default per skeleton A4) |
+
+A nightly failure opens (or updates) one issue per job with the artifacts attached; it does not block merges, but a nightly job that is red for three consecutive nights blocks the next milestone exit (see 12-milestones.md).
+
+### `release.yml` — tags produced by `changeset git-tag`
+
+| Job | Steps |
+|---|---|
+| `verify` | re-run `static`, `unit`, `integration` and the license scan against the tagged tree (a tag is never trusted to match a green PR) |
+| `server-image` | `docker/setup-buildx-action` → `docker/build-push-action@v7.3.0` with SBOM and provenance attestation → `syft` SBOM + `grype` scan → push by digest |
+| `desktop` | electron-builder matrix (macos/windows/ubuntu) with signing and notarisation secrets; builds the **test-signed** variant first (production fuses except `enableNodeCliInspectArguments`), runs `playwright test --project=electron --grep @packaged` against it via `findLatestBuild()`/`parseElectronApp()`, verifies fuses with `npx @electron/fuses read`, then builds the final artifacts and runs a launch-and-exit sanity check on them |
+| `update-feed` | publish `latest.yml`/`latest-mac.yml`/`latest-linux.yml`, installers and blockmaps through `iridium desktop-updates publish <dir>`; then an end-to-end updater test against the published feed from the previous release's binary |
+| `bridge` | build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`; run `bridge.parity.contract` against the release image |
+| `drill` | the backup/restore drill against the release image, so "restorable" is a property of the artifact and not of `main` |
+| `version-pr` | `changesets/action@v2.1.2` |
+
+### What blocks a merge
+
+A pull request cannot merge unless **all** of the following are true. Nothing in the list is advisory once it is due, and there is no override path other than a commit that fixes the cause. Two entries are milestone-phased, and that is deliberate rather than a softening: a required check that *cannot* pass — `playwright test --project=chromium --shard=1/4` exits non-zero while `apps/e2e/web/` is empty, which it is until M4 — is a check somebody turns off, and then the lane is unguarded when it finally matters. The branch-protection set of 12-milestones.md §13.3 is exactly the union of this list's due entries at each milestone, and `docs/milestones/CURRENT` is the single place the milestone is named (the same file `guards.acceptance-map.guard` reads).
+
+1. `static` green — types, lint, format, dead code, boundaries, OpenAPI lint, generated-artifact drift (`pnpm gen` clean, which includes `docs/non-goals.json` and `docs/acceptance-map.json`), `pnpm audit --audit-level high`, single-version check, license scan, bundle budget, the acceptance-map generation and test-name reference check, and the whole `guard` project — which is where `guards.non-goals.guard` runs, so a crossed non-goal blocks a merge on the first job of the lane and is never advisory.
+2. `unit` green on ubuntu **and** windows, including every pure property at `numRuns: 200`.
+3. `integration` green, including `toMatchOpenApi` on every response, the MCP dual-era suite, the MCP conformance `active` suite with an **empty** baseline file, the Inspector CLI smoke and Schemathesis light.
+4. `chaos-core` green from M1 onward — 20 kill-after-ack iterations and the ack-ordering cases. A durability test is never skipped to unblock a release.
+5. `e2e-electron` green on all three OSes from M0 (`desktop.launch.e2e` exists from the first milestone, so the lane is never empty); `e2e-web` green on all four shards from M4, the milestone that writes the first `apps/e2e/web/` spec.
+6. `merge-reports` green — merged coverage thresholds met, OpenAPI operation coverage complete, every `hostContractCases()` case passed in every due harness (rule 5 of the acceptance map), Playwright report produced.
+7. `mutation-scoped` green whenever it runs (a file inside Stryker's `mutate` globs changed); it is a required check from M1, the milestone at which the mutation thresholds first apply.
+8. Every test file touched by the PR carries a requirement tag that `guards.acceptance-map.guard` accepts, and any new acceptance-map entry is committed in the same PR.
+9. No new entry in `apps/e2e/QUARANTINE.md`, `schemathesis-exclusions.toml`, `license-exceptions.json` or the CommonMark deviation allowlist without a linked issue and an owner (a CI step parses each file and fails on an entry missing either field). The MCP conformance baseline is not on this list because it admits no entries at all.
+10. Conventional commit messages (commitlint) and a changeset for every user-visible change (`changeset status --since origin/main`).
+
+Renovate PRs are held to exactly the same bar; a dependency bump that breaks a durability test does not merge because it is "just a bump".
+
+## Coverage and mutation thresholds
+
+### Coverage
+
+Provider `v8` (AST-aware remapping), `coverage.include` explicit (a missing `include` makes untested files invisible, which would make every number below meaningless), evaluated **once** on the merged blob report in `merge-reports`.
+
+| Scope | Statements | Lines | Branches | Functions | Mode |
+|---|---|---|---|---|---|
+| Global (`packages/*/src`, `apps/server/src`, `apps/web/src`, `apps/desktop/src/{preload,shared}`) | 85 | 85 | 80 | 85 | aggregate |
+| `apps/server/src/auth/**` | 100 | 100 | 100 | 100 | per file |
+| `apps/server/src/authz/**` | 100 | 100 | 100 | 100 | per file |
+| `packages/contracts/src/{tokens,paths,authz}.ts` | 100 | 100 | 100 | 100 | per file |
+| `apps/server/src/collab/persistence/**` | — | 95 | 90 | — | per file |
+| `packages/crdt/src/**` | — | 95 | 90 | — | per file |
+| `apps/server/src/audit/**` | — | 95 | 90 | — | per file |
+| `packages/markdown/src/sanitize/**` | 100 | 100 | 100 | 100 | per file |
+| `apps/desktop/src/{preload,shared}/**` | 100 | 100 | 100 | 100 | per file |
+
+Excluded from coverage: `**/*.spec.*`, `**/generated/**`, `**/*.d.ts`, `**/testing/**`, `apps/server/src/migrations/**` (migrations are covered by `migrations.integration` behaviourally; line coverage of DDL is noise) and `apps/desktop/src/main/**`.
+
+The desktop main process is deliberately outside the aggregate. Thresholds are evaluated once on the merged blob report, and almost everything in `main/` — the window factory, `protocol.handle`, the updater, server profiles, native menus, transfers and the attachment scheme — is proven only by the Playwright `electron` project, which contributes no v8 coverage to that report; leaving it in the include would make the global gate fail structurally from M5 onward, and the only available responses would be lowering a threshold (forbidden by the ratchet rule) or writing tests that assert nothing. Its gate is therefore behavioural instead: the `desktop.*.e2e` suite on three operating systems, plus `desktop.preload-surface.guard`, `desktop.webPreferences.guard`, `desktop.fuses.guard` and `ipc.origin.guard`, every one of them merge-blocking. `apps/desktop/src/preload/**` and `apps/desktop/src/shared/**` stay in the include at 100 % per file, because the preload surface is the security boundary between note content and the operating system and is small enough that 100 % is honest. `apps/web/src/**` is in the include rather than absent-without-explanation: it is thin (the entry point, router wiring, the store bindings and `BrowserHost`), its co-located `*.unit.spec.ts` files run in the `unit` project, and `BrowserHost` is driven by its own co-located component tests (the `component` project's include glob therefore extends to `apps/web/src/**/*.component.spec.tsx`), while `hostContractCases()` proves the same contract against `MemoryHost` and `BrowserHost` in the `component` project (which does contribute coverage) and again against `BrowserHost`/`ElectronHost` in Playwright, which contributes none and is not counted on. Per-glob thresholds repeat `perFile: true` explicitly because Vitest 5 glob thresholds do not inherit it.
+
+Ratcheting is a human act: `thresholds.autoUpdate` may be used locally behind `IRIDIUM_COVERAGE_RATCHET=1`, and the resulting number is committed with the PR that earned it. CI never auto-updates a threshold, and a threshold is never lowered — a PR that cannot meet a gate either adds tests or moves the untestable code behind an interface it can test.
+
+### Mutation
+
+Stryker 10.0.0 lives in `tooling/mutation`, a package whose own `package.json` aliases `typescript` to `@typescript/typescript6@6.0.2` so the `typescript-checker` keeps working while the rest of the repo builds with TypeScript 7.0.2 (which ships no compiler API until 7.1). Keeping the alias in one leaf package is what makes it possible to have both a fast native `tsc` and a working mutation checker; the alias is asserted by `guards.mutation-lane.guard.spec.ts`, which fails if `@typescript/typescript6` appears anywhere else.
+
+```jsonc
+// tooling/mutation/stryker.config.jsonc
+{
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.stryker.config.ts", "related": true },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tooling/mutation/tsconfig.stryker.json",
+  "typescriptChecker": { "prioritizePerformanceOverAccuracy": true },
+  "mutate": [
+    "apps/server/src/auth/**/*.ts",
+    "apps/server/src/authz/**/*.ts",
+    "apps/server/src/audit/chain.ts",
+    "apps/server/src/collab/persistence/**/*.ts",
+    "apps/server/src/collab/limits.ts",
+    "apps/server/src/mcp/{cursor,verifier,rate-limit}.ts",
+    "apps/server/src/tree/{names,moves,paths,rename-impact}.ts",
+    "apps/server/src/collab/owner-lease.ts",
+    "packages/contracts/src/{tokens,paths,authz,ids,limits}.ts",
+    "packages/crdt/src/**/*.ts",
+    "packages/markdown/src/sanitize/**/*.ts",
+    "packages/markdown/src/{normalize,restore,links}.ts",
+    "packages/collab-client/src/save-state.ts",
+    "!**/*.spec.ts"
+  ],
+  "ignoreStatic": true,
+  "incremental": true,
+  "incrementalFile": "reports/stryker-incremental.json",
+  "concurrency": 4,
+  "timeoutMS": 10000,
+  "thresholds": { "high": 90, "low": 75, "break": 70 },
+  "reporters": ["progress", "clear-text", "html", "json"]
+}
+```
+
+- `vitest.stryker.config.ts` declares **only** the `unit` project: Stryker does not support Browser Mode, and DB-backed projects would make every mutant a timeout. This is why the security-critical logic is factored into dependency-light pure modules in the first place (see the package layout in 02-system-architecture.md) — mutation testing is a design constraint, not an afterthought.
+- `break` starts at 70 and rises to **80 by M8** (skeleton A2). The number is raised in a commit that also shows the score; it is never lowered.
+- `incrementalFile` is cached with `actions/cache@v6.1.0` keyed on the lockfile hash plus the `main` sha, so the nightly run is incremental and the PR-scoped run is fast.
+- A surviving mutant in `auth`, `authz`, `sanitize` or `persistence` is treated as a missing test, not as an acceptable survivor. `// Stryker disable` comments are allowed only with a reason on the same line and are counted by `scripts/check-stryker-disables.ts`, which fails if the count grows.
+- Spike **S5** (`docs/spikes/S05-stryker-vitest5.md`, 12-milestones.md §4.4) validates Stryker 10 against Vitest 5.0.0 at M0 (Stryker 10 predates it); the recorded fallback is pinning `vitest@4.1.11` **inside `tooling/mutation` only**, which is possible precisely because the lane is an isolated package.
+
+---
+## Test data and fixtures policy
+
+### Rules
+
+1. **Synthetic only.** No production data, no customer content, no real names, no real email domains (`@iridium.test` everywhere), no real certificates or keys. There is no sanitisation step to get wrong because there is nothing to sanitise.
+2. **Loaded through product paths.** Fixture vaults enter the system through the real import job (`POST /imports` → `PUT /imports/:jobId/upload` → `POST /imports/:jobId/scan` → `POST /imports/:jobId/commit`), users through `iridium admin create-user` and `POST /admin/users`, memberships through `PUT /vaults/:id/members/:userId`, notes through `POST /vaults/:vaultId/nodes`, attachments through the upload route, backups through `iridium backup`. A test that needs state the product cannot create is a test that has found a missing product capability.
+3. **One sanctioned exception.** `corruptDeliberately(kind, args)` in `packages/testkit/src/db/corrupt.ts` is the only helper that writes raw SQL. Every call names the invariant it is breaking (`'stale-projection'`, `'broken-chain-head'`, `'orphan-note-doc'`, `'age-session'`, `'downgrade-snapshot-format'`, `'bump-authz-version'`), logs a line, and exists to test `iridium doctor`, `restore --verify` and the epoch guards. `guards.no-raw-sql-in-tests.guard.spec.ts` fails on any other raw `sql` tagged template in a test file.
+4. **Deterministic generation.** Large corpora are generated from a seeded PRNG (`packages/testkit/src/fixtures/generate.ts`, seed printed), not committed: the 10 000-node tree, the 5 000-note search/load corpus, the 500 MB export-stream fixture and the 1 MB single note. Generation is idempotent for a given seed and fixture version, so a failure is reproducible without a 500 MB artifact in git.
+5. **Committed fixtures are small and reviewable.** `fixtures/vaults/demo` (42 notes exercising every supported construct, 3 attachments, one note with frontmatter errors, one with 10 000 lines), `fixtures/vaults/obsidian-sample` (an Obsidian export with `.obsidian/`, `.trash/`, `.canvas`, Dataview blocks, wikilinks, transclusions, callouts, CRLF/CR/mixed files, a BOM file, a tab-indented frontmatter file, a filename-collision pair differing only in case, and an unsafe-path entry), `fixtures/hostile/**`, `fixtures/pathological/**`. Total committed fixture weight is capped at 5 MB and checked by `scripts/check-fixture-size.ts`; no git LFS.
+6. **Vendored third-party fixtures record provenance.** `fixtures/commonmark/spec.json` (CommonMark 0.31.2, from `commonmark-spec`) and `fixtures/gfm/**` (cmark-gfm extension examples) each carry a `PROVENANCE.md` naming the source, version, retrieval date and license, and are covered by the license scan's allowlist review.
+7. **Fixture versioning.** `IRIDIUM_FIXTURE_VERSION` is bumped whenever a committed fixture's content changes; golden artifacts embed it, so a stale golden fails loudly instead of quietly comparing against the wrong input.
+8. **Golden artifacts are file snapshots, reviewed like code.** `toMatchFileSnapshot` under `__golden__/` for mdast, sanitized hast, rendered HTML, `openapi.json` excerpts, MCP tool schemas, the `webPreferences` object, the preload surface and the export manifest. Inline snapshots are banned for anything longer than one line. CI runs with obsolete-and-mismatched snapshots failing; regeneration is `pnpm test:golden:update` locally and the diff must be explained in the PR description. A golden diff in `sanitize` or `webPreferences` requires a second reviewer (enforced by a CODEOWNERS entry on those directories).
+9. **Test secrets are fixed, obviously fake, and never valid in production.** `.env.test` carries `AUTH_PASSWORD_PEPPER=test-pepper-not-a-secret`, `AUDIT_HMAC_KEY=test-audit-not-a-secret`, `MCP_CURSOR_KEY=test-cursor-not-a-secret`. `config.rejects-test-secrets.unit.spec.ts` asserts `EnvSchema` refuses any value matching `/not-a-secret/` when `NODE_ENV=production`, and the secret-scanning regex for `irid_` credentials in `SECURITY.md` is asserted to match the testkit's generated tokens (so the published regex is known to work).
+10. **Isolation and cleanup.** Per-worker schemas (`iridium_w<n>`), per-test truncation in FK-safe order, per-test attachment directories under the OS temp dir, containers never reused (`withReuse()` is banned), and an `afterAll` that drops the worker schema. A leaked container or schema is a test bug, and `scripts/check-test-leaks.ts` runs after the local `test:docker` script to report any.
+
+### Fixture inventory
+
+| Fixture | Shape | Used by |
+|---|---|---|
+| `vaults/demo` | 42 notes, 3 attachments, nested categories 4 deep, one 10 000-line note, one frontmatter-error note | Playwright `setup`, component stories, integration reads, perf budgets |
+| `vaults/obsidian-sample` | Obsidian export with the awkward cases listed above | `transfer.fixtures.integration`, `import-report.e2e`, Obsidian detector tests |
+| `hostile/**` + `expectations.json` | one file per XSS/DoS vector class | `markdown.xss-corpus.unit`, `preview.inertness.component`, `projection.hostile.integration`, web + Electron hostile E2E |
+| `pathological/**` | quadratic and deep-nesting inputs with per-file budgets | `markdown.pathological.unit`, `projection.hostile.integration` |
+| `commonmark/spec.json`, `gfm/**` | conformance examples | `markdown.commonmark.unit` |
+| generated `tree-10k`, `tree-20k` | 10 000 and 20 000 nodes, seeded from the same generator | `tree.paths.integration` (the 50 ms CTE budget at 10 000 nodes; the recorded `GET /vaults/:vaultId/nodes` p95 at 20 000), perf budgets, quick-switcher budget |
+| generated `corpus-5k` | 5 000 notes with realistic word distribution | `search.performance.integration`, k6 `read-heavy` |
+| generated `note-1mb`, `note-2mb` | at the soft and hard note caps | `collab.oversize.chaos`, limits tests |
+| generated `export-500mb` | a vault sized to test streaming | `export.stream.integration` |
+| `kernel()` seed | the five-user cast and `note N` with `⟦IMPORT-MARK⟧` | every M1 suite, chaos, Playwright `setup` |
+
+## Flake policy
+
+| Rule | Detail |
+|---|---|
+| Vitest retries | `retry: 0` in every project, including `chaos` and `property`. A Vitest test that is not deterministic is broken. |
+| Playwright retries | `retries: 2` in CI only, with `trace: 'on-first-retry'` and `video: 'retain-on-failure'`. Locally `retries: 0`. |
+| Detection | The nightly `flake-hunt` job runs `playwright test --repeat-each=3` over the whole web suite and `vitest --project integration` three times on `main`; any test that passes and fails within one job is reported to the flake issue with its trace. |
+| Quarantine | A flaky test is moved behind `test.fixme` (Playwright) or `it.skip` with a `// QUARANTINE: <issue-url>` comment (Vitest) **and** an entry in `apps/e2e/QUARANTINE.md` naming the test, the acceptance row or hard property it covered, the issue and the owner. A quarantined test never counts toward a gate. |
+| Ceiling | At most 5 entries in `QUARANTINE.md`, and none covering an acceptance row or a hard property — a flaky `collab.durable-ack.chaos` blocks the pipeline until it is fixed, because the alternative is shipping an untested durability claim. `scripts/check-quarantine.ts` enforces both rules in `static`. |
+| Never | Raising a retry count, adding a sleep, loosening an assertion or increasing a timeout is not a fix for flakiness. The fix is `expect.poll` with an explicit deadline, an injected clock, a Toxiproxy toxic, or a test lock. |
+| Time bombs | `it.skip` without a `QUARANTINE:` comment and an issue URL fails oxlint (`no-disabled-tests` with the documented exception form). |
+
+## Local developer workflow
+
+| Command | Does |
+|---|---|
+| `pnpm test` | `unit` + `guard` + `component` (no Docker needed) |
+| `pnpm test:unit` / `:guard` / `:component` / `:integration` / `:property` / `:chaos` / `:contract` / `:mcp` | one project; each script passes `--config ../../vitest.config.ts --project <name>` because Vitest 5 does not search parent directories for a config |
+| `pnpm test:docker` | every DB-backed project; requires Docker Desktop (Linux engine) or Podman on the Windows dev box |
+| `pnpm test:watch -- <pattern>` | watch mode on the `unit` project |
+| `pnpm e2e` / `pnpm e2e:electron` | Playwright web / Electron against a locally built stack |
+| `pnpm e2e:ui` | Playwright UI mode |
+| `pnpm test:golden:update` | regenerate file snapshots |
+| `pnpm test:prop -- --runs 5000` | a nightly-strength property run locally |
+| `pnpm chaos -- --iterations 200` | a nightly-strength chaos run locally |
+| `pnpm mutation` | the Stryker lane |
+| `pnpm load` | the k6 (or fallback) generator against a compose stack |
+| `pnpm doctor:invariants` | `assertNoteInvariants` across a running dev database, useful after manual poking |
+
+Reproducing a CI failure is a documented three-step procedure in `CONTRIBUTING.md`: copy the printed seed (`IRIDIUM_TEST_SEED`, the fast-check `{ seed, path }`, or the chaos iteration index and toxic list) into the corresponding environment variable or `fc.assert` option; set `IRIDIUM_MYSQL_IMAGE` to whatever the failing lane used; run the single project with `-t '<test name>'`. Because no suite depends on wall-clock timing, on network conditions it did not create itself, or on test ordering, this is expected to work rather than hoped to.
+
+## Relationship to milestones
+
+12-milestones.md owns the ordering and the exit criteria; this section owns the tests those criteria name. The load-bearing relationships are:
+
+- **M0** delivers `@iridium/testkit`, the Vitest projects, the Playwright config, the CI skeletons and the M0 spike set registered in 12-milestones.md §4.4, under the ids and note filenames of 14-risks-and-open-questions.md (`docs/spikes/S<nn>-<slug>.md`, decision D14-11) — there is one register, not three. Two of those spikes have their fallbacks recorded in *this* section, because they are testing decisions: **S5** (Stryker 10 against Vitest 5.0.0 → pin `vitest@4.1.11` inside `tooling/mutation` only) and **S6** (k6 with bundled yjs → the Node `worker_threads` generator on `@iridium/collab-client`). A spike that fails executes its documented fallback inside the same milestone rather than blocking.
+- **M1** exits on the headless HP-1/HP-2/HP-3 suites plus `kernel.smoke.integration`, with the coverage and mutation gates already active on `auth`, `authz`, `collab/persistence` and `@iridium/crdt`.
+- **M2** turns on the structural-concurrency and REST-isolation rows; **M3** the MCP halves; **M4**/**M5** the browser and Electron halves; **M6** portability; **M7** the admin surface; **M8** backup recovery, load SLOs, mutation `break` 80 and seven consecutive green nightly runs (the conformance baseline is already empty at M3 and stays that way).
+
+### Tests specified here with no milestone exit-table entry — corrections due in 12-milestones.md
+
+12-milestones.md schedules a test by naming it in a milestone's exit-criteria table. Seven tests specified in this section are named in no such table, so nothing brings them into being: they are not in anybody's definition of done, and `guards.acceptance-map.guard` cannot miss them either, because the guard checks that a *due layer* has a test, not that a specified test is due. A test in that state is a test that gets written last or not at all.
+
+**The milestone of record is stated here, in this section, because this section owns the tests.** For each one it is the milestone that first delivers the mechanism under test, not the milestone at which the requirement is first mentioned — a test cannot gate a milestone whose scope does not yet contain the thing it reads.
+
+| Test | Milestone of record | The mechanism it tests, and where that milestone delivers it |
+|---|---|---|
+| `content.read-model.integration` | **M2** | `ContentReadCore` and the committed-projection read model (12-milestones.md §6.2, `apps/server/src/content/read`; skeleton A37). M1 ships one content read route over an M1 projection; the claim "**every** read route serves the committed projection, never the live `Y.Doc`" only becomes a claim about a set at M2, when the read routes are rewritten onto the core |
+| `content.etag.integration` | **M2** | the full content-read header set — `ETag` = `"<revision>:<contentHash>"` with `revision` the projected seq, `If-None-Match` → `304`, and `X-Iridium-Head-Revision` on every content read (09-api-reference.md `notes.getMarkdown`). M1's exit list already demonstrates `ETag`/`304` on the single route it ships; this test generalises it across the read surface `ContentReadCore` unifies at M2 |
+| `content.fresh-flag.integration` | **M2** | the staleness contract: `stale: true` exactly when `projected_seq < head_seq`, cleared by a `flush {}`, and no read route blocking on freshness. `GET /notes/:noteId/markdown?fresh=` arrives at M2 (§6.2, `apps/server/src/rest`) with the `?fresh=true` rate-limit policy; M2's `search.staleness-hint.integration` asserts the same invariant for search, and these two are the pair |
+| `content.no-ydoc.unit` | **M2** | the existence of a content read module whose import graph can be walked. `apps/server/src/content/read` is created at M2; before that there is nothing for the assertion to be about |
+| `content.lines-and-heading.unit` | **M2** | `readNoteMarkdown(p, noteId, {revision?, lines?, heading?})` (§6.2; skeleton A37) and `heading_title` extraction in the completed `project()` (§6.2, `@iridium/markdown`). Both are M2; M2's `projection.title-after-rename.integration` asserts the row-level half of the same `heading_title` rule, so the two belong in the same exit table. **Found by this pass, not by the traceability matrix, which named the other four content tests and `content.read-parity.integration`** |
+| `content.read-parity.integration` | **M3** | byte-identical text and an identical `revision`/`stale` pair across surfaces — A37's own proof obligation. Parity is vacuous at M2, where only REST reads exist; M3 adds MCP `get_note` over the same `ContentReadCore` with no second read path (§7.2), which is the first milestone at which two surfaces can disagree. The export-manifest arm of the assertion becomes live at **M6** with `export.manifest.integration`, so M6's table should extend the entry rather than add a second test |
+| `import.report.integration` | **M6** | `POST /imports/:jobId/scan` and the report JSON written into `import_jobs.report` (§10.2, `apps/server/src/transfer` — import). It is the only test that asserts the report is complete, survives a resume and is byte-stable for the same input, which is the "no silent normalization or discarding" requirement; M6 already schedules `import.commit.integration`, `import.unsafe-paths.unit` and `import-report.e2e`, and the report's own assertions sit between the wizard's and the commit's |
+
+**What has to change in 12-milestones.md.** Add `content.read-model.integration`, `content.etag.integration`, `content.fresh-flag.integration`, `content.no-ydoc.unit` and `content.lines-and-heading.unit` to the §6.4 exit table; add `content.read-parity.integration` to §7.4 and extend it in §10.4 with the export arm; add `import.report.integration` to §10.4. Nothing in this section changes with that edit — the names, files, projects and tags above are already the authority `docs/acceptance-map.json` is generated from, and 12-milestones.md's §13.5 convention is that it "only names tests and says which milestone gates them". Until the edit lands, the milestone of record is the column above.
+
+**Why this is a correction to 12 rather than a new guard here.** A guard that failed on "a specified test no exit table names" would need to read 12-milestones.md's exit tables as structured data, and those tables are prose with a `Lane` column, not a generated artifact; building that parser to catch seven known omissions would put a second, weaker copy of the scheduling authority in the `static` job. The durable fix is the one 15-requirements-traceability.md already applies: the matrix's Milestone column is derived from the exit tables, so an unscheduled test shows up there as a row whose milestone had to be inferred, and that inference is what produced this list.
+
+## Decisions made in this section
+
+These are decisions the skeleton does not cover. Each is used consistently above and is offered to 13-decision-log.md for merging as an ADR. Ids use the plan-wide `D<section number, two digits>-<n>` form, so this section's decisions are `D10-1`…`D10-39`; earlier drafts spelled the same decisions `TQ-n`, and that spelling is superseded — recorded here so a citation from an older draft still resolves, exactly as "Superseded spellings" does for test names.
+
+| Id | Decision | Rationale |
+|---|---|---|
+| D10-1 | Name the plan's own testable properties **HP-1…HP-5** (Saved truthfulness, restart recovery, revocation timing, hostile-content inertness, limits enforcement) and give the spec's section 9 rows stable ids (`concurrent-editing`, `initialization-reconnection`, `viewer-enforcement`, `vault-isolation`, `live-revocation`, `durable-saving`, `structural-concurrency`, `portability-and-safety`, `backup-recovery`). | Without ids, "every acceptance row has tests" is an assertion in prose. With ids it is machine-checkable, and reviewers can see at a glance which property a test defends. |
+| D10-2 | Tag every test with `[spec:<row-id>]` / `[hp:HP-n]` / `[area:<name>]` in the top-level `describe` (Playwright: `{ tag: ['@spec-…','@hp-n','@area-…'] }`), commit `docs/acceptance-map.json` with a `sinceMilestone` per `(rowId, layer)` entry and `docs/milestones/CURRENT` as the one place the current milestone lives, and enforce completeness with `guards.acceptance-map.guard.spec.ts` in the `static` job. | Makes the coverage map a build artifact instead of documentation that rots; also gives the compliance checklist of skeleton A57 a mechanical source. |
+| D10-3 | Test file naming `<area>.<subject>.<layer>.spec.ts[x]` with `layer ∈ {unit, component, integration, prop, chaos, contract, mcp, e2e, guard, drill}`, and fixed locations per layer; `drill` is collected by the `chaos` project's `*.{chaos,drill}.spec.ts` glob. | A file's path alone determines which runner semantics, timeouts and mocking rules apply, so authors cannot accidentally put a DB test in the `unit` project. |
+| D10-4 | Split `component` into its own Vitest project (Browser Mode) and run it only on ubuntu in CI; keep Windows on `unit` (where the path, filename, EOL and name-collation logic lives). | Windows runners cannot host Docker-based infrastructure and add little for a headless Chromium run; the Windows-specific risk is entirely in pure string/path logic. |
+| D10-5 | Standard environment knobs: `IRIDIUM_TEST_SEED`, `IRIDIUM_TEST_FUZZ_TOKEN`, `IRIDIUM_TEST_HOST_CONTRACT_REPORTS`, `IRIDIUM_PROP_RUNS`, `IRIDIUM_PROP_DB_RUNS`, `IRIDIUM_PROP_DB_COMMANDS`, `IRIDIUM_PROP_SIZE`, `IRIDIUM_CHAOS_ITERATIONS`, `IRIDIUM_E2E_ORIGIN`, `IRIDIUM_E2E_EXTERNAL_SERVER`, `IRIDIUM_E2E_CLIENT_VERSION`, `IRIDIUM_MYSQL_IMAGE`, `IRIDIUM_FIXTURE_VERSION`, `IRIDIUM_COVERAGE_RATCHET`, plus the client-owned `IRIDIUM_SERVER_URL` and `IRIDIUM_USER_DATA` the Electron launch sets. **Every one of them sits inside a reserved harness namespace** — the prefixes `IRIDIUM_TEST_*`, `IRIDIUM_PROP_*`, `IRIDIUM_CHAOS_*`, `IRIDIUM_E2E_*`, `IRIDIUM_FIXTURE_*`, `IRIDIUM_COVERAGE_*` and the exact names `IRIDIUM_MYSQL_IMAGE`, `IRIDIUM_USER_DATA`, `IRIDIUM_SERVER_URL`, `IRIDIUM_MCP_TOKEN` that `EnvSchema` lists as known-and-ignored (02-system-architecture.md ARCH-25, 11-operations-and-deployment.md) — and a new knob is never given a name outside them. | One set of names makes the PR lane, the nightly lane and a developer's laptop the same suite at different intensities, which is the only way nightly failures stay reproducible. The namespace rule is what makes the suite runnable at all: an unknown `IRIDIUM_*` variable is a fatal configuration error, and the `child` and `container` modes spawn the production `main.mjs serve` with the whole job environment, so a harness knob named outside a reserved namespace would stop the chaos lane — the only lane that can prove the durability invariants — from ever listening. |
+| D10-6 | Add a test-only HTTP namespace `/__test__` (`POST/DELETE /__test__/faults`) for arming fault points at runtime, gated on `NODE_ENV === 'test'`, declared in the route policy as `auth: 'test-only'`, and asserted absent in production by `routes.test-namespace-absent.integration.spec.ts`. | Some faults must be armed mid-session (after a document is loaded); spawning a new process per fault would make the chaos suite unaffordable. Confining the mechanism to one prefix with a boot assertion and an absence test is safer than ad-hoc `NODE_ENV` branches scattered through the code. |
+| D10-7 | A `Clock` interface in `@iridium/contracts` injected everywhere server-side, a `ManualClock` in the testkit, and `guards.no-direct-date.guard.spec.ts` banning `Date.now()`/`new Date()`/bare `setTimeout` in `apps/server/src` outside `ops/clock.ts`. | Ticket TTLs, session expiry, token expiry, the 15-minute re-validation and every retention job are time-dependent; without injected time those tests either sleep (slow and flaky) or are not written. |
+| D10-8 | `corruptDeliberately(kind, args)` is the only sanctioned raw-SQL write in tests, and `guards.no-raw-sql-in-tests.guard.spec.ts` bans all others. | Preserves principle 8 (tests exercise the product's own paths) while still allowing the deliberate corruption that `iridium doctor` and `restore --verify` must detect. |
+| D10-9 | `assertNoteInvariants` and `assertAuditChain` run in `afterEach` for the `integration`, `property` and `chaos` projects. | Attributes an invariant violation to the test that caused it instead of to some later victim; the C.5 invariants are cheap to check and are exactly where data-loss bugs surface first. |
+| D10-10 | `openapi.coverage.contract.spec.ts` fails when a documented `(operationId, status)` pair is never exercised across the whole run, aggregated in `merge-reports`. | Makes the OpenAPI document honest in both directions: drift checks stop the code from diverging from the spec, and this stops the spec from documenting responses nobody produces. |
+| D10-11 | Keep committed per-`apiVersion` wire baselines under `apps/server/test/contract/baselines/<apiVersion>/` and enforce skeleton A54's additive-only rule mechanically in `compat.n-minus-1.integration.spec.ts`. | "Additive-only" is otherwise a policy nobody can check during review; a removed field is caught at the moment it is removed, with a message telling the author to bump `apiVersion`. |
+| D10-12 | Implement the license scan as an in-repo `scripts/check-licenses.ts` over the production dependency closure, with the allowlist/denylist of skeleton A52 and an `scripts/license-exceptions.json` whose entries carry a version range, reason and approver and which fails when a range no longer matches. | The skeleton leaves the tool "pinned at M0"; an in-repo script has no supply-chain surface of its own, understands the pnpm workspace, and makes exceptions expire instead of accumulating. |
+| D10-13 | The renderer bundle budget is the only PR-blocking performance gate; timing budgets are advisory on PRs and blocking in the nightly `perf` job. | Bundle size is deterministic on any runner; wall-clock timings on shared CI runners are not, and a flaky performance gate gets disabled — which loses the signal entirely. |
+| D10-14 | Commit `apps/server/test/load/baseline.json` and fail the nightly load job on a > 20 % p95 regression even when no threshold is breached; re-baseline only by explicit commit. | Thresholds catch cliffs; baselines catch the slow slide that turns a passing SLO into a failing one three releases later. |
+| D10-15 | Quarantine discipline: `apps/e2e/QUARANTINE.md` with owner + issue, a hard ceiling of 5 entries, none allowed to cover an acceptance row or hard property, plus a nightly `flake-hunt` job (`--repeat-each=3`) and `scripts/check-quarantine.ts` in `static`. Every other exclusion file (`schemathesis-exclusions.toml`, `license-exceptions.json`, the CommonMark deviation allowlist) follows the same owner+issue+expiry rule; the MCP conformance baseline is the one file with no entries permitted, per skeleton A51. | Retries and skips are how a suite dies quietly. A bounded, owned, visible quarantine with an absolute ban on quarantining the acceptance rows keeps the gates meaningful. |
+| D10-16 | Extend the coverage gates beyond skeleton A51 with `apps/server/src/audit/**` at 95/90 per file and `packages/markdown/src/sanitize/**` at 100 % per file, and extend Stryker's mutate scope to `audit/chain.ts`, `collab/limits.ts`, `collab/owner-lease.ts`, `mcp/{cursor,verifier,rate-limit}.ts`, `tree/{names,moves,paths,rename-impact}.ts`, `markdown/{normalize,restore,links}.ts` and `collab-client/save-state.ts`. | These are the remaining modules where one wrong branch is a security or data-loss bug: audit tamper-evidence, the sanitizer, the limit arithmetic, cursor signing, path/name rules, EOL restoration, the Saved indicator, the affected-links summariser behind the move/rename warning (a mutant that under-counts is a warning that says "safe") and the boot lease (a mutant that treats a denied lock as acquired is two writers on one document). |
+| D10-17 | Fixture policy: synthetic data only, loaded through product paths, committed fixtures capped at 5 MB with provenance files for vendored corpora, large corpora generated from a printed seed, `IRIDIUM_FIXTURE_VERSION` embedded in goldens, and CODEOWNERS review on `sanitize`/`webPreferences` goldens. | Keeps the repository small and reviewable, keeps fixtures reproducible without binary artifacts, and makes a change to a security-relevant golden impossible to slip through. |
+| D10-18 | Performance trend artifacts as `reports/perf/*.jsonl` plus `scripts/perf-trend.ts` rendering into the nightly job summary; no external dashboard. | The data needs to be durable and diffable, not pretty; a dashboard is another system to own and would be the first thing to go stale. |
+| D10-19 | Add a non-blocking nightly `node-26` lane for the `unit` and `integration` projects. | Skeleton A4 targets Node 24 LTS now and Node 26 after Electron embeds it; a standing lane makes that switch a configuration change instead of a migration project. |
+| D10-20 | Name and specify the full guard-test set (`one-boot-path`, `no-mocks-outside-unit`, `no-sleep`, `no-direct-date`, `no-raw-sql-in-tests`, `fault-registry`, `error-shape`, `i18n`, `no-inner-html`, `mutation-lane`, `no-test-auth`, `acceptance-map`, plus the skeleton's `deps.single-instance`, `collab.initial-state-only-path`, `collab.no-reinit`, `collab.lf-invariant`, `authz.route-policy.boot`, `limits.single-source`, `ipc.origin`, `desktop.preload-surface` and `desktop.webPreferences` guards; A51's `db-grants`, `logging-redaction` and awareness-identity entries need a live database or a live socket and therefore ship as integration tests under their skeleton names rather than in this project; `docs.spikes.spec` runs in the project too but is named and templated by 14-risks-and-open-questions.md D14-11 rather than here, so it is listed in the guard table under D10-37 and is not part of this set) and run them as their own Vitest `guard` project — selected by path — executed first in the `static` job. | Guards are the cheapest tests in the repository and they protect the invariants that would otherwise only fail in production. Running the `guard` project first in the `static` job means a boundary or drift violation is reported before any heavier lane starts; selecting it by path rather than by test-name pattern is what makes "the guards ran" true rather than approximately true. |
+| D10-21 | "Inventory completeness" is the single authority mapping every test name used anywhere in the plan to a file, a project and a tag; `scripts/build-acceptance-map.ts` generates `docs/acceptance-map.json` from it as the last step of `pnpm gen` (so `gen.drift.guard` fails on a table/JSON divergence), and `scripts/check-test-name-references.ts` in the `static` job fails on any `<area>.<subject>.<layer>` name in `plan/` or `docs/` that the map does not contain, printing the canonical spelling for a superseded variant. Where sections disagreed, the skeleton's spelling won, then 12-milestones.md §13.5's (decision D12-12). | Twelve sections cited roughly 180 test names this section never defined, each of them either an undefined reference or a duplicate under another name — and the acceptance-map guard could not be satisfied by any of them. A prose promise that "every row has named tests" is only worth what a script can check, and the same script is what stops the next rename from re-creating the drift. |
+| D10-22 | Two property budgets — `PROP` (`numRuns` 200 PR / 5 000 nightly, 60 s interrupt) for pure files in the `unit` project and `PROP_DB` (20 × 60 PR / 200 × 300 nightly, 600 s interrupt, `testTimeout: 900_000`) for the MySQL-backed models — with `markInterruptAsFailure: true` in both and an in-memory mirror of every model in the `unit` project. | The skeleton's 200/5 000 figures are affordable for CPU-only properties and unreachable when every command is a transaction; with `markInterruptAsFailure: false` the difference showed up as a green suite that had abandoned the search. Splitting the budget and mirroring each model keeps the skeleton's strength where it is achievable and makes truncation a failure everywhere. |
+| D10-23 | `docs/acceptance-map.json` carries a `sinceMilestone` per `(rowId, layer)` entry, `docs/milestones/CURRENT` names the open milestone, and `[area:<name>]` is a third legal requirement tag. | Without the milestone axis the guard is red on every pull request from M1 to M4, because five acceptance rows require browser and MCP layers that do not exist yet; without `[area:…]` the "every file is tagged" rule forces `readyz.integration` and its like to claim a spec row they do not defend. A gate that is wrong by construction gets switched off, and then nothing is checked at all. |
+| D10-24 | The `chaos` project keeps the **production** collaboration debounce (`COLLAB_DEBOUNCE_MS=2000`, `COLLAB_MAX_DEBOUNCE_MS=10000`); only the `integration` project and the Playwright `webServer` use 100 / 500 ms. | The lane exists to survive the real failure windows, and a kill aimed at a 500 ms window proves nothing about a deployment whose window is 10 s. The cost is paid in the iteration budget, not in the fidelity of the test. Stated here because the value differs per project and every chaos wait in this section is sized for it. |
+| D10-25 | A chaos iteration is its own Vitest case (`it.for(range(IRIDIUM_CHAOS_ITERATIONS))`), so the project's `testTimeout: 180_000` bounds one iteration; CH-14 and CH-15 declare `{ timeout: 600_000 }` at the test; `chaos-extended` is budgeted at ≤ 3 h with `timeout-minutes: 240`. | Written as a loop inside one test, the nightly budgets exceed the project timeout by an order of magnitude, and the lane would report a timeout where a durability regression should be. Making the iteration the unit of test also puts the iteration index in the failing test's name, which is what makes a nightly failure replayable. |
+| D10-26 | Every route-enumerating test reads its route set from **both** `app.routes()` and `packages/contracts/openapi/openapi.json` and asserts the two sets are equal before exercising any member (`authz.rest-viewer.integration`, `authz.vault-isolation.integration`, `security.csrf.integration`, `auth.step-up.integration`, `admin.surface-matrix.integration`). | The two sources fail differently: the live instance sees a route nobody documented (the dangerous case for "knowledge of an id must not grant access"), the specification sees a documented route nobody guarded. Requiring both, and requiring them to agree, is the only version of "data-driven over the route table" that cannot be satisfied by an incomplete table. |
+| D10-27 | The merge-blocking set is milestone-phased for lanes that have no tests yet (`chaos-core` from M1, `e2e-web` from M4, `mutation-scoped` from M1; `e2e-electron` from M0 via `desktop.launch.e2e`), the branch-protection set of 12-milestones.md §13.3 is exactly the union of the due entries, and `docs/milestones/CURRENT` is the single source of the current milestone. | A required check that cannot pass — `playwright test --project=chromium --shard=1/4` against an empty `apps/e2e/web/` — is a check somebody disables, and it stays disabled past the milestone where it would have caught something. Phasing the list and deriving branch protection from it keeps "no advisory statuses" literally true. |
+| D10-28 | Acceptance row 9 (`backup-recovery`) is owned by `nightly.yml › backup-restore-drill` and by `release.yml › drill`, never by `ci.yml`; that one job runs all five operator rehearsals (`ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos`, `ops.key-rotation.drill` and an `upgrade-rehearsal` step for `ops.upgrade-rehearsal.drill`); and `drill` is a layer of the `chaos` project, whose `include` glob is `*.{chaos,drill}.spec.ts`. | Each rehearsal provisions its own MySQL container and restores a whole deployment, so the PR lane cannot host them and they must not contend for Docker with each other; putting them in one nightly job makes "row 9 is green" a single artifact the M8 exit record and the release gate can both cite (12-milestones.md §12.4), instead of a criterion that asks a pull request for a proof it can never produce. Declaring `drill` in the project's glob is what makes the layer real: with `*.chaos.spec.ts` alone the runner would silently collect none of these files. |
+| D10-29 | The contracts name-and-id primitives are **four** canonical names — `contracts.paths.unit`, `contracts.paths.prop`, `contracts.ids.unit`, `contracts.ids.prop` — one subject in two layers each; `tree.name-rules`, `tree.name-rules.unit`, `paths.prop` and `ids.prop` are superseded, and 12-milestones.md §4.3, §6.4 and §13.5 are corrected to match rather than followed. | The two spellings were not two opinions about one test: each subject genuinely has an example-based file and a property file, and the contradiction was that one document named the pair by its server-side *caller* (`tree.name-rules`) and the other by the *module that owns the rules* (`contracts.paths`). Both spellings cannot be keys of `docs/acceptance-map.json`, so `scripts/check-test-name-references.ts` was unsatisfiable as written, and the acceptance map could not be generated at all. The Location convention already decides the direction — a name follows its file — and this section owns test names (D10-21), so the correction lands here once and 12 follows. |
+| D10-30 | The move/rename link warning is proven by four named tests in four layers — `tree.rename-impact.unit` (the pure summariser), `tree.rename-impact.integration` (the three routes' payloads and the pre-rename ordering), `rename-impact.dialog.component` (the dialog precedes the `PATCH`) and `rename-impact.e2e` (the same in the built application, plus the untouched source text of every linking note) — tagged `[area:links]`, which `links.index.integration` joins. | The mechanism was fully specified and entirely unproven: the only suites touching those routes asserted that they 404 for a non-member and that a rename *re-points* inbound rows, which is the thing that most resembles the deferred rewriting. Nothing asserted the payload was right, that the warning came first, or that the rename still worked once accepted. "The warning precedes the mutation" is an ordering claim, so it is asserted on a recorded request *sequence* and on pre-rename values inside the write's own response — a count of requests would pass for a dialog that fired the `PATCH` beside the impact call. |
+| D10-31 | Viewer enforcement, live revocation and durable saving each gain an Electron acceptance spec at M5 — `desktop.viewer-readonly.e2e`, `desktop.revocation-while-open.e2e`, `desktop.durable-save.e2e` — filling the `L7@M5` cells of rows 3, 5 and 6 and the L7 cells of HP-1 and HP-3; `docs/acceptance/host-parity.md` keeps only the route-and-command reachability walk and is named in no acceptance-map entry. | The desktop host is the process that holds the session credential, so revocation and durability are exactly what must be proven there rather than signed off: a credential that outlives its session, or is lost on a server restart, is invisible to every headless suite and to a human walking a checklist, and shows up as a working application until the next launch. Moving three rows off a manual record also removes the last place where a spec §9 row could be discharged by a signature. |
+| D10-32 | One merge-blocking `guards.non-goals.guard` asserts every declared non-goal against the built inventories — registered routes, MCP tools and resources, CLI commands, client host capabilities and command/route registries, the Kysely `Database` and migration list, and the lockfile — driven by a generated `docs/non-goals.json` whose ids must equal the hand-written `NonGoalId` union, with the assertion table declared `satisfies Record<NonGoalId, NonGoalAssertion>`. | Twelve traceability rows for explicit non-goals were held by prose alone, and they all fail the same way: the seam is proven, the absence is not, so a graph pane, a mobile breakpoint, a vector column or a second content write path lands as a small reasonable change and silently invalidates security work done against the narrower surface. One guard closes all twelve because the assertion is the same shape every time — "this identifier appears in no inventory" — and the exhaustiveness check is what stops the list from rotting: adding a non-goal to 01 §4.4 without an assertion does not compile. |
+| D10-33 | Single-process document ownership is enforced by a boot lease: `SELECT GET_LOCK('iridium_collab_owner', 0)` on one dedicated `dbPersist` connection held for the process's lifetime, released after the writer drain and the last unload. Without it the process refuses `/collab` with close code `4503` and reason `no-owner-lease`, `/readyz` fails its new `collab_owner_lease` check, REST reads keep working, and acquisition is retried on each readiness evaluation. Proven by `collab.owner-lease.integration` and `collab.second-process-refused.chaos` (CH-16). | Spec §6's "one process owns the active documents" had no enforcement at all: two copies of the binary against one database were detected only afterwards, as a `head_seq` CAS mismatch surfacing through `persist.cas_mismatch`, which is an alarm about damage rather than a refusal. A named MySQL advisory lock is the mechanism the skeleton already uses for exactly this kind of mutual exclusion (`GET_LOCK('iridium_migrate', 60)`, A7), and a zero timeout plus the readiness retry means no new environment variable, no new `limits.ts` constant, and a rolling restart that hands over without operator action. The lock name is deliberately none of the two the multi-process path reserves, so nothing about A19 or the deferred multi-server work changes: the CAS stays the backstop, and the lease only makes the ordinary operator error impossible instead of merely visible. |
+| D10-34 | `docs/acceptance-map.json` carries a third id namespace, `ruleId`, generated from "Specified rules outside the nine rows", and `guards.acceptance-map.guard` gains rule 6: every listed rule must name at least one existing test carrying the tag the table states. `[area:links]`, `[area:vaults]` and `[area:non-goals]` join the legal `[area:…]` set. | Several load-bearing rules are neither acceptance rows nor hard properties — the link warning, the `invalid_move` reason vocabulary, vault settings, single-process ownership, the declared non-goals — and with only two namespaces they had nowhere to be checked, which is precisely why all five were found unproven by a traceability pass rather than by a red build. A third namespace costs one generator branch and makes the same guard cover them. |
+| D10-35 | The vault-settings floor rule is the **same** rule as the server-settings floor rule: a value weaker than its environment baseline is `422 validation_failed` with `errors[0].code='below_env_floor'`, and the per-field direction is read from the `stricter` metadata `@iridium/contracts/settings.ts` already declares rather than from an expectation written into the test. | `PATCH /vaults/:vaultId` and `PUT /admin/settings` both let an operator's pinned baseline be tightened and never loosened, and two spellings of one rule would mean two validators, two error codes and one of them eventually drifting. Reading the direction from the schema's own metadata also means a new setting is validated correctly the day it is added, which is what makes the route's data-driven enumeration honest instead of a list somebody must remember to extend. |
+| D10-36 | **An evidence cell names a test, never a lane, a runner or a phrase.** Every entry in the hard-property table, the "Hard properties → required layers" table, the nine-row overview and the specified-rules table must be a name that one of the five inventories or "Inventory completeness" resolves to a file, a project and a tag; the runner and the lane live in that inventory row's own columns. HP-5's "k6 nightly" is replaced by `ops.load.slo` accordingly, and the six layer-less workflow gates stay legal evidence because each is an inventory row. | A phrase in an evidence cell is not a weaker citation, it is an absent one: `scripts/build-acceptance-map.ts` emits it into `docs/acceptance-map.json` as a member the guard cannot resolve, so `guards.acceptance-map.guard` skips it silently and the property reads as discharged by a check nothing verifies exists. Deleting the k6 job would then break no test and no gate — which is exactly the failure mode the map was built to make impossible. Keeping the runner in the inventory row rather than in the cell also means a change of load tool (S6's recorded fallback to the Node `worker_threads` generator) edits one row and no hard property. |
+| D10-37 | **`docs.spikes.spec` is specified here — file, project, lane, tag and assertions — while its *name* and its template stay owned by 14-risks-and-open-questions.md D14-11.** The file is `apps/server/test/guards/docs.spikes.guard.spec.ts` in the `guard` project, lane `ci.yml › static`, tag `[area:docs]` (which joins the legal `[area:…]` set); the name is deliberately **not** renamed to `docs.spikes.guard` despite the Location convention, and `scripts/check-test-name-references.ts` carries it as a single literal exception rather than admitting `spec` to the layer alternation. | The gate was named in three documents and specified in none, so it could be no key of `docs/acceptance-map.json`, `scripts/check-test-name-references.ts` had nothing to resolve it against, and 15-requirements-traceability.md could not cite the gate that closes its own spike requirement — a check that exists in prose in three places and in the map in none. The name is left alone because this is not the `tree.name-rules` case: there, two sections disagreed about which test was meant and one spelling had to lose; here both agree about the test, and the other section owns the template the test asserts, so adopting 14's spelling costs one recorded exception and keeps template and assertion in one place. Widening the layer alternation with `spec` was rejected because every `*.spec.ts` filename quoted in `plan/` would then read as a test name and fail the checker. |
+| D10-38 | **A test specified here carries a milestone of record even before 12-milestones.md schedules it.** The seven tests found with no exit-table entry — the six content read-model tests and `import.report.integration` — are assigned in "Tests specified here with no milestone exit-table entry", each to the milestone that first delivers the mechanism under test, and the required edit to 12-milestones.md §§6.4/7.4/10.4 is stated there rather than made here. | A test nothing schedules is a test that is written last or not at all, and `guards.acceptance-map.guard` cannot catch it: the guard asserts that a due layer has a test, not that a specified test is due, so an unscheduled test is invisible to the one mechanism that would otherwise notice. Stating the owner in the section that owns test names keeps a single authority — 12-milestones.md's own convention is that it "only names tests and says which milestone gates them" — and choosing "first delivers the mechanism" over "first mentions the requirement" is what makes the assignment checkable rather than negotiable: `content.read-parity.integration` cannot gate M2, because parity across surfaces is vacuous until M3 adds the second surface. A guard for this was rejected because it would have to parse 12-milestones.md's prose exit tables, putting a second and weaker copy of the scheduling authority in the `static` job. |
+| D10-39 | **Vault isolation of note history is one named case per surface family, not a route in the enumeration.** `authz.vault-isolation.integration` gains the case *foreign-vault revision history* covering every `history:read`-gated REST surface — the two revision read routes, `GET /notes/:noteId/markdown?revision=`, `?includeTrashed=true`, `/vaults/:vaultId/trash` and the two mutating revision routes — declared `satisfies Record<HistoryGatedSurface, Case>` over a union exported from `@iridium/contracts/authz.ts`; `mcp.isolation.mcp` gains a case of the same name for `list_note_revisions`, `get_note {revision}`, `list_notes {include_trashed}` and the `?rev=` resource form; `revisions.named.integration`, `revisions.restore.integration` and `revisions.thinning.integration` carry no isolation assertions. A mapping-table cell may narrow a named test to a case with `(incl. case *name*, @M<n>)`, which is italic prose and never a map member. | The spec §9 word "history" traced to a *route list* rather than to an assertion, and a route list cannot reach it: three of the surfaces are query parameters on routes the enumeration already calls, so the enumerated call exercises `note:read` or `vault:read`, passes, and never tries `history:read`. The plausible wrong answer is also specific here — the outsider really does lack `history:read`, so `403 forbidden` looks correct and is the existence leak F13 forbids — which is exactly the kind of thing a named oracle catches and an enumeration cannot express. The union makes the case exhaustive at compile time, which is why one case in one file beats an isolation assertion bolted onto each of the three revision-behaviour files: three partial copies of one rule is how the copies drift, and the same division already works for `tree.invalid-move.integration` against `tree.structural-concurrency.integration`. MCP needs its own case rather than a row in the REST enumeration because `list_note_revisions` is a tool: it is in neither `app.routes()` nor `openapi.json`, and scope-filtered registration means a token without `history:read` does not have the tool at all — an unknown-tool error that must never be accepted as proof of isolation, which is why the case asserts both token shapes. |
