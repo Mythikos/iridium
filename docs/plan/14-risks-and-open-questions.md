@@ -625,7 +625,7 @@ flowchart LR
 | Method | The commands or harness used, reproducible from the repository |
 | Result | `pass` or `fail` with the evidence (log excerpts, measurements, a committed reproduction test) |
 | Decision | What the plan now does, in one sentence |
-| Fallback executed | `n/a` on pass; on fail, the fallback taken and the pull request that implemented it |
+| Fallback executed | `n/a` on pass; on fail, the fallback taken and the pull request or commit that implemented it |
 | Follow-ups | Upstream issues filed, tests added, register rows re-scored |
 
 ### S1 — `onLoadDocument` in-place V2 apply
