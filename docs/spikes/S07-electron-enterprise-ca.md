@@ -307,8 +307,8 @@ wider scope:
    to match: the pin is primary everywhere, and the OS-store route is a documented convenience whose
    verification lives in CI.
 
-Pull request: *to be filled in by the M0 pull request that lands items 1–3.* It had not been opened
-when this note was written; the three edits above are the whole of the fallback.
+Executed by commit 71915f5, the M0 milestone commit on `main` that lands items 1–3; the three edits
+above are the whole of the fallback.
 
 ## Follow-ups
 

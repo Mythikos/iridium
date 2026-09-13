@@ -239,9 +239,8 @@ the product is `packages/editor/src/remote-selections.ts`, composed as above in 
 extension stack, which 12-milestones.md builds at M4; the composition rule is what this spike hands
 forward, and `@iridium/editor` must never call `yCollab` with a non-null awareness.
 
-> The pull request that lands this note is the one that executes the fallback; its number is to be
-> written into this section when it is opened (see Follow-ups), because `docs.spikes.spec` requires a
-> `fail` note to name it.
+Executed by commit 71915f5, the M0 milestone commit on `main`, which lands this note, the reference
+implementation and the composition rule it hands forward.
 
 ## Follow-ups
 

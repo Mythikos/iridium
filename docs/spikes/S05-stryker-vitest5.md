@@ -189,6 +189,9 @@ The 111 mutants that survived untested on Vitest 5 are the same 111 that are now
 
 Every clause of the pass criterion now holds on 4.1.11: the run completes; compile-error mutants are reported as such, with the compiler's own messages (`packages/crdt/src/dominates.ts(13,63): error TS2355: …`); mutants are killed (92) and mutants survive (11); and the incremental file is written and reused. The 8 timeouts are hit-limit detections (`Hit limit reached (14169301/14169300)`), which Stryker counts as detected.
 
+Executed by commit 71915f5, the M0 milestone commit on `main`, which lands `tooling/mutation` as
+described above.
+
 The lane is run as `pnpm --filter @iridium/mutation mutation`, or narrowed with `-- --mutate <globs>`. Gates after the change: `check-types` and `lint` clean for `@iridium/mutation`, `oxfmt --check` clean on every file touched, and the ordinary `unit` project still green for both edited packages (223 tests) with a freshly drawn seed.
 
 ## Follow-ups

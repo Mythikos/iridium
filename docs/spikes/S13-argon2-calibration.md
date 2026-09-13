@@ -79,8 +79,8 @@ configuration module accepts the pair without modification, verified by the serv
 `iridium doctor --argon2` check that reads the same measurement is an M1+ deliverable (the M0 CLI carries
 `serve` and `migrate` only); when it lands it warns rather than fails when a host is outside the window.
 
-Pull request: the M0 milestone commit that lands the compose and configuration changes (recorded at the M0
-exit).
+Executed by commit 71915f5, the M0 milestone commit on `main` that lands the compose and configuration
+changes.
 
 ## Follow-ups
 
