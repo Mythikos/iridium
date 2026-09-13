@@ -1,0 +1,265 @@
+/**
+ * The single limits policy (02-system-architecture.md, "The single limits policy"; ARCH-16,
+ * D01-12). Every numeric limit in Iridium is a member of `LIMITS` and is named exactly as the
+ * policy table's "Constant in `limits.ts`" column names it — that column is the sole naming
+ * authority, because `limits.policy.unit` and `limits.single-source.guard` compare identifiers
+ * rather than values. Environment variables are never constant names: `MAX_UPLOAD_BYTES`
+ * overrides `UPLOAD_MAX_BYTES`, `COLLAB_MAX_LOADED_DOCS` overrides `LOADED_DOCS_MAX`, and the
+ * `NOTE_*` and `MARKDOWN_*` caps have no environment form at all.
+ *
+ * Adding a limit means adding a member here and an enforcement site; nothing outside this module
+ * declares a number.
+ */
+
+/** One rung of the preview debounce ladder: `[sourceBytesAtMost, debounceMs]`. */
+export type PreviewDebounceTier = readonly [sourceBytesAtMost: number, debounceMs: number];
+
+export const LIMITS = {
+  // ---- WebSocket transport (02 policy; 09-api-reference.md section 3.10) ------------------
+  /** `@fastify/websocket` `maxPayload`; a larger frame is closed by `ws` with 1009. 2 MiB. */
+  WS_MAX_PAYLOAD_BYTES: 2_097_152,
+  /** A single Yjs update, checked in `beforeHandleMessage`; close `too-large`. 1 MiB. */
+  YJS_UPDATE_MAX_BYTES: 1_048_576,
+  /**
+   * UTF-8 bytes per chunk of `insertChunked()` (`packages/crdt/src/insert-chunked.ts`), the only
+   * way first-party code inserts a large string into a `Y.Text`. 256 KiB, which is what makes
+   * `YJS_UPDATE_MAX_BYTES` unreachable rather than merely enforced (D05-16).
+   */
+  INSERT_CHUNK_MAX_BYTES: 262_144,
+  /** Yjs messages per connection per `YJS_MESSAGE_WINDOW_MS`; close `rate-limited`. */
+  YJS_MESSAGES_PER_WINDOW: 200,
+  /** The sliding window `YJS_MESSAGES_PER_WINDOW` is counted over. */
+  YJS_MESSAGE_WINDOW_MS: 10_000,
+  /** Awareness messages per connection per second; excess is dropped, never closed. */
+  AWARENESS_MESSAGES_PER_SECOND: 10,
+  /** Client to server stateless payload cap; the handler closes with `protocol-error`. 4 KiB. */
+  STATELESS_PAYLOAD_MAX_BYTES: 4_096,
+  /** `flush` (Ctrl/Cmd+S) budget per connection per minute; excess is answered `projected`. */
+  FLUSH_PER_MINUTE: 6,
+
+  // ---- Connections and admission ---------------------------------------------------------
+  /** Document connections per user (one per open note plus one per open vault channel). */
+  CONNECTIONS_PER_USER: 20,
+  /** Sockets per IP, refused at the upgrade with `429 rate_limited`. */
+  CONNECTIONS_PER_IP: 50,
+  /** Sockets per process, refused at the upgrade with `429 rate_limited`. */
+  CONNECTIONS_PER_PROCESS: 5_000,
+  /** Loaded-document admission budget; close `capacity`. Env `COLLAB_MAX_LOADED_DOCS`. */
+  LOADED_DOCS_MAX: 2_000,
+  /** Loaded-state byte budget; close `capacity`. 1 GiB. Env `COLLAB_MAX_STATE_BYTES_TOTAL`. */
+  LOADED_STATE_BYTES_MAX: 1_073_741_824,
+
+  // ---- Note size and snapshots -----------------------------------------------------------
+  /** Soft note cap in UTF-16 units: client paste guard, compactor flags `notes.oversize`. */
+  NOTE_SOFT_MAX_UTF16: 1_000_000,
+  /** Hard note cap in UTF-16 units: initialize, restore, repair and import refuse with 422. */
+  NOTE_HARD_MAX_UTF16: 2_097_152,
+  /** A V2 snapshot above this size alerts and latches `notes.oversize`. 8 MB. */
+  SNAPSHOT_ALERT_BYTES: 8_000_000,
+  /** A V2 snapshot above this size is refused (the blob only, D05-14). 64 MB. */
+  SNAPSHOT_REFUSE_BYTES: 64_000_000,
+
+  // ---- Persistence writer ----------------------------------------------------------------
+  /** Writer queue depth before backpressure (`persist-failed {reason:'backpressure'}`). */
+  WRITER_QUEUE_MAX_UPDATES: 5_000,
+  /** Writer queue bytes before backpressure. 32 MiB. */
+  WRITER_QUEUE_MAX_BYTES: 33_554_432,
+  /** Updates coalesced into one writer transaction (05, "Coalescing"). */
+  WRITER_BATCH_MAX_UPDATES: 512,
+  /** Raw update bytes coalesced into one writer transaction. 8 MiB. */
+  WRITER_BATCH_MAX_RAW_BYTES: 8_388_608,
+  /** Compaction debounce. Env `COLLAB_DEBOUNCE_MS`. */
+  COMPACTION_DEBOUNCE_MS: 2_000,
+  /** Compaction maximum debounce. Env `COLLAB_MAX_DEBOUNCE_MS`. */
+  COMPACTION_MAX_DEBOUNCE_MS: 10_000,
+  /** Retention of `note_updates` rows at or below `snapshot_through_seq`. */
+  UPDATE_LOG_RETENTION_DAYS: 7,
+  /** Default for `vaults.auto_checkpoint_interval_min`. */
+  CHECKPOINT_MIN_INTERVAL_MIN: 10,
+
+  // ---- Collaboration tickets and re-validation -------------------------------------------
+  /** Collaboration ticket time to live, in seconds; single use. */
+  TICKET_TTL_S: 60,
+  /** Tickets per `POST /auth/collab-tickets` request. */
+  TICKET_BATCH_MAX: 50,
+  /** Ticket issuance budget per session per minute. */
+  TICKETS_PER_MINUTE_PER_SESSION: 300,
+  /** Ticket issuance budget per IP per minute. */
+  TICKETS_PER_MINUTE_PER_IP: 1_000,
+  /** `onTokenSync` re-validation interval. 15 min. */
+  TOKEN_REVALIDATION_MS: 900_000,
+  /** Jitter applied to `TOKEN_REVALIDATION_MS`. 3 min. */
+  TOKEN_REVALIDATION_JITTER_MS: 180_000,
+  /** Grace period for an unanswered `requestToken()` before close `unauthorized`. 5 min. */
+  TOKEN_REVALIDATION_GRACE_MS: 300_000,
+
+  // ---- REST and login hardening ----------------------------------------------------------
+  /** Authenticated REST budget per principal per minute. */
+  REST_AUTHENTICATED_PER_MINUTE: 600,
+  /** Unauthenticated REST budget per IP per minute. */
+  REST_UNAUTHENTICATED_PER_MINUTE: 60,
+  /** `POST /auth/sessions` budget per IP per minute. */
+  LOGIN_PER_MINUTE_PER_IP: 10,
+  /** Consecutive failures per `email_key|ip` before a block. */
+  LOGIN_FAILURES_PER_ACCOUNT_SOURCE: 5,
+  /** First block length, doubling per block. 900 s. */
+  LOGIN_BLOCK_BASE_SECONDS: 900,
+  /** Block ceiling. 86 400 s. */
+  LOGIN_BLOCK_MAX_SECONDS: 86_400,
+  /** Login failures per IP per day. */
+  LOGIN_FAILURES_PER_IP_PER_DAY: 100,
+
+  // ---- MCP and integration tokens --------------------------------------------------------
+  /** Burst budget per token per minute on `/mcp`. */
+  MCP_TOKEN_BURST_PER_MINUTE: 120,
+  /** Sustained budget per token per hour. Env `MCP_RATE_LIMIT_PER_HOUR` (the default only). */
+  MCP_TOKEN_PER_HOUR: 3_000,
+  /** Points a `search_notes` (and a REST search) call costs. */
+  MCP_SEARCH_COST: 3,
+  /** Process ceiling on `/mcp`, across all tokens, per minute. */
+  MCP_PROCESS_PER_MINUTE: 600,
+  /** Characters of note text returned by `get_note` and the note resource, per call. */
+  MCP_GET_NOTE_MAX_CHARS: 100_000,
+  /** `resource_link` content blocks emitted per tool result (D06-04). */
+  MCP_MAX_RESOURCE_LINKS: 50,
+  /** Entries in the `iridium://vault/<id>` index resource (D06-04). */
+  MCP_VAULT_INDEX_MAX_ENTRIES: 2_000,
+  /** Vault ids in a token allowlist or an OAuth consent (D06-04). */
+  PAT_MAX_ALLOWLIST_VAULTS: 200,
+  /** Lower bound of `access_tokens.rate_limit_per_hour` and `pat_policy` (D06-04). */
+  PAT_RATE_LIMIT_PER_HOUR_MIN: 60,
+  /** Upper bound of `access_tokens.rate_limit_per_hour` and `pat_policy` (D06-04). */
+  PAT_RATE_LIMIT_PER_HOUR_MAX: 100_000,
+  /** Characters of `vaults.ai_guidance` (D06-04). */
+  AI_GUIDANCE_MAX_CHARS: 4_000,
+  /** Note ids recorded on one `access_log` row before `note_ids_truncated` is set. */
+  ACCESS_LOG_MAX_NOTE_IDS: 2_000,
+
+  // ---- OAuth 2.1 authorization server ----------------------------------------------------
+  /** Authorization code lifetime, single use. */
+  OAUTH_CODE_TTL_SECONDS: 60,
+  /** Consent request lifetime. */
+  OAUTH_CONSENT_REQUEST_TTL_SECONDS: 600,
+  /** Pending consent requests held at once. */
+  OAUTH_MAX_PENDING_CONSENTS: 1_000,
+  /** Client ID metadata document fetch cap. 32 KiB. */
+  OAUTH_CIMD_MAX_BYTES: 32_768,
+  /** Client ID metadata document fetch timeout. */
+  OAUTH_CIMD_TIMEOUT_MS: 5_000,
+  /** Client ID metadata document cache lifetime. 24 h. */
+  OAUTH_CIMD_CACHE_SECONDS: 86_400,
+  /** Dynamic client registrations per IP per hour. */
+  OAUTH_DCR_PER_IP_PER_HOUR: 10,
+  /** Registered clients that never completed an authorization. */
+  OAUTH_MAX_UNUSED_CLIENTS: 1_000,
+  /** Days before an unused client is swept. */
+  OAUTH_UNUSED_CLIENT_TTL_DAYS: 7,
+  /** Redirect URIs per client. */
+  OAUTH_MAX_REDIRECT_URIS: 8,
+
+  // ---- Markdown projection (08-markdown-pipeline-import-export.md; D08-03) ----------------
+  /** Pre-scan cap on the UTF-8 byte length of the source. 2 MiB. */
+  MARKDOWN_SOURCE_MAX_BYTES: 2_097_152,
+  /** Pre-scan blockquote nesting cap; `too_complex`. */
+  MARKDOWN_BLOCKQUOTE_MAX_DEPTH: 32,
+  /** Pre-scan list indent cap in columns; `too_complex`. */
+  MARKDOWN_LIST_INDENT_MAX_COLS: 64,
+  /** Pre-scan lines-per-paragraph cap; `too_complex`. */
+  MARKDOWN_LINES_PER_PARAGRAPH_MAX: 20_000,
+  /** Pre-scan cap on `[^` footnote references; `too_complex` (`detail: 'footnotes'`). */
+  MARKDOWN_FOOTNOTE_REFS_MAX: 10_000,
+  /** Pre-scan cap on `[` characters; `too_complex` (`detail: 'brackets'`). */
+  MARKDOWN_BRACKETS_MAX: 200_000,
+  /** Server projection timeout. Env `PROJECTION_TIMEOUT_MS`. */
+  PROJECTION_TIMEOUT_SERVER_MS: 10_000,
+  /** Client preview worker timeout. */
+  PROJECTION_TIMEOUT_CLIENT_MS: 2_000,
+  /**
+   * Preview debounce ladder as `[sourceBytesAtMost, debounceMs]` pairs. The last rung's ceiling
+   * is `Number.MAX_SAFE_INTEGER` spelled as a literal — `isolatedDeclarations` cannot write the
+   * name and a literal `Infinity` loses precision — and it means "every source above the rung
+   * before it", which `MARKDOWN_SOURCE_MAX_BYTES` already bounds at 2 MiB.
+   */
+  PREVIEW_DEBOUNCE: [
+    [65_536, 150],
+    [524_288, 500],
+    [9_007_199_254_740_991, 1_500],
+  ],
+  /** Matching source lines returned per search hit. */
+  SNIPPET_MAX_LINES: 3,
+  /** Characters per returned snippet line. */
+  SNIPPET_MAX_CHARS: 240,
+  /** Frontmatter tag length. */
+  FM_TAG_MAX_LEN: 64,
+  /** Frontmatter tags per note. */
+  FM_TAGS_MAX: 200,
+  /** Frontmatter alias length. */
+  FM_ALIAS_MAX_LEN: 255,
+  /** Frontmatter aliases per note. */
+  FM_ALIASES_MAX: 100,
+
+  // ---- Transfer --------------------------------------------------------------------------
+  /** Attachment upload cap. 50 MiB. Env `MAX_UPLOAD_BYTES`. */
+  UPLOAD_MAX_BYTES: 52_428_800,
+  /** Import payload cap. 2 GiB. Env `MAX_IMPORT_BYTES`. */
+  IMPORT_MAX_BYTES: 2_147_483_648,
+  /** Files in one import. */
+  IMPORT_MAX_FILES: 50_000,
+  /** Directory depth the import scanner accepts; its own copy of `TREE_MAX_DEPTH`. */
+  IMPORT_MAX_DEPTH: 64,
+  /** Parts per `PUT /imports/:jobId/upload` batch. */
+  IMPORT_UPLOAD_BATCH_FILES: 200,
+  /** Bytes per `PUT /imports/:jobId/upload` batch. 64 MiB. */
+  IMPORT_UPLOAD_BATCH_BYTES: 67_108_864,
+
+  // ---- Tree ------------------------------------------------------------------------------
+  /** Maximum node depth below the root row. */
+  TREE_MAX_DEPTH: 64,
+  /** `nodes.name` length in UTF-8 bytes. */
+  NODE_NAME_MAX_BYTES: 255,
+  /** `vaults.name` length in characters. */
+  VAULT_NAME_MAX_CHARS: 120,
+
+  // ---- Process ---------------------------------------------------------------------------
+  /** Fastify `bodyLimit` for JSON routes. 1 MiB. */
+  BODY_MAX_BYTES_JSON: 1_048_576,
+  /** Fastify `bodyLimit` on the two MCP mounts. 1 MiB. */
+  BODY_MAX_BYTES_MCP: 1_048_576,
+  /** Shutdown drain window. Env `SHUTDOWN_DRAIN_MS`. */
+  SHUTDOWN_DRAIN_MS: 20_000,
+} as const;
+
+/** Every member of the single limits policy. `limits.policy.unit` is exhaustive over it. */
+export type LimitId = keyof typeof LIMITS;
+
+/**
+ * The environment keys that override a limit, and the constant each one overrides. Environment
+ * names are never constant names (rule 2 of the policy), so this is the only place the two
+ * vocabularies meet; `limits.policy.unit` asserts that no `EnvSchema` key is a `LimitId`.
+ */
+export const LIMIT_ENV_OVERRIDES = {
+  MAX_UPLOAD_BYTES: 'UPLOAD_MAX_BYTES',
+  MAX_IMPORT_BYTES: 'IMPORT_MAX_BYTES',
+  COLLAB_DEBOUNCE_MS: 'COMPACTION_DEBOUNCE_MS',
+  COLLAB_MAX_DEBOUNCE_MS: 'COMPACTION_MAX_DEBOUNCE_MS',
+  COLLAB_MAX_LOADED_DOCS: 'LOADED_DOCS_MAX',
+  COLLAB_MAX_STATE_BYTES_TOTAL: 'LOADED_STATE_BYTES_MAX',
+  COLLAB_MAX_CONNECTIONS: 'CONNECTIONS_PER_PROCESS',
+  COLLAB_MAX_CONNECTIONS_PER_USER: 'CONNECTIONS_PER_USER',
+  MCP_RATE_LIMIT_PER_HOUR: 'MCP_TOKEN_PER_HOUR',
+  PROJECTION_TIMEOUT_MS: 'PROJECTION_TIMEOUT_SERVER_MS',
+  UPDATE_LOG_RETENTION_DAYS: 'UPDATE_LOG_RETENTION_DAYS',
+  SHUTDOWN_DRAIN_MS: 'SHUTDOWN_DRAIN_MS',
+} as const;
+
+/** An environment key that overrides a limit. */
+export type LimitEnvKey = keyof typeof LIMIT_ENV_OVERRIDES;
+
+/**
+ * The two limits a client must know before it sends a request, published additively at
+ * `GET /meta.limits` under these wire names (02, "The single limits policy").
+ */
+export const PUBLISHED_LIMIT_WIRE_NAMES = {
+  uploadBytes: 'UPLOAD_MAX_BYTES',
+  importBytes: 'IMPORT_MAX_BYTES',
+} as const;

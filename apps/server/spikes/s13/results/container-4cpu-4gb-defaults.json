@@ -1,0 +1,87 @@
+{
+  "label": "container-4cpu-4gb",
+  "timestamp": "2026-09-13T11:43:39.976Z",
+  "platform": {
+    "os": "linux",
+    "arch": "x64",
+    "release": "6.18.33.2-microsoft-standard-WSL2",
+    "cpus": 32,
+    "totalMemGiB": 31.22
+  },
+  "node": "v24.21.0",
+  "uvThreadpoolSize": "8",
+  "argon2Options": {
+    "memoryCost": 65536,
+    "timeCost": 3,
+    "parallelism": 1,
+    "outputLen": 32,
+    "secret": "<37 bytes>"
+  },
+  "probeKind": "mysql-select-1",
+  "sequential": {
+    "n": 20,
+    "samplesMs": [
+      56.391, 47.03, 57.487, 54.358, 48.388, 52.122, 50.906, 53.558, 56.171, 47.857, 47.462, 48.189,
+      47.178, 47.362, 47.275, 46.485, 47.244, 47.741, 47.564, 47.578
+    ],
+    "summary": {
+      "n": 20,
+      "min": 46.485,
+      "p50": 47.799,
+      "p95": 56.446,
+      "max": 57.487,
+      "mean": 49.917
+    }
+  },
+  "verifyLastPhcOk": true,
+  "samplePhc": "$argon2id$v=19$m=65536,t=3,p=1$OUYpUH/YL/9T/AwaVVT6xg$p6wXPItQoB2ogdBiJ0MqIi5H5dB3o7LlGKZzjLVOiGc",
+  "baselineProbe": {
+    "n": 15,
+    "summary": { "n": 15, "min": 0.299, "p50": 0.41, "p95": 3.804, "max": 10.981, "mean": 1.124 }
+  },
+  "concurrentWithHashing": {
+    "hashDurationsMs": [116.181, 127.919, 140.931, 141.211, 136.457, 144.389, 143.141, 144.025],
+    "hashSummary": {
+      "n": 8,
+      "min": 116.181,
+      "p50": 141.071,
+      "p95": 144.262,
+      "max": 144.389,
+      "mean": 136.782
+    },
+    "totalWallMs": 144.61,
+    "probeLatencySummary": {
+      "n": 10,
+      "min": 0.476,
+      "p50": 0.91,
+      "p95": 16.334,
+      "max": 28.809,
+      "mean": 3.62
+    },
+    "probeSampleCount": 10,
+    "probeErrorCount": 0
+  },
+  "needsRehash": {
+    "targetPolicy": { "memoryCost": 65536, "timeCost": 3, "parallelism": 1 },
+    "parsedCurrent": {
+      "algorithm": 2,
+      "version": 1,
+      "memoryCost": 65536,
+      "timeCost": 3,
+      "parallelism": 1,
+      "outputLen": 32,
+      "saltLen": 16
+    },
+    "parsedChanged": {
+      "algorithm": 2,
+      "version": 1,
+      "memoryCost": 65536,
+      "timeCost": 4,
+      "parallelism": 1,
+      "outputLen": 32,
+      "saltLen": 16
+    },
+    "needsRehashBeforeChange": false,
+    "needsRehashAfterChange": true
+  }
+}

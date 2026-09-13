@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@iridium/tsconfig/react.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The page is browser code, but the three hosts and the build are Node programs: `build.mjs`,
+    // `csp-host.mjs`, `run-fastify-host.mjs` and `vitest.config.ts` (`import.meta.dirname`).
+    "types": ["node"],
+    // The hosts are plain `.mjs` — `vitest.config.ts` imports `csp-host.mjs` and needs its inferred
+    // types. They are parsed, never checked: `checkJs` stays off.
+    "allowJs": true
+  },
+  "include": ["src", "*.mjs", "*.config.ts", "s04.csp.spec.ts"]
+}

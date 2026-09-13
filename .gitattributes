@@ -14,3 +14,6 @@
 packages/contracts/openapi/openapi.json linguist-generated
 packages/contracts/mcp/tools.schema.json linguist-generated
 packages/api-client/src/generated/** linguist-generated
+# Line-ending fixtures are test data: CRLF, CR-only, mixed and BOM files must survive checkout byte for byte
+packages/testkit/src/fixtures/** -text
+apps/server/test/fixtures/** -text

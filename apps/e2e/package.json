@@ -21,6 +21,6 @@
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
     "@playwright/test": "catalog:",
-    "electron-playwright-helpers": "catalog:"
+    "@types/node": "catalog:"
   }
 }

@@ -1,0 +1,13 @@
+{
+  "$comment": "Committed renderer bundle ceilings, read by scripts/check-bundle-budget.ts. The rule is 10-testing-and-quality.md, \"Client budgets\" (D10-13) and 07-client-applications.md §9.4: at most 900 KB gzip total and 350 KB gzip for the initial route chunk, where KB is 1024 bytes. An entry here may tighten those ceilings but never loosen them — raising a number above the plan's is an edit to the plan, and the check fails on a budget that exceeds it.",
+  "bundles": {
+    "apps/web/dist": {
+      "totalGzipBytes": 921600,
+      "initialRouteChunkGzipBytes": 358400
+    },
+    "apps/desktop/dist/renderer": {
+      "totalGzipBytes": 921600,
+      "initialRouteChunkGzipBytes": 358400
+    }
+  }
+}

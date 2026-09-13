@@ -1,0 +1,37 @@
+# A36 — stdio bridge: a first-party transparent proxy, `iridium-mcp`
+
+**Status:** Accepted (2026-09-11); **confirmed by the owner's answer to G7 on 2026-09-12** — the bridge is not published to the public npm registry — and narrowed in scope by AG1 (2026-09-12), which removes Claude Desktop from the set of clients that require it. The Decision stands unchanged.
+
+## Context
+
+Claude Desktop's local configuration is stdio-only, and claude.ai custom connectors require OAuth outside a limited header beta (digest §3.2), so a stdio-to-HTTP bridge was the only path for those surfaces until G1 was answered yes. The bridge is kept and its rationale narrows: it serves stdio-only clients, air-gapped and intranet-only deployments that cloud connectors cannot reach at all — a claude.ai connector is initiated from Anthropic's servers and needs a publicly reachable HTTPS origin — and scripted use. It is no longer the required path for Claude Desktop, which since AG1 can add `https://<origin>/mcp/connect` as a custom connector and sign in. The obvious third-party option is `mcp-remote`, which digest §3.2 flags hard: it changed hands (geelen/Cloudflare → punkpeye/Glama), shipped 100+ versions including 13 on 2026-09-11 alone, and handles user tokens on disk under `~/.mcp-auth`. Two source plans proposed instead to share a tool package between the MCP server and a bridge built on a `RestReadApi`, which would mean two implementations of the same six tools and a second read backend to keep in parity.
+
+## Decision
+
+A first-party transparent proxy in `packages/mcp-bridge` (Node 24 ESM, built by tsdown into a single file with a shebang, bin name `iridium-mcp`). It uses `serveStdio` from `@modelcontextprotocol/server` and forwards `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`, and `completion/complete` to the remote `/mcp` through `@modelcontextprotocol/client`'s `StreamableHTTPClientTransport` with `requestInit.headers.Authorization`. Lists are fetched at start and refreshed every 5 minutes. Token sources, in order: `--token-file <path>`, then `IRIDIUM_MCP_TOKEN` — **never** a command-line argument. Flags: `--server <origin>`, `--vault <id>`, `--allow-insecure-http` (development only). It sends `User-Agent: iridium-mcp/<version>`, which lands in `access_log.client_name`/`client_version`, and exits non-zero with a clear message on 401 or 403. It is bundled into the desktop application at `resources/bin/` and downloadable from `/desktop/tools/`. `mcp-remote@0.13.5` is documented only as a pinned alternative. npm publication is G7.
+
+## Alternatives Considered
+
+| Alternative | Why rejected |
+|---|---|
+| A shared tool package over a `RestReadApi` (plan-enterprise, plan-product-dx, judge 1) | Two implementations of the six tools, two authorization call sites, two audit surfaces, and era negotiation duplicated locally. A transparent proxy has exactly one implementation and one `access_log`. |
+| `mcp-remote` as the recommended bridge | A third-party dependency that handles user tokens on disk, with a 2026 ownership change and an extremely high release cadence (digest §3.2); it remains documented as a pinned alternative for operators who prefer it. |
+| Tokens as a command-line argument | Process lists and shell history expose them; `--token-file` and the environment variable are the two supported paths. |
+| No bridge (wait for OAuth) | ~~Claude Desktop is a primary target client for a markdown product; the bridge is small and reuses the SDK on both sides.~~ **Premise retired 2026-09-12:** OAuth arrived with AG1, so "wait for OAuth" is no longer a deferral. The bridge is re-justified on its surviving grounds, which OAuth does not reach: a stdio-only client has no HTTP transport to point at either mount; an intranet-only or air-gapped deployment cannot be reached by a cloud connector at all, whatever it advertises; and a scripted or CI use of the tools wants a process it can pipe, not a browser consent round trip. It remains small and reuses the SDK on both sides, which is why keeping it costs little. |
+| Bridging over REST instead of `/mcp` | Would bypass MCP-specific behaviour (eras, `_meta`, cache hints, `resource_link` blocks) and require the bridge to re-implement them. |
+
+## Consequences
+
+Positive: one tool implementation and one audit surface; era negotiation is delegated to the SDK at both ends; `access_log` distinguishes bridge traffic from direct traffic by `client_name`; the bridge ships with the desktop application, so an administrator does not have to approve an npm dependency. Negative: Iridium now ships and maintains a CLI binary, including its pinned SDK versions and its own release step (A52); the 5-minute list refresh means a tool-surface change can take up to 5 minutes to appear in a long-running bridge session (documented); `--allow-insecure-http` exists for development and must be clearly marked (it is refused when the origin is not loopback).
+
+## Verification
+
+`bridge.parity.contract` (through `StdioClientTransport`: the proxy's `tools/list`, `tools/call`, `resources/*`, and `completion/complete` responses are byte-equal to a direct `/mcp` call for the same token); `bridge.token-sources.unit` (`--token-file` precedence, environment fallback, argument rejected); the same `bridge.parity.contract` file asserts that a 401 or 403 exits non-zero with an actionable message; the nightly real-client matrix includes a bridge lane; `access-log.integration` asserts the bridge's `client_name`.
+
+## References
+
+Digest §3.2 (Claude Desktop stdio-only, claude.ai connector auth, `mcp-remote` ownership and cadence), §3.4, §3.5; brief requirement 5; judges 2, 3; **G7, answered "no" on 2026-09-12** — the bridge ships bundled with the desktop application and downloadable from `/desktop/tools/`, and is not published to the public registry, which is exactly the Decision above, so nothing in it changes; **G1, answered yes on 2026-09-12** (AG1), which is why the Context no longer calls the bridge the only path for Claude Desktop. Implemented in `06-mcp-and-agent-access.md` and `11-operations-and-deployment.md`.
+
+---
+
+Source: docs/plan/13-decision-log.md, decision A36. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).

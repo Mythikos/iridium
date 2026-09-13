@@ -1,0 +1,42 @@
+{
+  "name": "@iridium/spike-s04-editor-csp",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spike S04 harness: CodeMirror, y-codemirror.next and Base UI under a nonce-only style-src. Throwaway (12-milestones.md D12-5)",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "spike": "node build.mjs && vitest --run --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "@base-ui/react": "catalog:",
+    "@codemirror/commands": "catalog:",
+    "@codemirror/lang-markdown": "catalog:",
+    "@codemirror/language": "catalog:",
+    "@codemirror/search": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
+    "@fastify/helmet": "catalog:",
+    "@iridium/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "fastify": "catalog:",
+    "hast-util-to-jsx-runtime": "catalog:",
+    "playwright": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "rehype-highlight": "catalog:",
+    "remark-parse": "catalog:",
+    "remark-rehype": "catalog:",
+    "unified": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "y-codemirror.next": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
+  }
+}

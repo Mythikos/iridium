@@ -1,0 +1,76 @@
+{
+  "hookCounts": {
+    "onRequest": 0,
+    "onUpgrade": 0,
+    "onListen": 0,
+    "onConnect": 8,
+    "onAuthenticate": 8,
+    "onStateless": 2,
+    "beforeHandleAwareness": 10
+  },
+  "socketClosesSeenByServer": [
+    {
+      "code": 1006,
+      "reason": ""
+    },
+    {
+      "code": 1005,
+      "reason": ""
+    }
+  ],
+  "acceptedSocketOrigins": [
+    "http://127.0.0.1:51685",
+    "app://iridium",
+    "http://127.0.0.1:51685",
+    "http://127.0.0.1:51685",
+    "http://127.0.0.1:51685",
+    "http://127.0.0.1:51685",
+    "http://127.0.0.1:51685",
+    "http://127.0.0.1:51685"
+  ],
+  "doubleSendLogLines": [],
+  "absentOrigin": {
+    "status": 403,
+    "body": {
+      "type": "urn:iridium:problem:forbidden",
+      "title": "You do not have permission to do that",
+      "status": 403,
+      "code": "forbidden",
+      "requestId": "01a09acd-c264-78d1-9371-7b1270ffbf27",
+      "detail": "The /collab upgrade carried no Origin header."
+    }
+  },
+  "foreignOrigin": {
+    "status": 403,
+    "body": {
+      "type": "urn:iridium:problem:forbidden",
+      "title": "You do not have permission to do that",
+      "status": 403,
+      "code": "forbidden",
+      "requestId": "01a09acd-c269-7573-a35e-f3874b71980d",
+      "detail": "The Origin header is not on the allowlist."
+    }
+  },
+  "oversizeFrame": {
+    "clientSaw": {
+      "code": 1009,
+      "reason": ""
+    },
+    "serverHandleCloseSaw": {
+      "code": 1006,
+      "reason": ""
+    }
+  },
+  "revokedClose": {
+    "code": 1000,
+    "reason": "revoked"
+  },
+  "statelessClose": {
+    "code": 1000,
+    "reason": "protocol-error"
+  },
+  "awarenessSpoofClose": {
+    "code": 1000,
+    "reason": "awareness-spoof"
+  }
+}

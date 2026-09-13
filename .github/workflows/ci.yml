@@ -1,0 +1,594 @@
+# Pull-request and push lanes (10-testing-and-quality.md, "CI lanes" › `ci.yml`;
+# 12-milestones.md §4.2 step 10 and §4.3 row "CI").
+#
+# The job names are the required-check set of 12-milestones.md §13.3 and are created at M0 —
+# empty of tests where the milestone has not written them yet — so branch protection is
+# configured once and never edited mid-milestone (D12-9). Renaming a job here changes a
+# required check; do not rename one without editing §13.3 in the same commit.
+#
+# Every `uses:` is pinned to a commit digest with the tag in a trailing comment
+# (Renovate `helpers:pinGitHubActionDigests`), and every container image is pinned to an
+# exact tag plus digest — except the two `IRIDIUM_MYSQL_IMAGE` matrix values, which are the
+# plain tags `mysql:8.4.11` and `mysql:9.7.2-oraclelinux9` because the matrix value is what
+# GitHub prints in the check name: `integration (mysql:8.4.11)` is a required check, so the
+# string is part of the contract and a digest suffix would rename it.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+  # No IRIDIUM_MYSQL_IMAGE default here: the matrix sets it per entry, and an unset
+  # selector inside the harness resolves to the floor (mysql:8.4.11).
+
+jobs:
+  # Types, lint, format, dead code, boundaries, OpenAPI lint, generated-artefact drift, the
+  # supply-chain gates, the exclusion-hygiene scripts and the whole `guard` project.
+  # Required from M0. Critical-path budget ≤ 15 min for the whole run (10, "CI lanes").
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      # `deps.single-instance.guard` analyses the web bundle and `check-bundle-budget.ts`
+      # reads `apps/web/dist` + `apps/desktop/dist/renderer`, so the build comes first.
+      - name: Build
+        run: pnpm turbo run build
+
+      # The `guard` project runs before the heavier steps (12-milestones.md §3, non-goals
+      # row: "the `guard` project, which the job runs first"), so a boundary, drift,
+      # preload-surface or `webPreferences` violation fails here rather than after a
+      # twenty-minute lane. Selection is by PATH, never by `--testNamePattern`, which
+      # filters by test title and would silently skip every guard whose name does not
+      # begin `guards.`.
+      - name: Guard project
+        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project guard
+
+      - name: Types
+        run: pnpm exec tsc -b --builders 8
+
+      - name: Lint
+        run: pnpm exec oxlint -c oxlint.config.ts --type-aware .
+
+      - name: Format
+        run: pnpm exec oxfmt --check .
+
+      - name: Dead code
+        run: pnpm exec knip --production
+
+      - name: Package boundaries
+        run: pnpm exec turbo boundaries
+
+      - name: OpenAPI lint
+        run: pnpm exec redocly lint packages/contracts/openapi/openapi.json --extends recommended
+
+      # Step 4 of `pnpm gen` (the kysely-codegen comparison) needs a MySQL container and writes no
+      # artefact; `migrations.integration` asserts the same invariant on both required images, so
+      # this job skips it and stays free of Docker.
+      - name: Generated-artefact drift
+        run: pnpm gen:check
+        env:
+          IRIDIUM_GEN_SKIP_DB: '1'
+
+      - name: Audit
+        run: pnpm audit --audit-level high
+
+      - name: Dedupe check
+        run: pnpm dedupe --check
+
+      # The single-version assertion itself lives in `deps.single-instance.guard`, which the
+      # guard step above runs; this step records the resolution the guard reads so the lane
+      # has the evidence attached even when the guard passes.
+      - name: pnpm why single-version check
+        run: |
+          mkdir -p reports/deps
+          pnpm why --recursive --json \
+            yjs lib0 y-protocols @codemirror/state @codemirror/view \
+            > reports/deps/why.json
+
+      - name: License scan
+        run: node scripts/check-licenses.ts
+
+      - name: Bundle budget
+        run: node scripts/check-bundle-budget.ts
+
+      - name: Exclusion hygiene
+        run: |
+          node scripts/check-quarantine.ts
+          node scripts/check-fixture-size.ts
+          node scripts/check-stryker-disables.ts
+          node scripts/check-exclusion-owners.ts
+
+      - name: Acceptance map and test-name references
+        run: |
+          node scripts/build-acceptance-map.ts --check
+          node scripts/check-test-name-references.ts
+
+      - name: Upload static-job reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-static
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # `pnpm turbo run build check-types lint test` green on both operating systems
+  # (12-milestones.md §3, "Build matrix"). Windows runs `--project unit` only: Browser Mode
+  # needs a Playwright browser that is installed on ubuntu, and the path/name/EOL logic that
+  # actually needs Windows is all in `unit`.
+  unit:
+    needs: static
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      IRIDIUM_PROP_RUNS: '200'
+      IRIDIUM_PROP_SIZE: '='
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          playwright-browsers: ${{ runner.os == 'Linux' && 'chromium' || '' }}
+
+      - name: Build, check types, lint
+        run: pnpm turbo run build check-types lint
+
+      # `vitest.config.ts` selects `['default', 'blob']` whenever CI is set, so the blob
+      # report is produced without narrowing the reporters; `--outputFile.blob` only gives
+      # it a name that cannot collide with another lane's blob in `merge-reports`.
+      - name: Unit and component projects
+        if: runner.os == 'Linux'
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit --project component
+          --coverage --outputFile.blob=.vitest-reports/unit-${{ matrix.os }}.json
+
+      - name: Unit project
+        if: runner.os == 'Windows'
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit
+          --coverage --outputFile.blob=.vitest-reports/unit-${{ matrix.os }}.json
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-blob-unit-${{ matrix.os }}
+          path: .vitest-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Two required checks: `integration (mysql:8.4.11)` and
+  # `integration (mysql:9.7.2-oraclelinux9)`. Both MySQL lines are required deployment
+  # targets, so a pull request green on one engine and red on the other has not passed.
+  # Docker → Linux only.
+  integration:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
+    env:
+      IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
+      # PR budget for the MySQL-backed models: 20 × 60 (nightly `property-long` raises it).
+      IRIDIUM_PROP_DB_RUNS: '20'
+      IRIDIUM_PROP_DB_COMMANDS: '60'
+      IRIDIUM_PROP_SIZE: '='
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Slug for the matrix image
+        id: image
+        run: echo "slug=$(echo '${{ matrix.mysql }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
+
+      # `child` mode needs apps/server/dist/main.mjs.
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+
+      # `container` mode needs an image; building it here is also the check that
+      # `turbo prune --docker` did not drop a dependency from the pruned lockfile
+      # (11-operations-and-deployment.md, "Image hygiene checks that run in CI").
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .
+
+      # This step carries the three remaining steps of the lane's row in
+      # 10-testing-and-quality.md, because each needs the ephemeral port and the minted
+      # credential that `@iridium/testkit` owns rather than a fixed port the workflow could
+      # know. The spec that owns each one invokes it:
+      #
+      #   Schemathesis light (against the container-mode server) —
+      #     schemathesis run http://127.0.0.1:<port>/openapi.json --checks all
+      #       --stateful=links --max-examples=50
+      #       --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
+      #       --header "X-Iridium-Client: web"
+      #       --exclude-path-regex '^/(admin|__test__)' --report junit
+      #   MCP conformance, active suite —
+      #     npx @modelcontextprotocol/conformance server --url http://127.0.0.1:<port>/mcp
+      #       --suite active --requirements 2026-07-28
+      #       --expected-failures apps/server/test/mcp/conformance-baseline.yaml
+      #   Inspector CLI smoke —
+      #     npx @modelcontextprotocol/inspector --cli
+      #       --config apps/server/test/mcp/ci-servers.json --server iridium ...
+      #
+      # `--project property` is here because §4.6 lists a `property` lane on `ci.yml` and
+      # the DB-backed property project is the one that needs the MySQL global setup this
+      # lane already provides; it adds no job name.
+      - name: Integration, contract, mcp and property projects
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project integration --project contract --project mcp --project property
+          --coverage
+          --outputFile.blob=.vitest-reports/integration-${{ steps.image.outputs.slug }}.json
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-blob-integration-${{ steps.image.outputs.slug }}
+          path: .vitest-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload conformance and fuzz reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-integration-${{ steps.image.outputs.slug }}
+          path: |
+            reports/
+            results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Required from M1 on both entries. Both run because the durability contract — a COMMIT
+  # under innodb_flush_log_at_trx_commit=1 surviving a SIGKILL — is an engine behaviour.
+  # A durability test is never skipped to unblock a release.
+  chaos-core:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
+    env:
+      IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
+      # 20 kill-after-ack iterations and the PR toxic subset; `chaos-extended` raises both.
+      IRIDIUM_CHAOS_ITERATIONS: '20'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Slug for the matrix image
+        id: image
+        run: echo "slug=$(echo '${{ matrix.mysql }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
+
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+
+      - name: Chaos project
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project chaos
+          --outputFile.blob=.vitest-reports/chaos-${{ steps.image.outputs.slug }}.json
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vitest-blob-chaos-${{ steps.image.outputs.slug }}
+          path: .vitest-reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Required on all four shards from M4, the milestone that writes the first
+  # `apps/e2e/web/` spec. The service container is the compatibility floor: this lane
+  # proves UI behaviour, which is engine-independent, so it runs once and runs on the
+  # stricter engine.
+  e2e-web:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      mysql:
+        # A GitHub service container takes neither a `command:` nor a bind mount, so
+        # infra/docker/mysql/my.cnf and infra/docker/mysql/init/01_roles.sh cannot be
+        # mounted here; the tuned configuration and the three roles are proven by the
+        # `integration` lane, where Testcontainers mounts both. This lane therefore
+        # connects as root and proves UI behaviour only.
+        image: mysql:8.4.11@sha256:85b9bf2e29cf836ecb8c2a15a935d4ba0c606631dff1dd79531a11983c638f2a
+        env:
+          MYSQL_ROOT_PASSWORD: iridium-ci
+          MYSQL_DATABASE: iridium
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
+    env:
+      NODE_ENV: test
+      BIND_ADDRESS: 127.0.0.1
+      PUBLIC_ORIGIN: http://127.0.0.1:4000
+      DATABASE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_PASSWORD: iridium-ci
+      DATABASE_MIGRATE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_MIGRATE_PASSWORD: iridium-ci
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      READYZ_STRICT_DURABILITY: 'false'
+      # Names the blob so four shards and three operating systems cannot collide when
+      # `merge-reports` flattens every lane's artifact into one directory.
+      PLAYWRIGHT_BLOB_OUTPUT_NAME: e2e-web-shard-${{ matrix.shard }}.zip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          playwright-browsers: --with-deps chromium
+
+      - name: Generate the ephemeral keyring
+        run: |
+          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+
+      - name: Build the web host and the server
+        run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
+
+      - name: Apply the migrations
+        run: pnpm --filter @iridium/server run iridium migrate up
+
+      - name: Web E2E shard ${{ matrix.shard }}/4
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=chromium
+          --shard=${{ matrix.shard }}/4 --reporter=blob --pass-with-no-tests
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-blob-e2e-web-shard-${{ matrix.shard }}
+          path: blob-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Required on all three operating systems from M0: `desktop.launch.e2e` is an M0 exit
+  # test, so the lane is never an empty required check. `--grep @smoke` selects the desktop
+  # acceptance set as well as the shell's security floor, because from M5 the Electron
+  # proofs gate four spec §9 rows. If the lane pushes the critical path past the ≤ 15 min
+  # target the answer is `--shard` on the `electron` project, never demoting an acceptance
+  # proof to nightly.
+  e2e-electron:
+    needs: static
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      NODE_ENV: test
+      BIND_ADDRESS: 127.0.0.1
+      PUBLIC_ORIGIN: http://127.0.0.1:4000
+      DATABASE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_MIGRATE_URL: mysql://root@127.0.0.1:3306/iridium
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      READYZ_STRICT_DURABILITY: 'false'
+      PLAYWRIGHT_BLOB_OUTPUT_NAME: e2e-electron-${{ matrix.os }}.zip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      # The same MySQL line the `e2e-web` service container uses: an unmatrixed lane
+      # resolves to the compatibility floor, which is the stricter of the two required
+      # lines. Docker is not available on the windows and macos runners, so the engine
+      # comes from the setup action rather than from a container.
+      - uses: shogo82148/actions-setup-mysql@4a30921d75247b8f82fca433e05d26c6d0e21a41 # v1
+        with:
+          mysql-version: '8.4'
+          root-password: ''
+          auto-start: true
+
+      - name: Create the database
+        shell: bash
+        run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
+
+      - name: Generate the ephemeral keyring
+        shell: bash
+        run: |
+          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+
+      - name: Install the Playwright Linux dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install-deps chromium
+
+      - name: Build the desktop shell (unpackaged) and the server
+        run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
+
+      - name: Apply the migrations
+        run: pnpm --filter @iridium/server run iridium migrate up
+
+      - name: Electron E2E smoke (Linux, under xvfb)
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum
+          pnpm exec playwright test -c playwright.config.ts --project=electron --grep @smoke
+          --pass-with-no-tests
+
+      - name: Electron E2E smoke
+        if: runner.os != 'Linux'
+        shell: bash
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=electron --grep @smoke
+          --pass-with-no-tests
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-blob-e2e-electron-${{ matrix.os }}
+          path: blob-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Required from M1, the milestone at which the mutation thresholds first apply. The job
+  # always runs and gates its own work on whether a path inside Stryker's `mutate` globs
+  # changed: a required check that GitHub reports as `skipped` is a check somebody turns
+  # off, and then the lane is unguarded when it finally matters.
+  mutation-scoped:
+    needs: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The regex mirrors the `mutate` array of tooling/mutation/stryker.config.jsonc,
+      # which is the source of truth; `guards.mutation-lane.guard` should assert the two
+      # agree so this copy cannot drift.
+      - name: Detect changes inside the mutate scope
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = 'pull_request' ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+          else
+            base='${{ github.event.before }}'
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          mutate='^(apps/server/src/(auth|authz|oauth)/.*\.ts'
+          mutate="$mutate"'|apps/server/src/audit/chain\.ts'
+          mutate="$mutate"'|apps/server/src/collab/persistence/.*\.ts'
+          mutate="$mutate"'|apps/server/src/collab/(limits|owner-lease)\.ts'
+          mutate="$mutate"'|apps/server/src/mcp/(cursor|verifier|rate-limit)\.ts'
+          mutate="$mutate"'|apps/server/src/tree/(names|moves|paths|rename-impact)\.ts'
+          mutate="$mutate"'|packages/contracts/src/(tokens|paths|authz|ids|limits)\.ts'
+          mutate="$mutate"'|packages/crdt/src/.*\.ts'
+          mutate="$mutate"'|packages/markdown/src/sanitize/.*\.ts'
+          mutate="$mutate"'|packages/markdown/src/(normalize|restore|links)\.ts'
+          mutate="$mutate"'|packages/collab-client/src/save-state\.ts)$'
+          changed="$(git diff --name-only "$base" HEAD | grep -E "$mutate" | grep -v '\.spec\.ts$' || true)"
+          if [ -n "$changed" ]; then
+            echo 'A path inside the mutate scope changed:'
+            echo "$changed"
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No path inside the mutate scope changed; the Stryker run is not due.'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup-workspace
+        if: steps.scope.outputs.changed == 'true'
+
+      - name: Restore the Stryker incremental file
+        if: steps.scope.outputs.changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tooling/mutation/reports/stryker-incremental.json
+          key: stryker-incremental-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-${{ hashFiles('pnpm-lock.yaml') }}-
+            stryker-incremental-
+
+      - name: Build
+        if: steps.scope.outputs.changed == 'true'
+        run: pnpm turbo run build
+
+      - name: Stryker
+        if: steps.scope.outputs.changed == 'true'
+        run: pnpm --filter @iridium/mutation run mutation
+
+      - name: Upload the mutation report
+        if: always() && steps.scope.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stryker-report
+          path: tooling/mutation/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Where the coverage thresholds are evaluated, because no single job sees all of them.
+  # `if: always()` so a red lane still produces the merged report that names what failed.
+  merge-reports:
+    needs: [unit, integration, chaos-core, e2e-web, e2e-electron]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IRIDIUM_TEST_HOST_CONTRACT_REPORTS: reports/host-contract
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Download the Vitest blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vitest-blob-*
+          merge-multiple: true
+          path: .vitest-reports
+
+      - name: Download the Playwright blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: playwright-blob-*
+          merge-multiple: true
+          path: blob-report
+
+      - name: Download the lane reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: reports-*
+          merge-multiple: true
+          path: reports
+
+      - name: Merge the Vitest reports and evaluate the coverage thresholds
+        run: pnpm exec vitest --merge-reports --coverage --config vitest.config.ts
+
+      - name: Merge the Playwright reports
+        run: pnpm exec playwright merge-reports --reporter=html,github blob-report
+
+      - name: OpenAPI operation coverage
+        run: node scripts/check-openapi-coverage.ts
+
+      # Rule 5 of the acceptance map: every `hostContractCases()` case passed in every due
+      # harness. The reports the harnesses wrote are under reports/host-contract.
+      - name: Host-contract completeness
+        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project guard
+
+      - name: Upload the merged reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: merged-reports
+          path: |
+            coverage/
+            playwright-report/
+            reports/
+          if-no-files-found: ignore
+          retention-days: 30

@@ -6,5 +6,34 @@
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": false
   },
-  "include": ["../../apps/server/src/**/*.ts", "../../packages/*/src/**/*.ts"]
+  // Exactly what `stryker.config.mjs` mutates, and nothing else: the five packages whose sources the
+  // register covers wholesale, then the server app file by file, mirroring its `mutate` globs (the
+  // paths that do not exist yet arrive with their milestone and are ignored until then). Anything
+  // wider stops the lane dead, because the typescript checker refuses to start when its dry-run
+  // compilation reports any error at all, mutant-related or not (spike S5). `packages/*/src/**` pulls
+  // in the React packages, whose `.tsx` entry points cannot compile under a Node tsconfig with no
+  // `jsx` setting; `apps/server/src/**` pulls in every file the register never mutates, so one type
+  // error anywhere in the app — `src/ops/openapi.ts` today — disables mutation testing for the whole
+  // repository. Whole-app type health is `check-types`'s gate, not this one's. Transitive imports are
+  // in the program either way, so a mutant that breaks a consumer of a mutated file is still caught.
+  "include": [
+    "../../packages/collab-client/src/**/*.ts",
+    "../../packages/contracts/src/**/*.ts",
+    "../../packages/crdt/src/**/*.ts",
+    "../../packages/markdown/src/**/*.ts",
+    "../../apps/server/src/auth/**/*.ts",
+    "../../apps/server/src/authz/**/*.ts",
+    "../../apps/server/src/oauth/**/*.ts",
+    "../../apps/server/src/audit/chain.ts",
+    "../../apps/server/src/collab/persistence/**/*.ts",
+    "../../apps/server/src/collab/limits.ts",
+    "../../apps/server/src/collab/owner-lease.ts",
+    "../../apps/server/src/mcp/cursor.ts",
+    "../../apps/server/src/mcp/verifier.ts",
+    "../../apps/server/src/mcp/rate-limit.ts",
+    "../../apps/server/src/tree/names.ts",
+    "../../apps/server/src/tree/moves.ts",
+    "../../apps/server/src/tree/paths.ts",
+    "../../apps/server/src/tree/rename-impact.ts"
+  ]
 }

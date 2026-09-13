@@ -1,0 +1,31 @@
+# Uploads whatever a nightly job produced, under a name that matches the job.
+#
+# Every nightly job attaches its artifacts because "a nightly failure opens (or updates) one
+# issue per job with the artifacts attached" (10-testing-and-quality.md, "CI lanes"), so the
+# upload is the same five lines in fifteen jobs; it lives here so the digest below is pinned
+# once. `if-no-files-found: ignore` is deliberate: a lane whose suite the milestone has not
+# written yet produces nothing, and that is not a failure of the lane.
+name: Upload nightly reports
+description: Attaches a nightly job's reports to the run under a per-job artifact name.
+
+inputs:
+  name:
+    description: Artifact name; use the job name (plus the matrix entry where there is one).
+    required: true
+  path:
+    description: Paths to upload, newline-separated.
+    required: false
+    default: |
+      reports/
+      coverage/
+      results/
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: nightly-${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ignore
+        retention-days: 30

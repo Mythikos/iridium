@@ -1,0 +1,1 @@
+# CR onlyClassic Mac line endings.Still one paragraph per line.

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tools-call-elicitation",
+    "name": "ToolsCallElicitation",
+    "description": "Tool requests user input from client",
+    "status": "FAILURE",
+    "timestamp": "2026-09-13T12:47:13.802Z",
+    "errorMessage": "Failed: MCP error -32602: Tool test_elicitation not found",
+    "specReferences": [
+      {
+        "id": "MCP-Elicitation",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/elicitation"
+      }
+    ]
+  }
+]

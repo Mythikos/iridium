@@ -31,12 +31,16 @@
     "@testcontainers/mysql": "catalog:",
     "@testcontainers/toxiproxy": "catalog:",
     "ajv": "catalog:",
+    "ajv-formats": "catalog:",
+    "fast-check": "catalog:",
     "msw": "catalog:",
     "testcontainers": "catalog:",
     "ws": "catalog:"
   },
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "vitest": "catalog:"
   }
 }

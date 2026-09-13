@@ -1,0 +1,10 @@
+{
+  "returnedV2Blob": {
+    "rejected": false,
+    "text": ""
+  },
+  "appliedInPlace": {
+    "text": "control text\n",
+    "svEqual": true
+  }
+}

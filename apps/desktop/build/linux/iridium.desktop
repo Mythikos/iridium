@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Iridium
+Comment=Enterprise documentation platform
+Exec=%k/iridium %u
+Icon=iridium
+Terminal=false
+Categories=Office;
+MimeType=x-scheme-handler/iridium;

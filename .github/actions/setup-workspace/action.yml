@@ -1,0 +1,59 @@
+# Shared workspace setup for every job of every Iridium workflow.
+#
+# It exists so the three `uses:` digests below are pinned in exactly one place: a job that
+# repeats them is a job that will one day disagree with the others about which pnpm or Node
+# it runs. Renovate's `helpers:pinGitHubActionDigests` (renovate.json) updates composite
+# actions as well as workflows, so the pins here are maintained with the rest.
+#
+# `actions/checkout` is deliberately NOT here: a local action cannot run before the
+# repository that contains it has been checked out, so every job checks out first.
+name: Set up the Iridium workspace
+description: >-
+  Installs the pinned pnpm (from `packageManager`) and the pinned Node (from `.node-version`),
+  then installs the workspace from the frozen lockfile.
+
+inputs:
+  node-version:
+    description: >-
+      Node major or exact version to use instead of the `.node-version` pin. Only the
+      forward-compatibility lanes set it; every other job runs the pinned runtime.
+    required: false
+    default: ''
+  install:
+    description: Install the workspace with `pnpm install --frozen-lockfile`.
+    required: false
+    default: 'true'
+  install-args:
+    description: Extra arguments appended to `pnpm install --frozen-lockfile`.
+    required: false
+    default: ''
+  playwright-browsers:
+    description: >-
+      Playwright browsers to install, as the argument list for `playwright install`
+      (for example `chromium` or `--with-deps chromium`). Empty installs nothing.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # No `version:` input: pnpm/action-setup reads the root `packageManager` field
+    # (pnpm@12.4.1), and passing both is an error.
+    - uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+
+    # pnpm must be on PATH before `cache: pnpm` can resolve the store directory.
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
+        cache: pnpm
+
+    - name: Install the workspace
+      if: inputs.install == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile ${{ inputs.install-args }}
+
+    - name: Install Playwright browsers
+      if: inputs.playwright-browsers != ''
+      shell: bash
+      run: pnpm exec playwright install ${{ inputs.playwright-browsers }}

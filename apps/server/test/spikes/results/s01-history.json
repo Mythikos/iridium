@@ -1,0 +1,51 @@
+{
+  "operations": 50722,
+  "rows": 50722,
+  "textChars": 71260,
+  "bytes": {
+    "rawLog": 1048579,
+    "mergedLogV1": 555400,
+    "snapshotV1": 295900,
+    "snapshotV2": 183837,
+    "v2OverV1": 0.6213
+  },
+  "load": {
+    "snapshotV1": {
+      "samples": 7,
+      "p50Ms": 11.211,
+      "p95Ms": 25.152,
+      "minMs": 10.357
+    },
+    "snapshotV2": {
+      "samples": 7,
+      "p50Ms": 9.179,
+      "p95Ms": 37.889,
+      "minMs": 8.619
+    },
+    "mergedLogV1": {
+      "samples": 7,
+      "p50Ms": 96.387,
+      "p95Ms": 98.937,
+      "minMs": 78.342
+    },
+    "replayRows": {
+      "samples": 3,
+      "p50Ms": 337.241,
+      "p95Ms": 344.659,
+      "minMs": 317.974
+    },
+    "snapshotV2PlusTail": {
+      "samples": 7,
+      "p50Ms": 57.248,
+      "p95Ms": 73.848,
+      "minMs": 35.079,
+      "tailRows": 5073,
+      "tailBytes": 106777
+    }
+  },
+  "equivalence": {
+    "v1AndV2LoadSameStateVector": true,
+    "v2LoadProjectsSameText": true,
+    "v2PlusTailProjectsSameText": true
+  }
+}

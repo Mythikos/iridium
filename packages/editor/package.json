@@ -19,6 +19,7 @@
     "@codemirror/autocomplete": "catalog:",
     "@codemirror/commands": "catalog:",
     "@codemirror/lang-markdown": "catalog:",
+    "@codemirror/lang-yaml": "catalog:",
     "@codemirror/language": "catalog:",
     "@codemirror/search": "catalog:",
     "@codemirror/state": "catalog:",

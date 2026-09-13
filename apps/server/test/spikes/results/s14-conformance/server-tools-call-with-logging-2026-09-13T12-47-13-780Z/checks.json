@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tools-call-with-logging",
+    "name": "ToolsCallWithLogging",
+    "description": "Tool sends log messages during execution",
+    "status": "FAILURE",
+    "timestamp": "2026-09-13T12:47:13.784Z",
+    "errorMessage": "Failed: MCP error -32601: Method not found",
+    "specReferences": [
+      {
+        "id": "MCP-Logging",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/logging"
+      }
+    ]
+  }
+]

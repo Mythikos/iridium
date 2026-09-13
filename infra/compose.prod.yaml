@@ -1,0 +1,222 @@
+# Iridium hardened reference deployment — 11-operations-and-deployment.md,
+# "infra/compose.prod.yaml (hardened reference deployment)". This is the file docs/ops/deployment.md
+# walks through verbatim and the nightly `compose.prod clean-VM boot` job boots from scratch; every
+# hardening line here is asserted afterwards with `docker inspect`.
+#
+# The committed file is bootable, so exactly two placeholders are allowed, both the operator's:
+# the GHCR owner and the server image digest, which the release notes carry next to the tag. Every
+# other value is resolved here or in the committed infra/.env, which `docker compose` loads from
+# this directory. The `:?` form makes a missing pin a startup failure instead of a floating tag.
+#
+# Before the first `docker compose -f infra/compose.prod.yaml up -d`:
+#   - substitute the two operator placeholders in the two image references below;
+#   - create ./iridium.env (non-secret configuration: PUBLIC_ORIGIN, DATABASE_URL, …);
+#   - create ./secrets/* (one password or key per file), owned by uid 10001;
+#   - set IRIDIUM_SITE and IRIDIUM_CADDYFILE in ./.env.
+# Maintenance runs as the one-shot ops service: docker compose -f infra/compose.prod.yaml run --rm ops migrate status
+name: iridium
+
+networks:
+  # The server has no published port: Caddy reaches it over an internal network with a fixed
+  # subnet, and the only published ports on the host are Caddy's 80 and 443.
+  iridium-internal:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+  iridium-edge: {}
+
+secrets:
+  mysql_root_password: { file: ./secrets/mysql_root_password }
+  db_app_password: { file: ./secrets/db_app_password }
+  db_migrator_password: { file: ./secrets/db_migrator_password }
+  db_backup_password: { file: ./secrets/db_backup_password }
+  auth_password_pepper_v1: { file: ./secrets/auth_password_pepper_v1 }
+  audit_hmac_key_v1: { file: ./secrets/audit_hmac_key_v1 }
+  mcp_cursor_key_v1: { file: ./secrets/mcp_cursor_key_v1 }
+  metrics_token: { file: ./secrets/metrics_token }
+
+volumes:
+  mysql-data: {}
+  attachments-data: {}
+  staging-data: {}
+  exports-data: {}
+  updates-data: {}
+  caddy-data: {}
+  caddy-config: {}
+
+services:
+  # MYSQL_TAG is 9.7.2-oraclelinux9 or 8.4.11; both are required targets and the committed infra/.env
+  # pins one of them. MySQL never has a published port in production.
+  mysql:
+    image: mysql:${MYSQL_TAG:?pin missing}
+    networks:
+      iridium-internal:
+        ipv4_address: 172.28.0.20
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/iridium.cnf:ro
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: iridium
+      IRIDIUM_DB_APP_PASSWORD_FILE: /run/secrets/db_app_password
+      IRIDIUM_DB_MIGRATOR_PASSWORD_FILE: /run/secrets/db_migrator_password
+      IRIDIUM_DB_BACKUP_PASSWORD_FILE: /run/secrets/db_backup_password
+    secrets: [mysql_root_password, db_app_password, db_migrator_password, db_backup_password]
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '--silent']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+
+  # Image references carry both a version tag and a digest; release.yml prints the digest in the
+  # release notes and docs/ops/upgrade.md tells operators to copy both.
+  server:
+    image: ghcr.io/<org>/iridium-server:1.0.0@sha256:<digest>
+    networks:
+      iridium-internal:
+        ipv4_address: 172.28.0.30
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file: [./iridium.env] # non-secret configuration only
+    environment:
+      BIND_ADDRESS: 0.0.0.0
+      TRUST_PROXY: 172.28.0.10/32
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      DATABASE_PASSWORD_FILE: /run/secrets/db_app_password
+      # Only while IRIDIUM_MIGRATE_ON_BOOT is true; an operator who sets it false removes this line
+      # and the db_migrator_password entry below, and runs `ops migrate up` before each upgrade.
+      DATABASE_MIGRATE_PASSWORD_FILE: /run/secrets/db_migrator_password
+      AUTH_PASSWORD_PEPPER_V1_FILE: /run/secrets/auth_password_pepper_v1
+      AUDIT_HMAC_KEY_V1_FILE: /run/secrets/audit_hmac_key_v1
+      MCP_CURSOR_KEY_V1_FILE: /run/secrets/mcp_cursor_key_v1
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
+      PROJECTION_WORKERS: '3' # Team profile; explicit, so the shipped file never depends on quota detection
+      NODE_OPTIONS: --max-old-space-size=1536
+      # S13 (docs/spikes/S13-argon2-calibration.md) measured the EnvSchema defaults (65536/3) at
+      # p50 47.80 ms / p95 56.45 ms on the 4 vCPU / 4 GiB reference container — far under the
+      # 150-300 ms window — and found this pair centered in the window instead: p50 213.51 ms /
+      # p95 224.58 ms, with the concurrent SELECT 1 probe at p95 44.52 ms against the 50 ms
+      # threshold (11 percent headroom). The EnvSchema defaults stay 65536/3 for every other host
+      # (a schema default would also apply to developer machines and CI runners); this deployment
+      # file is where the measured pair belongs.
+      ARGON2_MEMORY_KIB: '131072'
+      ARGON2_TIME_COST: '6'
+      # Must be set here, not only in the image: libuv reads UV_THREADPOOL_SIZE once, before any
+      # application code runs, so it has to come from the environment rather than from something
+      # main.ts sets in-process. Keeps argon2id hashing and mysql2 off the event loop under
+      # concurrent logins (docs/spikes/S13-argon2-calibration.md).
+      UV_THREADPOOL_SIZE: '8'
+    secrets:
+      - db_app_password
+      - db_migrator_password
+      - auth_password_pepper_v1
+      - audit_hmac_key_v1
+      - mcp_cursor_key_v1
+      - metrics_token
+    volumes:
+      - attachments-data:/data/attachments
+      - staging-data:/data/staging
+      - exports-data:/data/exports
+      - updates-data:/data/desktop-updates
+    # The process writes only to the four volumes above and to /tmp. Piscina workers, pino and the
+    # MCP SDK write nothing to disk.
+    read_only: true
+    tmpfs: ['/tmp:size=512m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: '10001:10001'
+    healthcheck:
+      test: ['CMD', 'node', 'dist/healthcheck.mjs']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Exceeds SHUTDOWN_DRAIN_MS (20 s) plus flushPendingStores() and hocuspocus.destroy(), so
+    # Docker never SIGKILLs a draining server.
+    stop_grace_period: 45s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+
+  # The same image run as a one-shot container with maintenance credentials. It deliberately does
+  # not mount the MySQL data volume: MySQL owns that directory as mysql:mysql and this container is
+  # uid 10001, so closed binary logs are streamed over the protocol instead
+  # (mysqlbinlog --read-from-remote-server), which is also the only variant that works against a
+  # managed MySQL. ./secrets and ./backups on the host must be owned by uid 10001: restore and
+  # `keys rotate` write key files into /secrets, the same directory the secrets entries read.
+  ops:
+    profiles: [ops]
+    image: ghcr.io/<org>/iridium-server:1.0.0@sha256:<digest>
+    networks: [iridium-internal]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file: [./iridium.env]
+    environment:
+      DATABASE_PASSWORD_FILE: /run/secrets/db_app_password
+      DATABASE_MIGRATE_PASSWORD_FILE: /run/secrets/db_migrator_password
+      DATABASE_BACKUP_PASSWORD_FILE: /run/secrets/db_backup_password
+      AUTH_PASSWORD_PEPPER_V1_FILE: /run/secrets/auth_password_pepper_v1
+      AUDIT_HMAC_KEY_V1_FILE: /run/secrets/audit_hmac_key_v1
+      MCP_CURSOR_KEY_V1_FILE: /run/secrets/mcp_cursor_key_v1
+    secrets:
+      - db_app_password
+      - db_migrator_password
+      - db_backup_password
+      - auth_password_pepper_v1
+      - audit_hmac_key_v1
+      - mcp_cursor_key_v1
+    volumes:
+      - attachments-data:/data/attachments:ro
+      - ./backups:/backups
+      - ./secrets:/secrets
+      # Optional: target for `iridium backup --textfile-out /textfile/iridium_backup.prom`
+      # - /var/lib/node_exporter/textfile:/textfile
+    read_only: true
+    tmpfs: ['/tmp:size=1g,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: '10001:10001'
+    entrypoint: ['iridium']
+    command: ['--help']
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2g # a backup must never starve the live writer's fsync path
+
+  # TLS termination only: the proxy adds no security headers, because @fastify/helmet already emits
+  # HSTS, the nonce CSP, COOP, CORP, Referrer-Policy and X-Frame-Options from the application.
+  # CADDY_TAG and CADDY_DIGEST are both set in the committed infra/.env.
+  caddy:
+    image: caddy:${CADDY_TAG:?pin missing}@${CADDY_DIGEST:?pin missing}
+    networks:
+      iridium-internal:
+        ipv4_address: 172.28.0.10
+      iridium-edge: {}
+    depends_on: [server]
+    ports: ['80:80', '443:443']
+    environment:
+      IRIDIUM_SITE: ${IRIDIUM_SITE:?set IRIDIUM_SITE to the public host name, or to :443 with Caddyfile.internal}
+    volumes:
+      # Caddyfile (public origin, ACME) or Caddyfile.internal (local CA, no outbound connection).
+      - ./caddy/${IRIDIUM_CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped

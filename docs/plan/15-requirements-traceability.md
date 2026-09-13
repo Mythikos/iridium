@@ -72,7 +72,7 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | Tokens are read-only at MVP | brief item 5 | 06-mcp-and-agent-access.md § Scopes and the Read bundle | `token.reserved-scopes-inert.unit`, `mcp.no-write-imports.unit`, `mcp.scopes.mcp`, `authz.rest-token.integration` | M3 | covered |
 | Tokens are revocable | brief item 5 | 06-mcp-and-agent-access.md § Revocation semantics | `mcp.revocation.mcp`, `tokens.lifecycle.integration`, `authz.revocation-rest.integration` | M3 | covered |
 | Tokens are hashed at rest and never logged | brief item 5 | 06-mcp-and-agent-access.md § Storage and verification | `tokens.verify.unit`, `tokens.verifier.integration`, `logging-redaction.integration`, `bridge.no-token-leak.unit` | M3 | covered |
-| The token is pasted into the agent's MCP configuration at setup time, with per-client configuration snippets | brief item 5 | 06-mcp-and-agent-access.md § Per-client configuration snippets | `mcp.snippets.unit`, `tokens.dialog.component`, `token-create-and-use.e2e`, `proxied-stack.mcp-headers` | M3, M4 | covered |
+| The token is pasted into the agent's MCP configuration at setup time, with per-client configuration snippets | brief item 5 | 06-mcp-and-agent-access.md § Per-client configuration snippets | `mcp.snippets.unit`, `tokens.dialog.component`, `token-create-and-use.e2e`, `proxied-stack.headers.mcp` | M3, M4 | covered |
 | Revocation cuts off agent access immediately | brief item 5; spec §9 row 'Live revocation' | 04-auth-and-access-control.md § 8.8 Timing guarantees; 06-mcp-and-agent-access.md § Revocation semantics; 04-auth-and-access-control.md § 9. Token principals on the authorization path | `mcp.revocation.mcp`, `collab.revocation-race.chaos`, `authz.revocation-rest.integration`, `tokens.lifecycle.integration` | M3 | covered |
 | The design leaves a clean path to scoped WRITE access without a contract change | brief item 5 | 06-mcp-and-agent-access.md § The designed path to write access; 01-vision-scope-and-principles.md § 4.5 Post-MVP roadmap as seams | `token.reserved-scopes-inert.unit`, `mcp.no-write-imports.unit` | M3 | covered |
 | The design leaves a clean path to OAuth-based flows later — **met in full at MVP** | brief item 5 | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; 06-mcp-and-agent-access.md § Discovery, and why it lives on a second mount; 04-auth-and-access-control.md § 9.1 Where a token principal comes from; § 9.2 The four invariants `authorize()` enforces | `oauth.discovery-split.contract`, `oauth.metadata.contract`, `oauth.authorization-code.integration`, `oauth.principal-parity.prop`, `oauth.audience.contract`, `mcp.verifier.dispatch.unit`, `tokens.kind-enum.unit` | M3 | covered |
@@ -651,9 +651,9 @@ fixed in the same pass as the gaps above.
 
 - **Undefined and superseded test names cited by sibling sections.** 04-auth-and-access-control.md
   § 14 and 05-collaboration-and-durability.md § What is tested and how cite names that
-  10-testing-and-quality.md marks superseded (`auth.token-format.prop`, `auth.token-parse.unit`,
-  `authz.route-policy.boot`, `authz.admin-owned-token.unit`, `mcp.revocation.contract`,
-  `desktop.signout-clears-cache.e2e`) or does not define at all (`sessions.integration`,
+  10-testing-and-quality.md's superseded-spellings table resolves to (`tokens.format.prop`, `tokens.format.unit`,
+  `authz.route-policy.boot`, `authz.no-mcp-admin-implied.guard`, `mcp.revocation.mcp`,
+  `desktop.revocation-while-open.e2e`, `auth.sessions-web.integration`, `auth.sessions-desktop.integration`) or does not define at all (
   `collab.epoch-steady-state.integration`, `desktop.revocation-while-open`, `e2e.viewer-readonly`,
   `e2e.revocation-while-open`, `collab.stateless-protocol.integration`,
   `collab.awareness-rate.integration`, `collab.reconnect.oversize-delta.integration`,
@@ -662,10 +662,10 @@ fixed in the same pass as the gaps above.
   `scripts/check-test-name-references.ts` fails the `static` job on exactly these, so they are
   build-breaking references rather than cosmetic drift. Three of them are already resolved on the
   owning side and are listed only so the citing sections are corrected rather than re-argued:
-  `desktop.signout-clears-cache.e2e` now resolves to `desktop.revocation-while-open.e2e`, and
-  `tree.name-rules.unit` and `paths.prop` to `contracts.paths.unit` and `contracts.paths.prop`, in
+  the earlier sign-out-cache spelling now resolves to `desktop.revocation-while-open.e2e`, and
+  the bare-subject spellings of the contracts primitives to `contracts.paths.unit` and `contracts.paths.prop`, in
   10-testing-and-quality.md's "Superseded spellings" table and 12-milestones.md § 13.5. A fourth
-  joined them on 2026-09-12: `mcp.no-prm.contract` is retired by the OAuth 2.1 authorization server
+  joined them on 2026-09-12: the earlier no-discovery MCP contract test is retired by the OAuth 2.1 authorization server
   and resolves to `oauth.discovery-split.contract`, which asserts the split between the two MCP
   mounts rather than the absence of discovery. This matrix cites only names the inventory defines.
 - ~~**HP-5's evidence column names an unnamed check.**~~ Closed: the hard-property table of

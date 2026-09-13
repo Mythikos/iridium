@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Replaced per load by the harness scheme handler, exactly as src/main/scheme.ts does. -->
+    <meta name="iridium-csp-nonce" content="__IRIDIUM_CSP_NONCE__" />
+    <title>Iridium spike S3</title>
+  </head>
+  <body>
+    <h1>S3 — WebSocket and fetch Origin from app://iridium</h1>
+    <pre id="out"></pre>
+    <!--
+      Absolute, not `./probe.js`: the navigated sub-page leg loads this document through the SPA
+      fallback from a deep path, and a relative script URL would resolve against that deep path.
+    -->
+    <script type="module" src="/probe.js"></script>
+  </body>
+</html>

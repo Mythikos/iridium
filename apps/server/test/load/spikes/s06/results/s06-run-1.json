@@ -1,0 +1,460 @@
+{
+  "spike": "S6",
+  "generatedAt": "2026-09-13T13:19:51.057Z",
+  "node": "24.11.0",
+  "k6": {
+    "binary": "C:/Users/Vincent/AppData/Local/Temp/claude/D--Repository-Other-iridium/b6d20f0c-f75b-4d68-9394-a22aa8942a89/scratchpad/m0/tools/k6-v2.2.0-windows-amd64/k6.exe",
+    "exitCode": 0,
+    "vusPerScenario": 1,
+    "markers": 200
+  },
+  "bundle": {
+    "esbuild": "0.25.12",
+    "bundledVersions": {
+      "yjs": "13.6.32",
+      "lib0": "0.2.117",
+      "y-protocols": "1.0.7"
+    },
+    "flags": [
+      "--bundle",
+      "--format=cjs",
+      "--platform=browser",
+      "--external:k6*",
+      "--target=es2022"
+    ],
+    "entry": "src/s06-collab.js",
+    "outfile": "s06-collab.bundle.js",
+    "bundleBytes": 266940,
+    "moduleCount": 40,
+    "imports": ["k6", "k6/execution", "k6/metrics", "k6/websockets", "k6/websockets"],
+    "bytesByPackage": {
+      ".pnpm": 471048,
+      "(entry)": 25947
+    },
+    "largestInputs": [
+      {
+        "path": "../../../../../../node_modules/.pnpm/yjs@13.6.32/node_modules/yjs/dist/yjs.mjs",
+        "bytes": 299797
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/schema.js",
+        "bytes": 30563
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/encoding.js",
+        "bytes": 26567
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/decoding.js",
+        "bytes": 17847
+      },
+      {
+        "path": "src/s06-collab.js",
+        "bytes": 14355
+      },
+      {
+        "path": "src/wire.js",
+        "bytes": 11592
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/logging.js",
+        "bytes": 9825
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/awareness.js",
+        "bytes": 9647
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/dom.js",
+        "bytes": 6768
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/prng.js",
+        "bytes": 6092
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/sync.js",
+        "bytes": 4988
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/array.js",
+        "bytes": 4725
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/string.js",
+        "bytes": 4449
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/environment.js",
+        "bytes": 4212
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/buffer.js",
+        "bytes": 4133
+      }
+    ]
+  },
+  "server": {
+    "ready": {
+      "event": "ready",
+      "port": 54836,
+      "origin": "http://127.0.0.1:54836",
+      "wsUrl": "ws://127.0.0.1:54836/collab",
+      "publicHost": "127.0.0.1:54836",
+      "token": "spike-ticket",
+      "desktopOrigin": "app://iridium"
+    },
+    "shutdown": {
+      "event": "shutdown",
+      "counts": {
+        "onConnect": 2,
+        "onAuthenticate": 2,
+        "authRejected": 0,
+        "onLoadDocument": 1,
+        "onChange": 200,
+        "onStoreDocument": 23,
+        "afterStoreDocument": 23,
+        "statelessBroadcasts": 23
+      },
+      "documents": ["s06-note"],
+      "texts": {
+        "s06-note": {
+          "bytes": 0,
+          "markers": 0
+        }
+      },
+      "lastPersistedHeads": {
+        "2": 200
+      },
+      "lastPersistedBytes": 5292,
+      "lastPersistedMarkers": 200,
+      "lastPersistedText": "[[S06:2:1:1789305582046]][[S06:2:2:1789305582071]][[S06:2:3:1789305582096]][[S06:2:4:1789305582122]][[S06:2:5:1789305582147]][[S06:2:6:1789305582172]][[S06:2:7:1789305582197]][[S06:2:8:1789305582223]][[S06:2:9:1789305582248]][[S06:2:10:1789305582274]][[S06:2:11:1789305582299]][[S06:2:12:1789305582324]][[S06:2:13:1789305582349]][[S06:2:14:1789305582375]][[S06:2:15:1789305582400]][[S06:2:16:1789305582425]][[S06:2:17:1789305582451]][[S06:2:18:1789305582476]][[S06:2:19:1789305582501]][[S06:2:20:1789305582527]][[S06:2:21:1789305582552]][[S06:2:22:1789305582577]][[S06:2:23:1789305582603]][[S06:2:24:1789305582628]][[S06:2:25:1789305582653]][[S06:2:26:1789305582679]][[S06:2:27:1789305582704]][[S06:2:28:1789305582730]][[S06:2:29:1789305582755]][[S06:2:30:1789305582780]][[S06:2:31:1789305582805]][[S06:2:32:1789305582830]][[S06:2:33:1789305582856]][[S06:2:34:1789305582881]][[S06:2:35:1789305582907]][[S06:2:36:1789305582932]][[S06:2:37:1789305582958]][[S06:2:38:1789305582983]][[S06:2:39:1789305583008]][[S06:2:40:1789305583034]][[S06:2:41:1789305583060]][[S06:2:42:1789305583086]][[S06:2:43:1789305583111]][[S06:2:44:1789305583137]][[S06:2:45:1789305583163]][[S06:2:46:1789305583188]][[S06:2:47:1789305583215]][[S06:2:48:1789305583244]][[S06:2:49:1789305583269]][[S06:2:50:1789305583296]][[S06:2:51:1789305583322]][[S06:2:52:1789305583348]][[S06:2:53:1789305583373]][[S06:2:54:1789305583398]][[S06:2:55:1789305583424]][[S06:2:56:1789305583450]][[S06:2:57:1789305583476]][[S06:2:58:1789305583502]][[S06:2:59:1789305583528]][[S06:2:60:1789305583554]][[S06:2:61:1789305583579]][[S06:2:62:1789305583605]][[S06:2:63:1789305583633]][[S06:2:64:1789305583659]][[S06:2:65:1789305583684]][[S06:2:66:1789305583710]][[S06:2:67:1789305583740]][[S06:2:68:1789305583765]][[S06:2:69:1789305583791]][[S06:2:70:1789305583818]][[S06:2:71:1789305583844]][[S06:2:72:1789305583870]][[S06:2:73:1789305583897]][[S06:2:74:1789305583922]][[S06:2:75:1789305583949]][[S06:2:76:1789305583974]][[S06:2:77:1789305584002]][[S06:2:78:1789305584031]][[S06:2:79:1789305584056]][[S06:2:80:1789305584082]][[S06:2:81:1789305584107]][[S06:2:82:1789305584135]][[S06:2:83:1789305584163]][[S06:2:84:1789305584188]][[S06:2:85:1789305584214]][[S06:2:86:1789305584241]][[S06:2:87:1789305584266]][[S06:2:88:1789305584293]][[S06:2:89:1789305584319]][[S06:2:90:1789305584345]][[S06:2:91:1789305584371]][[S06:2:92:1789305584398]][[S06:2:93:1789305584423]][[S06:2:94:1789305584450]][[S06:2:95:1789305584477]][[S06:2:96:1789305584503]][[S06:2:97:1789305584530]][[S06:2:98:1789305584556]][[S06:2:99:1789305584582]][[S06:2:100:1789305584608]][[S06:2:101:1789305584637]][[S06:2:102:1789305584663]][[S06:2:103:1789305584689]][[S06:2:104:1789305584717]][[S06:2:105:1789305584742]][[S06:2:106:1789305584769]][[S06:2:107:1789305584795]][[S06:2:108:1789305584822]][[S06:2:109:1789305584848]][[S06:2:110:1789305584875]][[S06:2:111:1789305584900]][[S06:2:112:1789305584930]][[S06:2:113:1789305584955]][[S06:2:114:1789305584982]][[S06:2:115:1789305585008]][[S06:2:116:1789305585034]][[S06:2:117:1789305585060]][[S06:2:118:1789305585087]][[S06:2:119:1789305585114]][[S06:2:120:1789305585141]][[S06:2:121:1789305585168]][[S06:2:122:1789305585194]][[S06:2:123:1789305585220]][[S06:2:124:1789305585246]][[S06:2:125:1789305585272]][[S06:2:126:1789305585299]][[S06:2:127:1789305585326]][[S06:2:128:1789305585351]][[S06:2:129:1789305585378]][[S06:2:130:1789305585405]][[S06:2:131:1789305585432]][[S06:2:132:1789305585459]][[S06:2:133:1789305585484]][[S06:2:134:1789305585511]][[S06:2:135:1789305585539]][[S06:2:136:1789305585565]][[S06:2:137:1789305585592]][[S06:2:138:1789305585617]][[S06:2:139:1789305585644]][[S06:2:140:1789305585670]][[S06:2:141:1789305585696]][[S06:2:142:1789305585722]][[S06:2:143:1789305585748]][[S06:2:144:1789305585774]][[S06:2:145:1789305585799]][[S06:2:146:1789305585826]][[S06:2:147:1789305585852]][[S06:2:148:1789305585878]][[S06:2:149:1789305585904]][[S06:2:150:1789305585929]][[S06:2:151:1789305585956]][[S06:2:152:1789305585983]][[S06:2:153:1789305586014]][[S06:2:154:1789305586040]][[S06:2:155:1789305586066]][[S06:2:156:1789305586091]][[S06:2:157:1789305586118]][[S06:2:158:1789305586145]][[S06:2:159:1789305586172]][[S06:2:160:1789305586197]][[S06:2:161:1789305586223]][[S06:2:162:1789305586251]][[S06:2:163:1789305586277]][[S06:2:164:1789305586304]][[S06:2:165:1789305586332]][[S06:2:166:1789305586358]][[S06:2:167:1789305586387]][[S06:2:168:1789305586412]][[S06:2:169:1789305586442]][[S06:2:170:1789305586468]][[S06:2:171:1789305586495]][[S06:2:172:1789305586520]][[S06:2:173:1789305586546]][[S06:2:174:1789305586573]][[S06:2:175:1789305586599]][[S06:2:176:1789305586630]][[S06:2:177:1789305586656]][[S06:2:178:1789305586682]][[S06:2:179:1789305586709]][[S06:2:180:1789305586734]][[S06:2:181:1789305586761]][[S06:2:182:1789305586791]][[S06:2:183:1789305586820]][[S06:2:184:1789305586847]][[S06:2:185:1789305586874]][[S06:2:186:1789305586901]][[S06:2:187:1789305586927]][[S06:2:188:1789305586953]][[S06:2:189:1789305586979]][[S06:2:190:1789305587006]][[S06:2:191:1789305587033]][[S06:2:192:1789305587060]][[S06:2:193:1789305587086]][[S06:2:194:1789305587111]][[S06:2:195:1789305587137]][[S06:2:196:1789305587162]][[S06:2:197:1789305587189]][[S06:2:198:1789305587214]][[S06:2:199:1789305587242]][[S06:2:200:1789305587267]]",
+      "lastPending": {
+        "pending": false
+      },
+      "lastClients": [
+        {
+          "client": 79993002,
+          "items": 1
+        }
+      ],
+      "warnLogLines": 4,
+      "warnLines": [
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:19:39.946Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 48316,
+          "instanceId": "DESKTOP-6PDT5SM:48316:01a09aec",
+          "warning": "UV_THREADPOOL_SIZE is unset: argon2id at 150-300 ms serialises on the default libuv pool of 4. Set it to at least 8 in the environment the process starts with (image ENV, Compose environment, systemd Environment=); a process cannot widen its own pool.",
+          "msg": "UV_THREADPOOL_SIZE is unset: argon2id at 150-300 ms serialises on the default libuv pool of 4. Set it to at least 8 in the environment the process starts with (image ENV, Compose environment, systemd Environment=); a process cannot widen its own pool."
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:19:39.990Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 48316,
+          "instanceId": "DESKTOP-6PDT5SM:48316:01a09aec",
+          "event": "readyz.recovered",
+          "state": "ready",
+          "reason": "ready",
+          "msg": "readiness is now ready"
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:19:40.047Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 48316,
+          "instanceId": "DESKTOP-6PDT5SM:48316:01a09aec",
+          "requestId": "01a09aec-6a0f-72bd-87d2-f4fa42553fae",
+          "event": "authz.origin_rejected",
+          "route": "/collab",
+          "originPresent": true,
+          "msg": "websocket origin rejected"
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:19:40.049Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 48316,
+          "instanceId": "DESKTOP-6PDT5SM:48316:01a09aec",
+          "requestId": "01a09aec-6a11-7153-8752-5edea88a87b7",
+          "event": "authz.origin_rejected",
+          "route": "/collab",
+          "originPresent": false,
+          "msg": "websocket origin rejected"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "spike": "S6",
+    "generatedAt": "2026-09-13T13:19:51.046Z",
+    "k6": {
+      "scenarios": ["observer", "probe", "origins"],
+      "thresholds": {
+        "checks": ["rate==1.0"],
+        "durable_ack_ms": ["p(95)<1000"],
+        "iridium_ws_connecting_ms": ["p(95)<500"],
+        "ws_connecting": ["p(95)<500"],
+        "yjs_propagation_ms": ["p(95)<250"]
+      }
+    },
+    "environment": {
+      "wsUrl": "ws://127.0.0.1:54836/collab",
+      "origin": "http://127.0.0.1:54836",
+      "document": "s06-note",
+      "vusPerScenario": 1,
+      "clientIdBase": 79993000,
+      "markers": 200,
+      "markerIntervalMs": 25
+    },
+    "metrics": {
+      "s06_propagation_zero_ms_samples": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "rate": 0.2726907867000123,
+          "count": 3
+        }
+      },
+      "ws_connecting": {
+        "contains": "time",
+        "values": {
+          "min": 1.5573,
+          "avg": 6.524299999999999,
+          "med": 7.373,
+          "p(90)": 8.81524,
+          "p(95)": 9.11662,
+          "max": 9.418,
+          "count": 5
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend"
+      },
+      "data_received": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "count": 33787,
+          "rate": 3071.1345367444383
+        }
+      },
+      "iterations": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 3,
+          "rate": 0.2726907867000123
+        }
+      },
+      "vus_max": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 3,
+          "min": 3,
+          "max": 3
+        }
+      },
+      "data_sent": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "count": 13605,
+          "rate": 1236.6527176845557
+        }
+      },
+      "s06_stateless_persisted": {
+        "contains": "default",
+        "values": {
+          "count": 23,
+          "rate": 2.0906293647000944
+        },
+        "type": "counter"
+      },
+      "ws_session_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 7228.8958,
+          "count": 3,
+          "min": 12.3898,
+          "avg": 4365.544133333334,
+          "med": 5855.3468,
+          "p(90)": 6954.186000000001,
+          "p(95)": 7091.5409
+        }
+      },
+      "vus": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 1,
+          "min": 1,
+          "max": 2
+        }
+      },
+      "yjs_propagation_ms": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 5,
+          "count": 200,
+          "min": 0,
+          "avg": 1.66,
+          "med": 2,
+          "p(90)": 2,
+          "p(95)": 3
+        },
+        "thresholds": {
+          "p(95)<250": {
+            "ok": true
+          }
+        }
+      },
+      "ws_msgs_received": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 655,
+          "rate": 59.53748842950268
+        }
+      },
+      "s06_markers_sent": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 200,
+          "rate": 18.179385780000818
+        }
+      },
+      "durable_ack_ms": {
+        "contains": "time",
+        "values": {
+          "p(95)": 212.04999999999998,
+          "max": 222,
+          "count": 200,
+          "min": 1,
+          "avg": 106.28,
+          "med": 106,
+          "p(90)": 203.1
+        },
+        "thresholds": {
+          "p(95)<1000": {
+            "ok": true
+          }
+        },
+        "type": "trend"
+      },
+      "iteration_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 11001.4718,
+          "count": 3,
+          "min": 1500.4612,
+          "avg": 6119.2085,
+          "med": 5855.6925,
+          "p(90)": 9972.31594,
+          "p(95)": 10486.89387
+        }
+      },
+      "ws_sessions": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 5,
+          "rate": 0.45448464450002046
+        }
+      },
+      "checks": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 1,
+          "passes": 18,
+          "fails": 0
+        },
+        "thresholds": {
+          "rate==1.0": {
+            "ok": true
+          }
+        }
+      },
+      "s06_markers_observed": {
+        "contains": "default",
+        "values": {
+          "count": 200,
+          "rate": 18.179385780000818
+        },
+        "type": "counter"
+      },
+      "iridium_sync_ms": {
+        "values": {
+          "avg": 8,
+          "med": 8,
+          "p(90)": 12,
+          "p(95)": 12.5,
+          "max": 13,
+          "count": 2,
+          "min": 3
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "iridium_ws_connecting_ms": {
+        "contains": "time",
+        "values": {
+          "med": 4.5,
+          "p(90)": 6.5,
+          "p(95)": 6.75,
+          "max": 7,
+          "count": 2,
+          "min": 2,
+          "avg": 4.5
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend"
+      },
+      "ws_msgs_sent": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 210,
+          "rate": 19.08835506900086
+        }
+      },
+      "iridium_sync_status_ms": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "min": 0,
+          "avg": 1.685,
+          "med": 2,
+          "p(90)": 3,
+          "p(95)": 3,
+          "max": 4,
+          "count": 200
+        }
+      }
+    },
+    "thresholdFailures": []
+  }
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "resources-list",
+    "name": "ResourcesList",
+    "description": "Server lists available resources with valid structure",
+    "status": "SUCCESS",
+    "timestamp": "2026-09-13T12:47:13.819Z",
+    "specReferences": [
+      {
+        "id": "MCP-Resources-List",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/resources#listing-resources"
+      }
+    ],
+    "details": {
+      "resourceCount": 1,
+      "resources": ["iridium://spike/static"]
+    }
+  }
+]

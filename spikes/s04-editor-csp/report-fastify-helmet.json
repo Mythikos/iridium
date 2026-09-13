@@ -1,0 +1,473 @@
+{
+  "host": "fastify-5.12.4 + @fastify/helmet-13.1.1 enableCSPNonces",
+  "cspHeaders": [
+    "default-src 'none';script-src 'self' 'nonce-c4acd3e67b335061eab0a088bb4eac86';style-src 'self' 'nonce-2e41cfb39519673df164d7a8c89a38ae';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'",
+    "default-src 'none';script-src 'self' 'nonce-765477bc2740f2e1004c0488c210e764';style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'"
+  ],
+  "noncesDiffer": true,
+  "consoleMessages": [
+    "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "error: Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00''. Either the 'unsafe-inline' keyword, a hash ('sha256-PDJ3YoDB2yA6xv5awcm/FBRC+djyoALx21/o0YymokY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+    "error: Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00''. Either the 'unsafe-inline' keyword, a hash ('sha256-WhygBFWDF/vCjEMHTklPlu+kO7EneHuwpfW03P34Fhs='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "error: Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00''. Either the 'unsafe-inline' keyword, a hash ('sha256-Am+REAjTMCuiIgF0aw0SRdV6QYA/ycRjePXyTB2YAcE='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "error: Applying inline style violates the following Content Security Policy directive 'style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00''. Either the 'unsafe-inline' keyword, a hash ('sha256-10NftZCZM8DRwF73VIpLLW7DCfc65zj9GHNQacHU0MU='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked."
+  ],
+  "report": {
+    "nonce": {
+      "present": true,
+      "length": 32
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "externalInputObserved": true,
+    "docLength": 517,
+    "remoteDocLength": 517,
+    "docsConverged": true,
+    "remoteCursor": {
+      "caretRendered": true,
+      "selectionMarkRendered": true,
+      "caretStyleAttribute": "background-color: #ee6352; border-color: #ee6352",
+      "caretInlineDeclarationCount": 0,
+      "caretComputedBackground": "rgba(0, 0, 0, 0)",
+      "caretComputedBorderLeft": "rgb(0, 0, 0)",
+      "selectionMarkStyleAttribute": "background-color: rgba(238, 99, 82, 0.2);",
+      "selectionMarkInlineDeclarationCount": 1,
+      "selectionMarkComputedBackground": "rgba(238, 99, 82, 0.2)",
+      "awarenessStates": 2
+    },
+    "preview": {
+      "hljsSpans": 11,
+      "codeBlocks": 1,
+      "elementsWithStyleAttribute": 0,
+      "highlightColourApplied": "rgb(255, 123, 114)"
+    },
+    "popover": {
+      "opened": true,
+      "positionerStyleAttribute": "position: absolute; top: 0px; left: 0px; --available-width: 1270px; --available-height: 768.515625px; --anchor-width: 66px; --anchor-height: 21px; --transform-origin: 39.984125000000006px -8px; transf",
+      "positionerInlineDeclarationCount": 9,
+      "rect": {
+        "x": 5,
+        "y": 126,
+        "width": 324,
+        "height": 127
+      },
+      "positioned": true
+    },
+    "tooltip": {
+      "opened": true,
+      "positionerInlineDeclarationCount": 9,
+      "rect": {
+        "x": 28,
+        "y": 50,
+        "width": 170,
+        "height": 39
+      }
+    },
+    "palette": {
+      "dialogOpened": true,
+      "listOpened": true,
+      "items": 6,
+      "positionerInlineDeclarationCount": 9,
+      "rect": {
+        "x": 472,
+        "y": 245,
+        "width": 115,
+        "height": 144
+      }
+    },
+    "select": {
+      "opened": true,
+      "items": 6,
+      "positionerInlineDeclarationCount": 12,
+      "rect": {
+        "x": 145,
+        "y": 87,
+        "width": 115,
+        "height": 162
+      },
+      "baseUiStyleElement": {
+        "hasNonce": true,
+        "nonceMatches": true,
+        "applied": true
+      }
+    },
+    "editorStyling": {
+      "mounted": true,
+      "contentWhiteSpace": "pre",
+      "contentFontFamily": "ui-monospace, SFMono-Regular, monospace",
+      "guttersBackground": "rgb(23, 23, 26)",
+      "caretColor": "rgba(0, 0, 0, 0)"
+    },
+    "styleElements": [
+      {
+        "hasNonce": true,
+        "nonceMatches": true,
+        "ruleCount": 2,
+        "firstRule": ".base-ui-disable-scrollbar { scrollbar-width: none; }"
+      },
+      {
+        "hasNonce": true,
+        "nonceMatches": true,
+        "ruleCount": 116,
+        "firstRule": ".ͼ1.cm-focused { outline: rgb(33, 33, 33) dotted 1px; }"
+      }
+    ],
+    "styleSheetCount": 3,
+    "inlineStyleAttributes": [
+      {
+        "selector": "body.",
+        "styleAttribute": "overflow: hidden;",
+        "inlineDeclarationCount": 2
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); position: fixed; top: 0px; left: 0px;",
+        "inlineDeclarationCount": 4
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "input.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "div.cm-gutters.cm-gutters-before",
+        "styleAttribute": "min-height: 499.062px; position: sticky;",
+        "inlineDeclarationCount": 2
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 0px; visibility: hidden; pointer-events: none;",
+        "inlineDeclarationCount": 3
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px; margin-top: 4px;",
+        "inlineDeclarationCount": 2
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-gutterElement",
+        "styleAttribute": "height: 18.1875px;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.cm-content",
+        "styleAttribute": "tab-size: 4;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "span.cm-ySelection",
+        "styleAttribute": "background-color: rgba(238, 99, 82, 0.2);",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "span.cm-ySelection",
+        "styleAttribute": "background-color: rgba(238, 99, 82, 0.2);",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "span.cm-ySelectionCaret",
+        "styleAttribute": "background-color: #ee6352; border-color: #ee6352",
+        "inlineDeclarationCount": 0
+      },
+      {
+        "selector": "div.cm-layer.cm-layer-above.cm-cursorLayer",
+        "styleAttribute": "z-index: 150; animation-duration: 1200ms; animation-name: cm-blink;",
+        "inlineDeclarationCount": 3
+      },
+      {
+        "selector": "div.cm-cursor.cm-cursor-primary",
+        "styleAttribute": "left: 106.906px; top: 241.438px; height: 15px;",
+        "inlineDeclarationCount": 3
+      },
+      {
+        "selector": "div.cm-layer.cm-selectionLayer",
+        "styleAttribute": "z-index: -2;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "div.",
+        "styleAttribute": "position: absolute; top: 0px; left: 0px; --available-width: 1270px; --available-height: 84.484375px; --anchor-width: 54p",
+        "inlineDeclarationCount": 9
+      },
+      {
+        "selector": "div.s04-popup",
+        "styleAttribute": "",
+        "inlineDeclarationCount": 0
+      },
+      {
+        "selector": "div.",
+        "styleAttribute": "position: fixed; inset: 0px; user-select: none;",
+        "inlineDeclarationCount": 6
+      },
+      {
+        "selector": "div.s04-backdrop",
+        "styleAttribute": "user-select: none;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "div.s04-palette",
+        "styleAttribute": "--nested-dialogs: 0;",
+        "inlineDeclarationCount": 1
+      },
+      {
+        "selector": "input.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "div.",
+        "styleAttribute": "position: fixed; inset: 0px; user-select: none; clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 148.203px ",
+        "inlineDeclarationCount": 7
+      },
+      {
+        "selector": "div.",
+        "styleAttribute": "position: fixed; --available-width: 1270px; --available-height: 776.015625px; --anchor-width: 16px; --anchor-height: 6px",
+        "inlineDeclarationCount": 12
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      },
+      {
+        "selector": "div.s04-popup",
+        "styleAttribute": "height: 100%; --transform-origin: 50% 13.541666666666666%;",
+        "inlineDeclarationCount": 2
+      },
+      {
+        "selector": "div.",
+        "styleAttribute": "position: relative; max-height: 100%; overflow: hidden auto;",
+        "inlineDeclarationCount": 4
+      },
+      {
+        "selector": "span.",
+        "styleAttribute": "clip-path: inset(50%); overflow: hidden; white-space: nowrap; border: 0px; padding: 0px; width: 1px; height: 1px; margin",
+        "inlineDeclarationCount": 35
+      }
+    ],
+    "violations": [
+      {
+        "effectiveDirective": "style-src-attr",
+        "violatedDirective": "style-src-attr",
+        "blockedURI": "inline",
+        "disposition": "enforce",
+        "sourceFile": "http://127.0.0.1:56554/assets/index-CWHMX2NV.js",
+        "lineNumber": 86485,
+        "columnNumber": 11,
+        "sample": "",
+        "originalPolicy": "default-src 'none';script-src 'self' 'nonce-765477bc2740f2e1004c0488c210e764';style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'",
+        "phase": "remote-cursor"
+      }
+    ],
+    "violationCount": 1,
+    "remedy": {
+      "caretRendered": true,
+      "selectionMarkRendered": true,
+      "caretHasStyleAttribute": true,
+      "caretInlineDeclarationCount": 5,
+      "caretComputedBackground": "rgb(238, 99, 82)",
+      "caretComputedBorderLeft": "rgb(238, 99, 82)",
+      "selectionMarkComputedBackground": "rgba(238, 99, 82, 0.2)",
+      "violations": []
+    },
+    "facetControl": {
+      "withNonce": {
+        "styleElements": 1,
+        "hasNonce": [true],
+        "sheetsApplied": [true],
+        "ruleCounts": [75],
+        "contentFontFamily": "ui-monospace, SFMono-Regular, monospace",
+        "violations": []
+      },
+      "withoutNonce": {
+        "styleElements": 1,
+        "hasNonce": [false],
+        "sheetsApplied": [false],
+        "ruleCounts": [-1],
+        "contentFontFamily": "\"Times New Roman\"",
+        "violations": [
+          {
+            "effectiveDirective": "style-src-elem",
+            "blockedURI": "inline"
+          }
+        ]
+      }
+    },
+    "control": {
+      "violations": [
+        {
+          "effectiveDirective": "style-src-elem",
+          "violatedDirective": "style-src-elem",
+          "blockedURI": "inline",
+          "disposition": "enforce",
+          "sourceFile": "http://127.0.0.1:56554/assets/index-CWHMX2NV.js",
+          "lineNumber": 95843,
+          "columnNumber": 16,
+          "sample": "",
+          "originalPolicy": "default-src 'none';script-src 'self' 'nonce-765477bc2740f2e1004c0488c210e764';style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'",
+          "phase": "control"
+        },
+        {
+          "effectiveDirective": "style-src-attr",
+          "violatedDirective": "style-src-attr",
+          "blockedURI": "inline",
+          "disposition": "enforce",
+          "sourceFile": "http://127.0.0.1:56554/assets/index-CWHMX2NV.js",
+          "lineNumber": 95845,
+          "columnNumber": 14,
+          "sample": "",
+          "originalPolicy": "default-src 'none';script-src 'self' 'nonce-765477bc2740f2e1004c0488c210e764';style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'",
+          "phase": "control"
+        }
+      ],
+      "styleElementBlocked": true,
+      "styleAttributeBlocked": true,
+      "enforcing": true
+    },
+    "observedPolicy": "default-src 'none';script-src 'self' 'nonce-765477bc2740f2e1004c0488c210e764';style-src 'self' 'nonce-28cb5b9b7737eed6fa2fc60711b3be00';img-src 'self' data: blob:;font-src 'self';connect-src 'self';worker-src 'self' blob:;frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'"
+  }
+}

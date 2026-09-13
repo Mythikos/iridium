@@ -95,6 +95,14 @@ export default defineConfig({
       env: react.env,
       rules: {
         ...react.rules,
+        // A stylesheet entry is imported for its side effect: that is how Vite sees Tailwind's entry
+        // (07-client-applications.md section 6), and the component project's axe matchers register the same way.
+        'import/no-unassigned-import': [
+          'error',
+          { allow: ['**/*.css', 'vitest-axe/extend-expect'] },
+        ],
+        // `__IRIDIUM_VERSION__` is the build-time define fixed by 07-client-applications.md section 6.1.
+        'no-underscore-dangle': ['error', { allow: ['__IRIDIUM_VERSION__'] }],
         'no-restricted-imports': [
           'error',
           {
@@ -118,6 +126,13 @@ export default defineConfig({
           'error',
           { paths: [...bannedEverywhere, ...yjsRestricted, ...platformBans.react] },
         ],
+      },
+    },
+    {
+      files: ['apps/web/src/**', 'apps/desktop/src/renderer/**'], // the two Vite entries
+      rules: {
+        'import/no-unassigned-import': ['error', { allow: ['**/*.css'] }],
+        'no-underscore-dangle': ['error', { allow: ['__IRIDIUM_VERSION__'] }],
       },
     },
     {

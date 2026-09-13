@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "a1",
+      "type": "text",
+      "text": "Canvas nodes are not Markdown",
+      "x": 0,
+      "y": 0,
+      "width": 260,
+      "height": 80
+    },
+    {
+      "id": "a2",
+      "type": "file",
+      "file": "Home.md",
+      "x": 320,
+      "y": 0,
+      "width": 260,
+      "height": 80
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "a1",
+      "fromSide": "right",
+      "toNode": "a2",
+      "toSide": "left"
+    }
+  ]
+}

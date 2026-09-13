@@ -1,0 +1,262 @@
+{
+  "spike": "S6",
+  "generatedAt": "2026-09-13T13:20:03.415Z",
+  "k6": {
+    "scenarios": ["observer", "probe", "origins"],
+    "thresholds": {
+      "ws_connecting": ["p(95)<500"],
+      "yjs_propagation_ms": ["p(95)<250"],
+      "checks": ["rate==1.0"],
+      "durable_ack_ms": ["p(95)<1000"],
+      "iridium_ws_connecting_ms": ["p(95)<500"]
+    }
+  },
+  "environment": {
+    "wsUrl": "ws://127.0.0.1:62005/collab",
+    "origin": "http://127.0.0.1:62005",
+    "document": "s06-note",
+    "vusPerScenario": 1,
+    "clientIdBase": 92360000,
+    "markers": 200,
+    "markerIntervalMs": 25
+  },
+  "metrics": {
+    "iridium_sync_status_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 0,
+        "avg": 1.715,
+        "med": 2,
+        "p(90)": 3,
+        "p(95)": 3,
+        "max": 8,
+        "count": 200
+      }
+    },
+    "s06_markers_observed": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 200,
+        "rate": 18.174201869474736
+      }
+    },
+    "ws_sessions": {
+      "values": {
+        "count": 5,
+        "rate": 0.4543550467368684
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 3,
+        "min": 3,
+        "max": 3
+      }
+    },
+    "data_received": {
+      "values": {
+        "rate": 3070.2587928197145,
+        "count": 33787
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 3,
+        "rate": 0.272613028042121
+      }
+    },
+    "yjs_propagation_ms": {
+      "values": {
+        "avg": 1.655,
+        "med": 2,
+        "p(90)": 2,
+        "p(95)": 3,
+        "max": 6,
+        "count": 200,
+        "min": 0
+      },
+      "thresholds": {
+        "p(95)<250": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "iridium_sync_ms": {
+      "values": {
+        "min": 3,
+        "avg": 8,
+        "med": 8,
+        "p(90)": 12,
+        "p(95)": 12.5,
+        "max": 13,
+        "count": 2
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 13605,
+        "rate": 1236.3000821710189
+      }
+    },
+    "ws_msgs_received": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 655,
+        "rate": 59.520511122529754
+      }
+    },
+    "s06_markers_sent": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 200,
+        "rate": 18.174201869474736
+      }
+    },
+    "checks": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 18,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate==1.0": {
+          "ok": true
+        }
+      }
+    },
+    "ws_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 6.551,
+        "med": 6.0001,
+        "p(90)": 9.5043,
+        "p(95)": 9.5043,
+        "max": 9.5043,
+        "count": 5,
+        "min": 1.7462
+      },
+      "thresholds": {
+        "p(95)<500": {
+          "ok": true
+        }
+      }
+    },
+    "ws_session_duration": {
+      "values": {
+        "count": 3,
+        "min": 12.3529,
+        "avg": 4369.956866666666,
+        "med": 5858.9544,
+        "p(90)": 6962.64152,
+        "p(95)": 7100.6024099999995,
+        "max": 7238.5633
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "count": 3,
+        "min": 1500.4652,
+        "avg": 6121.343133333333,
+        "med": 5858.9544,
+        "p(90)": 9975.47872,
+        "p(95)": 10490.044259999999,
+        "max": 11004.6098
+      }
+    },
+    "s06_propagation_zero_ms_samples": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 5,
+        "rate": 0.4543550467368684
+      }
+    },
+    "iridium_ws_connecting_ms": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 6,
+        "count": 2,
+        "min": 2,
+        "avg": 4,
+        "med": 4,
+        "p(90)": 5.6,
+        "p(95)": 5.8
+      },
+      "thresholds": {
+        "p(95)<500": {
+          "ok": true
+        }
+      }
+    },
+    "ws_msgs_sent": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 19.082911962948472,
+        "count": 210
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 1,
+        "min": 1,
+        "max": 2
+      }
+    },
+    "durable_ack_ms": {
+      "thresholds": {
+        "p(95)<1000": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 106.565,
+        "med": 107,
+        "p(90)": 204,
+        "p(95)": 213.04999999999998,
+        "max": 219,
+        "count": 200,
+        "min": 1
+      }
+    },
+    "s06_stateless_persisted": {
+      "values": {
+        "count": 23,
+        "rate": 2.0900332149895946
+      },
+      "type": "counter",
+      "contains": "default"
+    }
+  },
+  "thresholdFailures": []
+}

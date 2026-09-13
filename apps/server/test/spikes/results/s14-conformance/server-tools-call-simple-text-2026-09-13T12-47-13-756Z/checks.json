@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tools-call-simple-text",
+    "name": "ToolsCallSimpleText",
+    "description": "Tool returns simple text content",
+    "status": "FAILURE",
+    "timestamp": "2026-09-13T12:47:13.761Z",
+    "errorMessage": "Failed: MCP error -32602: Tool test_simple_text not found",
+    "specReferences": [
+      {
+        "id": "MCP-Tools-Call",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools"
+      }
+    ]
+  }
+]

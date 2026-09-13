@@ -28,6 +28,7 @@
   },
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
     "tsdown": "catalog:"
   }
 }

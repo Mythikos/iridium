@@ -1,0 +1,10 @@
+/*
+ * The application stylesheet both hosts import (07-client-applications.md §3.1, §3.6).
+ *
+ * It lives in `@iridium/ui` rather than in either app because `tailwindcss` is a dependency of this
+ * package, because the design tokens and the light / dark / high-contrast themes of §9.1 land beside
+ * it in `theme/`, and because one stylesheet shared by the browser tab and the Electron renderer is
+ * the CSS half of "one UI codebase, two hosts". Nothing here is loaded from a network: the bundle
+ * carries its own CSS and fonts, which is what lets both CSPs keep `font-src 'self'` with no CDN.
+ */
+@import 'tailwindcss';

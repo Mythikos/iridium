@@ -1,0 +1,55 @@
+# Redocly configuration for the committed OpenAPI document (09-api-reference.md §6).
+#
+# `@redocly/cli 2.52.1 lint` is step 2 of `pnpm gen` and an L0 gate in its own right
+# (10-testing-and-quality.md, the pyramid's L0 row lists Redocly beside tsc, oxlint and the gen drift
+# check). It runs immediately after the export so that a schema mistake is reported against the
+# document the server produced, before `openapi-typescript` turns it into the types every client
+# compiles against.
+#
+# The configuration lives next to the document rather than at the repository root because the
+# document is owned by `@iridium/contracts`, which is also the workspace that declares `@redocly/cli`.
+#
+# Every rule that is relaxed below carries its reason. Nothing that affects the *contract* is relaxed:
+# `spec` stays an error, so a document that is not valid OpenAPI 3.1 fails the job.
+
+apis:
+  iridium@v1:
+    root: ./openapi.json
+
+extends:
+  - recommended
+
+rules:
+  # A document that is not valid OpenAPI 3.1 is a build failure, never a warning.
+  spec: error
+  struct: error
+
+  # Iridium's API document is not a published artefact; it describes one deployment's own server and
+  # is served to that server's administrators (ARCH-27). A licence and a contact block would be
+  # invented metadata, and 09-api-reference.md §6 fixes the `info` fields that do exist.
+  info-license: off
+  info-license-strict: off
+  info-contact: off
+
+  # `operationId` is `<domain>.<verb>` exactly as in §2.18, which is dot-separated rather than
+  # camelCase. The convention is asserted by `rest.route-index.contract` against that table, so
+  # Redocly's own casing preference would be a second, conflicting authority.
+  operation-operationId-url-safe: error
+  operation-operationId-unique: error
+  operation-operationId: error
+
+  # Every operation documents every `ProblemDetails` code it can produce (§6), and the contract test
+  # `openapi.contract` asserts that from the `ErrorCode` enum. Redocly's blanket "must define a 4xx"
+  # rule would duplicate that check less precisely, and it cannot express the two documented
+  # exceptions (the MCP mounts and the `/oauth/*` operations declare their own error shapes).
+  operation-4xx-response: off
+
+  # Examples come from the integration-test fixtures so they cannot rot (§6). The rule that every
+  # example must validate stays on; the rule that every parameter must *have* one does not, because
+  # a path parameter's example is a UUIDv7 and repeating one per parameter adds no information.
+  no-invalid-media-type-examples: error
+  operation-parameters-unique: error
+
+  # Anonymous inline schemas are a lint failure by §6: every component schema is named from
+  # `z.globalRegistry`.
+  no-unresolved-refs: error

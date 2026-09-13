@@ -17,6 +17,7 @@
     { "path": "apps/desktop" },
     { "path": "apps/e2e" },
     { "path": "tooling/oxlint-config" },
-    { "path": "tooling/mutation" }
+    { "path": "tooling/mutation" },
+    { "path": "spikes/s04-editor-csp" }
   ]
 }

@@ -263,7 +263,7 @@ Exact decisions encoded above:
 | Comments / doctype | removed | |
 | `ancestors` | table parts require `table`; `li` requires `ol`/`ul` | structural sanity |
 
-`hast-util-sanitize` applies protocol checks after percent-decoding and whitespace/control-character stripping, and the XSS corpus (`fixtures/hostile/*.md`) asserts at the hast level that: `javascript:`, `vbscript:`, `data:`, `file:`, `ftp:`, `tel:` hrefs and `data:image/*` srcs are removed; raw `<script>`, `<img onerror>`, `<iframe>`, `<svg onload>`, `<math>`, `<meta http-equiv>`, `<base>`, `<form>` are escaped text; ids not prefixed `user-content-` are dropped; `%0A`, `&#x6A;avascript:`, tab/newline-embedded schemes, fullwidth colons and RTL overrides do not smuggle a scheme through; 10 000 nested `>` and 200 000-line paragraphs are rejected by `prescan` before parsing. The same corpus runs in Chromium component tests (`preview.component.test.tsx`, real DOM, no script executes, no navigation, `window.iridium` unreachable) and in the web and Electron E2E suites (`security.hostile-markdown`).
+`hast-util-sanitize` applies protocol checks after percent-decoding and whitespace/control-character stripping, and the XSS corpus (`fixtures/hostile/*.md`) asserts at the hast level that: `javascript:`, `vbscript:`, `data:`, `file:`, `ftp:`, `tel:` hrefs and `data:image/*` srcs are removed; raw `<script>`, `<img onerror>`, `<iframe>`, `<svg onload>`, `<math>`, `<meta http-equiv>`, `<base>`, `<form>` are escaped text; ids not prefixed `user-content-` are dropped; `%0A`, `&#x6A;avascript:`, tab/newline-embedded schemes, fullwidth colons and RTL overrides do not smuggle a scheme through; 10 000 nested `>` and 200 000-line paragraphs are rejected by `prescan` before parsing. The same corpus runs in Chromium component tests (`preview.inertness.component.test.tsx`, real DOM, no script executes, no navigation, `window.iridium` unreachable) and in the web and Electron E2E suites (`security.hostile-markdown`).
 
 DOMPurify 3.4.15 is not on the render path. It exists only in `@iridium/markdown-react/src/html-sink.ts` for any future HTML-string sink (mermaid `srcdoc`, HTML export preview) with the fixed configuration `{ USE_PROFILES: { html: true }, FORBID_TAGS: ['form','input','style','math','svg','iframe','object','embed'], FORBID_ATTR: ['style'], CUSTOM_ELEMENT_HANDLING: { tagNameCheck: null, attributeNameCheck: null, allowCustomizedBuiltInElements: false }, ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|iridium-attachment:|\/api\/v1\/vaults\/)/i, RETURN_TRUSTED_TYPE: false }`. No MVP feature calls it (printing renders the React tree); the module ships with its own test so the first consumer cannot introduce it unconfigured.
 
@@ -277,7 +277,7 @@ DOMPurify 3.4.15 is not on the render path. It exists only in `@iridium/markdown
 - `src/worker/preview.worker.ts` + `src/worker/client.ts` — the Web Worker (§2.11).
 - `src/html-sink.ts` — the DOMPurify helper (§2.8), unused by MVP features.
 
-There is no `dangerouslySetInnerHTML` anywhere in `@iridium/markdown-react` or `@iridium/ui` (lint rule `react/no-danger: error`, plus a grep guard test `no-inner-html.unit`).
+There is no `dangerouslySetInnerHTML` anywhere in `@iridium/markdown-react` or `@iridium/ui` (lint rule `react/no-danger: error`, plus a grep guard test `guards.no-inner-html.guard`).
 
 ### 2.10 Pre-scan caps and pathological input
 
@@ -1394,8 +1394,8 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 | Golden | `packages/markdown/fixtures/golden/*.md` with `.mdast.json`, `.hast.json`, `.html`, `.projection.json` | one file per feature (headings, tables, task lists, footnotes, autolinks, frontmatter variants, nested lists, code fences, images, reference links, hard breaks) |
 | Hostile | `packages/markdown/fixtures/hostile/*.md` | the XSS corpus of §2.8 plus DOM-clobbering ids, CSS injection attempts, percent/entity/Unicode scheme smuggling, RTL overrides |
 | Pathological | `packages/markdown/fixtures/pathological/*.md` | `*a_` × 20 000, 10 000 nested `>`, 1 000-deep lists, 200 000-line paragraph, 10 000 footnote refs, 200 000 `[` |
-| Obsidian sample vault | `packages/testkit/fixtures/obsidian-vault/` | every catalogue construct of §6.3, `.obsidian/` with `app.json` (`attachmentFolderPath`, `strictLineBreaks:false`), `plugins/`, `themes/`, `.trash/`, a `.canvas`, a `.base`, CRLF and CR files, a BOM file, a mixed-EOL file, an invalid-UTF-8 file, case-colliding siblings, a `Notes/` + `Notes.md` pair, a zip-slip archive variant, a 60 MiB attachment, an unsupported `.exe`, and a `manifest.json` |
-| Export round-trip | `packages/testkit/fixtures/roundtrip/` | byte-exact input/output pairs used by `markdown.roundtrip.prop` seeds and `export-roundtrip.e2e` |
+| Obsidian sample vault | `packages/testkit/src/fixtures/vaults/obsidian-sample/` | every catalogue construct of §6.3, `.obsidian/` with `app.json` (`attachmentFolderPath`, `strictLineBreaks:false`), `plugins/`, `themes/`, `.trash/`, a `.canvas`, a `.base`, CRLF and CR files, a BOM file, a mixed-EOL file, an invalid-UTF-8 file, case-colliding siblings, a `Notes/` + `Notes.md` pair, a zip-slip archive variant, a 60 MiB attachment, an unsupported `.exe`, and a `manifest.json` |
+| Export round-trip | `packages/testkit/src/fixtures/roundtrip/` | byte-exact input/output pairs used by `markdown.roundtrip.prop` seeds and `export-roundtrip.e2e` |
 
 ### 11.2 Test matrix
 
@@ -1412,7 +1412,7 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 | `markdown.roundtrip.prop` | property | `restoreSource(normalizeSource(bytes)) === bytes` for the uniform-EOL class; idempotence for the rest (§4.3) |
 | `markdown.body-text-map.prop` | property | every non-synthetic `bodyText` offset maps to the matching source character |
 | `markdown.attachment-reference.prop` | property | reference encoding/decoding round-trips for generated file names |
-| `links.resolve.prop` | property | resolution is total (always one `ResolvedLink`), never throws, never leaves the vault, and is stable under path folding |
+| `markdown.links.prop` | property | resolution is total (always one `ResolvedLink`), never throws, never leaves the vault, and is stable under path folding |
 | `preview.data-attributes.spec` | unit | the `'*'` attribute list of `iridiumSanitizeSchema` equals the set of `data-*` hints the `@iridium/markdown-react` overrides consume (§2.8), so `data-note-id` can never be dropped from the schema while the renderer still reads it |
 | `links.anchor-rows.unit` | unit | a valid same-note anchor projects `status='resolved'` with `resolved_node_id = from_note_id`; an invalid one projects `broken`; no row ever has both target columns `NULL` while `resolved` (§5.3) |
 | `links.index-fallback.integration` | integration | above `VAULT_INDEX_MAX_ENTRIES` the server resolves per link through the lazy `VaultIndex` and the preview resolves through `GET /notes/:noteId/links`, with identical classifications for a projected note (§5.2) |
@@ -1420,10 +1420,10 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 | `detector.pathological.spec` | unit | detector time is linear on the pathological corpus |
 | `markdown.pipeline-version.guard` | unit | a golden-fixture change without a `PIPELINE_VERSION` bump fails |
 | `deps.banned-imports` | unit (grep) | no `remark-stringify`, `mdast-util-to-markdown`, `gray-matter`, `markdown-it`, `shiki`, `isomorphic-dompurify`, `remark-obsidian` anywhere |
-| `no-inner-html.unit` | unit (grep) | no `dangerouslySetInnerHTML` in `@iridium/markdown-react` or `@iridium/ui` |
+| `guards.no-inner-html.guard` | guard (grep) | no `dangerouslySetInnerHTML` in `@iridium/markdown-react` or `@iridium/ui` |
 | `preview.worker-only.unit` | unit (grep) | no UI-thread import of the parse entry points |
 | `projection.worker-isolation.unit` | unit | the server never calls `parseNote` outside a piscina worker entry |
-| `preview.component.test.tsx` | component (Chromium) | hostile fixtures render inert in a real DOM: no script, no navigation, no `window.iridium` reach; axe clean |
+| `preview.inertness.component.test.tsx` | component (Chromium) | hostile fixtures render inert in a real DOM: no script, no navigation, no `window.iridium` reach; axe clean |
 | `projection.monotonic` | integration | out-of-order projection writes never regress a revision; `projected_seq` advances last |
 | `projection.title-after-rename` | integration | `note_search.title` follows a rename for notes without an H1 |
 | `projection.reindex.integration` | integration | `--stale`, `--pipeline-version` and `--note` selections, throttling, and flush-before-project for loaded notes |
@@ -1434,14 +1434,14 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 | `lock-order.integration` | integration | concurrent trash + edits + projections + audits never deadlock |
 | `transfer.fixtures.integration` | integration | the Obsidian sample vault scans and commits with the expected report, tree, attachments and links |
 | `import.unsafe-paths` | integration | every row of §7.5, with POSIX and Windows fixtures |
-| `transfer.zip-bomb.unit` | unit | ratio and expanded-size guards fire before expansion |
+| `import.unsafe-paths.unit` | unit | ratio and expanded-size guards fire before expansion |
 | `import.classification.unit` | unit | the classification table of §7.6, including `.mdx`, `.txt`, noise files and an Iridium manifest |
 | `import.commit.integration` | integration | one note per file, `origin='import'` exactly once, no visible vault before the flip, idempotent resume after three kill points, collision policies |
 | `export.manifest` | integration | manifest keys, per-note revisions and hashes, warning codes, deterministic entry order |
 | `export.sanitized-paths.unit` | unit | Windows-illegal name mapping and collision suffixing |
-| `attachments.mime-policy.unit` | unit | the acceptance rules of §9.3, including OOXML/ODF/CFB and every rejected class |
+| `attachments.security.integration` | integration | the acceptance rules of §9.3, including OOXML/ODF/CFB and every rejected class |
 | `attachments.security` | integration | header table of §9.4, cross-vault id access returns 404, SVG never `inline`, missing bytes return 503 |
-| `attachments.range.integration` | integration | single-range requests, `If-None-Match` → 304, `ETag` stability |
+| `attachments.dedupe.integration` | integration | single-range requests, `If-None-Match` → 304, `ETag` stability |
 | `attachments.unreferenced-report` | integration | rows, revision-only references and orphan blobs; purge respects every guard |
 | `mirror.integration` | integration | incremental writes, move handling, refusal on a non-empty directory, `--adopt` |
 | `import-report.e2e`, `export-roundtrip.e2e`, `attachments.e2e` | E2E (web + Electron) | the wizard, the decisions, the download/save flows, overwrite protection, paste/drag-drop upload |

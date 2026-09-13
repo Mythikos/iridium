@@ -1,0 +1,367 @@
+# Release lanes (10-testing-and-quality.md, "CI lanes" › `release.yml`;
+# 11-operations-and-deployment.md, "Container images and build" and "What a release is";
+# 12-milestones.md §4.3 row "CI" and §12.3).
+#
+# Two triggers, because the workflow owns both halves of a release:
+#   * a push to `main` runs `version-pr` only — `changesets/action` keeps the Version PR open;
+#   * a tag produced by `changeset git-tag` runs everything else against the tagged tree.
+# A tag is never trusted to match a green pull request, which is why `verify` re-runs the
+# blocking lanes before anything is built or published.
+#
+# There are no signing or notarisation secrets: none exist at 1.0, and the six desktop
+# bundles ship unsigned (07-client-applications.md §7.14, 11-operations-and-deployment.md).
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/iridium-server
+
+jobs:
+  # Re-run `static`, `unit`, `integration` and the license scan against the tagged tree.
+  verify:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
+    env:
+      IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
+      IRIDIUM_PROP_RUNS: '200'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Build
+        run: pnpm turbo run build
+
+      - name: Static gates
+        run: |
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project guard
+          pnpm exec tsc -b --builders 8
+          pnpm exec oxlint -c oxlint.config.ts --type-aware .
+          pnpm exec oxfmt --check .
+          pnpm exec knip --production
+          pnpm exec turbo boundaries
+          pnpm gen:check
+
+      - name: License scan against the tagged tree
+        run: node scripts/check-licenses.ts
+
+      - name: Unit and component projects
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit --project component
+
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .
+
+      - name: Integration, contract and mcp projects
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project integration --project contract --project mcp
+
+      # `release.yml` fails if a release contains a migration without a `[migration]` flag
+      # in the generated changelog (11-operations-and-deployment.md, "Release-note flags an
+      # operator must read").
+      - name: Release-note flags
+        run: |
+          set -euo pipefail
+          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -z "$previous" ]; then
+            echo 'No previous tag; nothing to compare.'
+            exit 0
+          fi
+          migrations="$(git diff --name-only "$previous" "$GITHUB_REF_NAME" -- 'apps/server/**/migrations/**' || true)"
+          if [ -n "$migrations" ] && ! grep -q '\[migration\]' CHANGELOG.md; then
+            echo "The release changes migrations but the changelog carries no [migration] flag:"
+            echo "$migrations"
+            exit 1
+          fi
+
+  # `docker/setup-buildx-action` → `docker/build-push-action@v7.3.0` with SBOM and
+  # provenance attestation → syft SBOM + grype scan → push by digest.
+  server-image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Image tags: `1.2.3` (immutable), `1.2` and `1` (floating), never `latest`.
+      - name: Resolve the version and the tag set
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          major="${version%%.*}"
+          minor="${version%.*}"
+          {
+            echo "version=$version"
+            echo "tags=${IMAGE_NAME}:${version},${IMAGE_NAME}:${minor},${IMAGE_NAME}:${major}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the server image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: infra/docker/server.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.version.outputs.tags }}
+          provenance: mode=max
+          sbom: true
+
+      # The digest is what the release notes print and what the scan and the SBOM below
+      # are taken against, so nothing downstream depends on a mutable tag.
+      - name: Record the pushed digest
+        run: |
+          echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: SBOM (syft, CycloneDX)
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          artifact-name: iridium-server-sbom.cdx.json
+          output-file: iridium-server-sbom.cdx.json
+
+      # A `critical` or `high` finding with a fix available fails the release.
+      - name: Vulnerability scan (grype)
+        uses: anchore/scan-action@8576240a41341d866dbd7ebc72cd9fc0ef023f54 # v7.4.2
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+
+      # Version drift between the image, the web bundle, the desktop bundles and the bridge
+      # is the failure this catches; `mysqldump` must report 9.7.x because one client serves
+      # both server lines (11-operations-and-deployment.md, "Image hygiene checks").
+      - name: Image hygiene
+        run: |
+          set -euo pipefail
+          ref="${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+          reported="$(docker run --rm "$ref" --version)"
+          echo "iridium --version: $reported"
+          case "$reported" in
+            *"${{ steps.version.outputs.version }}"*) ;;
+            *) echo 'The image version does not equal the Changesets version.'; exit 1 ;;
+          esac
+          docker run --rm --entrypoint mysqldump "$ref" --version | grep -E '\b9\.7\.'
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-image-sbom
+          path: iridium-server-sbom.cdx.json
+          retention-days: 90
+
+  # electron-builder matrix with no signing or notarisation secrets. The E2E fuse variant
+  # is built and smoke-tested first (production fuses except `enableNodeCliInspectArguments`),
+  # then the final artefacts, then `bundles.json` and `SHA256SUMS`, then
+  # `release.bundle-integrity` and a launch-and-exit sanity check over them.
+  desktop:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # No signing at 1.0: electron-builder must not go looking for an identity.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Install the Playwright Linux dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install-deps chromium
+
+      - name: Build the renderer, the preload and the main process
+        run: pnpm turbo run build --filter=@iridium/desktop
+
+      - name: Package the E2E fuse variant
+        env:
+          IRIDIUM_FUSE_VARIANT: e2e
+        run: pnpm --filter @iridium/desktop exec electron-builder --publish never
+
+      - name: Packaged smoke against the fuse variant (Linux, under xvfb)
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum
+          pnpm exec playwright test -c playwright.config.ts --project=electron
+          --grep @packaged --pass-with-no-tests
+
+      - name: Packaged smoke against the fuse variant
+        if: runner.os != 'Linux'
+        shell: bash
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=electron
+          --grep @packaged --pass-with-no-tests
+
+      - name: Package the release artefacts
+        run: pnpm --filter @iridium/desktop exec electron-builder --publish never
+
+      - name: Write bundles.json and SHA256SUMS
+        run: node tooling/release/write-bundle-manifest.ts
+
+      - name: release.bundle-integrity
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project guard apps/desktop
+
+      - name: Upload the bundles
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-bundles-${{ matrix.os }}
+          path: apps/desktop/release/
+          if-no-files-found: error
+          retention-days: 90
+
+  # Publish the six bundles through `iridium desktop-updates publish <dir>`, which re-verifies
+  # both digests server-side; then fetch `<PUBLIC_ORIGIN>/desktop/updates/<channel>/SHA256SUMS`
+  # and `<PUBLIC_ORIGIN>/api/v1/desktop/update-policy` and assert the published digests equal
+  # the built ones. There is no end-to-end updater test at 1.0 — there is no updater.
+  release-feed:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop, server-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Download the bundles from all three runners
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: desktop-bundles-*
+          merge-multiple: true
+          path: release
+
+      - name: Verify the bundles
+        run: pnpm --filter @iridium/server run iridium desktop-updates verify release
+
+      - name: Publish the release feed
+        run: pnpm --filter @iridium/server run iridium desktop-updates publish release
+
+      - name: Assert the published digests equal the built ones
+        run: node scripts/check-release-feed.ts release
+
+  # Build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`, then run
+  # `bridge.parity.contract` against the release image.
+  bridge:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: server-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Build the bridge
+        run: pnpm turbo run build --filter=@iridium/mcp-bridge
+
+      - name: bridge.parity.contract against the release image
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project contract packages/mcp-bridge
+
+      - name: Upload the bridge bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: iridium-mcp
+          path: packages/mcp-bridge/dist/
+          if-no-files-found: error
+          retention-days: 90
+
+  # The backup/restore drill against the release image, so "restorable" is a property of the
+  # artefact and not of `main`.
+  drill:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: server-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
+    env:
+      IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Backup and restore drill
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project chaos apps/server/test/chaos/ops.backup-restore
+
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: release-drill-${{ matrix.mysql }}
+
+  # The Version PR. Changesets keeps one product version across the server image, the web
+  # bundle, the desktop bundles and `iridium-mcp`; merging the PR is what produces the tag
+  # that triggers every job above.
+  version-pr:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+
+      - uses: changesets/action@66d7d1ddafddf1ef45f98ee51a7496f9cdadb2f4 # v2.1.2
+        with:
+          version: pnpm changeset version
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

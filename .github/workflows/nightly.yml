@@ -1,0 +1,481 @@
+# Scheduled lanes (10-testing-and-quality.md, "CI lanes" › `nightly.yml`;
+# 12-milestones.md §4.3 row "CI").
+#
+# Nothing here blocks a merge. A nightly failure opens (or updates) one issue per job with
+# the artifacts attached, and a job that is red for three consecutive nights blocks the next
+# milestone exit until it is green (12-milestones.md §3, "Nightly health").
+#
+# The job names are created at M0 so a milestone-exit record can cite a lane by name from the
+# first milestone; each job's suite arrives at the milestone that writes it. Two jobs are
+# explicitly non-blocking early-warning lanes and carry `continue-on-error`: `mysql-innovation`
+# and `node-26`. `conformance-all` carries it too, because only the `active` suite — which
+# runs in `ci.yml › integration` — blocks.
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+
+jobs:
+  # `IRIDIUM_PROP_RUNS=5000`, `IRIDIUM_PROP_DB_RUNS=200`, `IRIDIUM_PROP_DB_COMMANDS=300`,
+  # `IRIDIUM_PROP_SIZE=+2`, plus the 10-peer × 2 000-command convergence soak.
+  property-long:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+      IRIDIUM_PROP_RUNS: '5000'
+      IRIDIUM_PROP_DB_RUNS: '200'
+      IRIDIUM_PROP_DB_COMMANDS: '300'
+      IRIDIUM_PROP_SIZE: '+2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Property projects at the nightly budget
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit --project property
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: property-long
+
+  # 200 kill iterations, every toxic type, CH-15 restart-under-load, CH-14 at 200
+  # connections. Budgeted at ≤ 3 h with `timeout-minutes: 240` (D10-25).
+  chaos-extended:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+      IRIDIUM_CHAOS_ITERATIONS: '200'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Chaos project at the nightly budget
+        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: chaos-extended
+
+  # Full Stryker run over the whole mutate scope with `incremental` seeded from the cache;
+  # thresholds enforced (`break` 70 at M1–M2, 75 at M3–M7, 80 at M8 — decision D12-3).
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Restore the Stryker incremental file
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tooling/mutation/reports/stryker-incremental.json
+          key: stryker-incremental-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-${{ hashFiles('pnpm-lock.yaml') }}-
+            stryker-incremental-
+      - name: Build
+        run: pnpm turbo run build
+      - name: Stryker
+        run: pnpm --filter @iridium/mutation run mutation
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: mutation
+          path: tooling/mutation/reports/
+
+  # `--max-examples=500`, admin routes included (against a throwaway deployment), plus the
+  # non-member-token isolation run. Schemathesis 4.26.1 owns black-box OpenAPI fuzzing.
+  schemathesis-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
+      # pipx is preinstalled on the ubuntu runner; the version is the plan's pin, so the
+      # fuzzer cannot drift between the PR lane and this one.
+      - name: Schemathesis, full budget
+        run: >-
+          pipx run --spec 'schemathesis==4.26.1' schemathesis run
+          http://127.0.0.1:4000/openapi.json --checks all --stateful=links
+          --max-examples=500
+          --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
+          --header "X-Iridium-Client: web"
+          --exclude-path-regex '^/__test__' --report junit
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: schemathesis-full
+
+  # k6 (or the Node `worker_threads` fallback) over all scenarios; budget check against
+  # `apps/server/test/load/baseline.json`; weekly the 4 h soak. The generator and its
+  # bundling are settled by spike S6 (`docs/spikes/S06-k6-yjs-bundle.md`), which also fixes
+  # how k6 2.2.0 is installed on the runner; either implementation emits the same metric
+  # names, so the thresholds and the baseline do not change with it.
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Load scenarios
+        run: k6 run apps/server/test/load/scenarios.js
+      - name: Budget check against the baseline
+        run: node scripts/check-load-budget.ts
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: load
+          path: reports/load/
+
+  # The blocking client-budget run plus the 4× CPU-throttled variant. The timing budgets are
+  # advisory on a pull request and blocking here, where the runner class is consistent.
+  perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          playwright-browsers: --with-deps chromium
+      - name: Build the web host and the server
+        run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
+      - name: Client budgets
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=chromium
+          --grep @perf --pass-with-no-tests
+      - name: Client budgets, 4× CPU throttled
+        env:
+          IRIDIUM_E2E_CPU_THROTTLE: '4'
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=chromium
+          --grep @perf --pass-with-no-tests
+      - name: Performance trend table
+        if: always()
+        run: node scripts/perf-trend.ts >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: perf
+          path: reports/perf/
+
+  # `ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos`,
+  # `ops.key-rotation.drill` and an `upgrade-rehearsal` step running
+  # `ops.upgrade-rehearsal.drill` against the M1-era upgrade fixtures. The five operator
+  # rehearsals share one job because each provisions its own MySQL container and they must
+  # not contend for Docker; the matrix runs them against both required images, which is also
+  # what covers the two cross-line cases (`ops.cross-line-restore.drill` and the
+  # `restore.mysql_line_downgrade` case inside `ops.restore-verify.chaos`).
+  backup-restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
+    env:
+      IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Slug for the matrix image
+        id: image
+        run: echo "slug=$(echo '${{ matrix.mysql }}' | tr ':.' '--')" >> "$GITHUB_OUTPUT"
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Operator rehearsals
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project chaos apps/server/test/chaos/ops
+      - name: Upgrade rehearsal
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project chaos apps/server/test/chaos/ops.upgrade-rehearsal
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: backup-restore-drill-${{ steps.image.outputs.slug }}
+
+  # `property-long`, `chaos-extended` and `schemathesis-full` re-run against the *other*
+  # image from the one each already used, so every long-running suite has been seen on both
+  # required engines within 24 hours. There is no advisory single-line MySQL lane, because
+  # both lines are pull-request gates.
+  mysql-matrix-extended:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:9.7.2-oraclelinux9'
+      IRIDIUM_PROP_RUNS: '5000'
+      IRIDIUM_PROP_DB_RUNS: '200'
+      IRIDIUM_PROP_DB_COMMANDS: '300'
+      IRIDIUM_PROP_SIZE: '+2'
+      IRIDIUM_CHAOS_ITERATIONS: '200'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
+      - name: Property projects on the other line
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit --project property
+      - name: Chaos project on the other line
+        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
+      - name: Schemathesis on the other line
+        run: >-
+          pipx run --spec 'schemathesis==4.26.1' schemathesis run
+          http://127.0.0.1:4000/openapi.json --checks all --stateful=links
+          --max-examples=500
+          --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
+          --header "X-Iridium-Client: web"
+          --exclude-path-regex '^/__test__' --report junit
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: mysql-matrix-extended
+
+  # Non-blocking. The `integration` project against the current innovation line, in the same
+  # spirit as `node-26`: it exists to find out that the next LTS will break something while
+  # there is time to design for it rather than to react to it.
+  mysql-innovation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:26.7'
+      IRIDIUM_ALLOW_UNTESTED_MYSQL: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Integration project on the innovation line
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project integration
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: mysql-innovation
+
+  # The full Electron suite (not just `@smoke`) on all three operating systems, including
+  # `tls-pin`, `deep-link-fuzz` at 500 URLs and `desktop.perf`.
+  e2e-electron-full:
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      NODE_ENV: test
+      BIND_ADDRESS: 127.0.0.1
+      PUBLIC_ORIGIN: http://127.0.0.1:4000
+      DATABASE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_MIGRATE_URL: mysql://root@127.0.0.1:3306/iridium
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      READYZ_STRICT_DURABILITY: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - uses: shogo82148/actions-setup-mysql@4a30921d75247b8f82fca433e05d26c6d0e21a41 # v1
+        with:
+          mysql-version: '8.4'
+          root-password: ''
+          auto-start: true
+      - name: Create the database
+        shell: bash
+        run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
+      - name: Install the Playwright Linux dependencies
+        if: runner.os == 'Linux'
+        run: npx playwright install-deps chromium
+      - name: Build the desktop shell (unpackaged) and the server
+        run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
+      - name: Electron suite (Linux, under xvfb)
+        if: runner.os == 'Linux'
+        run: >-
+          xvfb-run --auto-servernum
+          pnpm exec playwright test -c playwright.config.ts --project=electron
+          --pass-with-no-tests
+      - name: Electron suite
+        if: runner.os != 'Linux'
+        shell: bash
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=electron
+          --pass-with-no-tests
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: e2e-electron-full-${{ matrix.os }}
+          path: |
+            blob-report/
+            playwright-report/
+            test-results/
+
+  # The pinned real-client matrix in all three of its parts — the static-header audience
+  # against `/mcp`, the OAuth audience against `/mcp/connect`, and the coexistence run with
+  # both configured against one server — and the proxied-stack header-passthrough test
+  # (`proxied-stack.mcp-headers`), run through both the Caddy and the nginx reference
+  # configurations, against both mounts. The exact per-client commands are recorded in
+  # `docs/ops/mcp-clients.md`; a product that cannot complete the flow is recorded in
+  # `apps/e2e/mcp-clients/versions.json` with its observed failure.
+  mcp-clients:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server and the bridge
+        run: pnpm turbo run build --filter=@iridium/server --filter=@iridium/mcp-bridge
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
+      - name: Real-client matrix and proxied stack
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project mcp --project contract apps/e2e/mcp-clients
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: mcp-clients
+
+  # `infra/compose.prod.yaml` brought up on a clean VM following `docs/ops/deployment.md`
+  # verbatim, then a three-editor smoke and a `claude mcp add` against it. The air-gapped
+  # in-process TLS profile is the second mode of the same job.
+  compose-boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
+      - name: Boot the reference deployment
+        run: docker compose -f infra/compose.prod.yaml up --wait
+      - name: Clean-VM smoke
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project chaos apps/server/test/chaos/ops.compose-prod
+      - name: Tear the reference deployment down
+        if: always()
+        run: docker compose -f infra/compose.prod.yaml down -v
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: compose-boot
+
+  # `@modelcontextprotocol/conformance --suite all`. New failures are reported and only the
+  # `active` suite — which runs in `ci.yml › integration` — blocks, so this lane is advisory.
+  conformance-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+      IRIDIUM_MCP_CONFORMANCE_SUITE: all
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: MCP conformance, full suite
+        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project mcp
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: conformance-all
+          path: results/
+
+  # `playwright test --repeat-each=3` over the whole web suite and three consecutive
+  # `vitest --project integration` runs on `main`; any test that both passes and fails
+  # within the job is reported with its trace.
+  flake-hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+        with:
+          playwright-browsers: --with-deps chromium
+      - name: Build
+        run: pnpm turbo run build
+      - name: Web suite, three times over
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=chromium
+          --repeat-each=3 --pass-with-no-tests
+      - name: Integration project, three consecutive runs
+        run: |
+          for run in 1 2 3; do
+            echo "::group::integration run $run/3"
+            pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project integration
+            echo '::endgroup::'
+          done
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: flake-hunt
+          path: |
+            blob-report/
+            playwright-report/
+            test-results/
+            reports/
+
+  # Non-blocking forward-compatibility lane until Node 26 becomes the default (skeleton A4).
+  node-26:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    continue-on-error: true
+    env:
+      IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # `engines` pins Node to `>=24.12.0 <25` and `engineStrict` is on, so the install has
+      # to be told this lane is deliberate; everything after it runs on Node 26 so a native
+      # or runtime incompatibility surfaces here rather than at the LTS switch.
+      - uses: ./.github/actions/setup-workspace
+        with:
+          node-version: '26'
+          install-args: --config.engine-strict=false
+      - name: Build the server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Unit and integration projects on Node 26
+        run: >-
+          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          --project unit --project integration
+      - uses: ./.github/actions/upload-nightly-reports
+        if: always()
+        with:
+          name: node-26

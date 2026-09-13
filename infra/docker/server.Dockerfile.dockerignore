@@ -1,0 +1,37 @@
+# Build context for infra/docker/server.Dockerfile. The context is the repository root, and
+# BuildKit reads this file — `<dockerfile>.dockerignore`, next to the Dockerfile — in preference to
+# a context-level `.dockerignore`, which is why the rules live here with the Dockerfile they serve
+# instead of in a root file shared with builds that do not exist.
+#
+# Stage `prune` does `COPY . .`, so everything not excluded here is uploaded and hashed on every
+# build. Two rules must never be relaxed: `pnpm-lock.yaml` and `pnpm-workspace.yaml` are what make
+# the pruned install reproducible, and every workspace `package.json` is what `turbo prune` reads.
+
+# Installed and generated trees: the image installs from the lockfile and builds from source.
+**/node_modules
+**/dist
+**/.turbo
+**/.vitest
+**/coverage
+**/*.tsbuildinfo
+
+# Test and release output.
+**/playwright-report
+**/test-results
+apps/desktop/release
+apps/e2e/.auth
+tooling/mutation/reports
+
+# Repository metadata and local files that never affect the image.
+.git
+.github
+.changeset
+.vscode
+.idea
+docs
+**/.DS_Store
+**/Thumbs.db
+**/*.log
+**/*.local
+**/.env
+**/.env.*

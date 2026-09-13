@@ -1,0 +1,283 @@
+{
+  // knip 6.35.1, run as `knip --production` by the `static` CI job and the M0 gate
+  // (10-testing-and-quality.md L0; 12-milestones.md §4.6). Production mode analyses only the
+  // entries suffixed `!` and the files they reach; exports that exist for tests carry `@internal`.
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": true,
+  // "Declared ahead" dependencies. 12-milestones.md §4.2 has every package declare the runtime
+  // dependencies of its final shape at M0, so that `turbo boundaries`, the single-instance overrides
+  // and `pnpm dedupe --check` exercise the real dependency graph from the first commit. Until the
+  // milestone that imports each one lands, knip would report it unused; the lists below carry those
+  // names and nothing else. Delete an entry the moment product code imports the package — knip's
+  // configuration hints report an entry that is no longer needed, and the M1 exit review reads them.
+  "workspaces": {
+    ".": {
+      // The root holds configuration and the `pnpm gen` pipeline (scripts/), none of it shipped.
+      "entry": ["scripts/*.ts", "scripts/lib/*.ts"],
+      "project": ["*.ts", "scripts/**/*.ts"],
+    },
+    "packages/*": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+    },
+    "packages/ui": {
+      // `test/setup.browser.ts` is the `component` project's setup file (root vitest.config.ts).
+      "entry": ["src/index.ts!", "test/setup.browser.ts", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@atlaskit/pragmatic-drag-and-drop",
+        "@base-ui/react",
+        "@headless-tree/core",
+        "@headless-tree/react",
+        "@iridium/api-client",
+        "@iridium/collab-client",
+        "@iridium/contracts",
+        "@iridium/editor",
+        "@iridium/markdown",
+        "@iridium/markdown-react",
+        "@tanstack/react-form",
+        "@tanstack/react-query",
+        "@tanstack/react-router",
+        "@tanstack/react-virtual",
+        "lucide-react",
+        "react-resizable-panels",
+        "zustand",
+      ],
+    },
+    "packages/testkit": {
+      // `src/global/*.ts` are the Vitest globalSetup and setupFiles the root vitest.config.ts names.
+      "entry": ["src/index.ts!", "src/global/*.ts", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@iridium/api-client",
+        "@iridium/contracts",
+        "@iridium/crdt",
+        "@modelcontextprotocol/client",
+      ],
+    },
+    "packages/editor": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@codemirror/autocomplete",
+        "@codemirror/commands",
+        "@codemirror/lang-markdown",
+        "@codemirror/lang-yaml",
+        "@codemirror/language",
+        "@codemirror/search",
+        "@codemirror/state",
+        "@codemirror/view",
+        "@iridium/collab-client",
+        "@iridium/contracts",
+        "@iridium/crdt",
+        "@lezer/common",
+        "@lezer/highlight",
+        "@lezer/markdown",
+        "y-codemirror.next",
+      ],
+    },
+    "packages/markdown-react": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@iridium/contracts",
+        "@iridium/markdown",
+        "comlink",
+        "dompurify",
+        "hast-util-to-jsx-runtime",
+        "react",
+      ],
+    },
+    "packages/collab-client": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@hocuspocus/common",
+        "@hocuspocus/provider",
+        "@iridium/contracts",
+        "@iridium/crdt",
+      ],
+    },
+    "packages/api-client": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": ["@iridium/contracts", "openapi-fetch"],
+    },
+    "packages/mcp-bridge": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@iridium/contracts",
+        "@modelcontextprotocol/client",
+        "@modelcontextprotocol/server",
+      ],
+    },
+    "packages/markdown": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@iridium/contracts",
+        "@types/hast",
+        "@types/mdast",
+        "comlink",
+        "github-slugger",
+        "hast-util-sanitize",
+        "highlight.js",
+        "lowlight",
+        "mdast-util-from-markdown",
+        "mdast-util-gfm-footnote",
+        "mdast-util-gfm-strikethrough",
+        "mdast-util-gfm-table",
+        "mdast-util-gfm-task-list-item",
+        "mdast-util-to-hast",
+        "mdast-util-to-string",
+        "micromark",
+        "micromark-extension-gfm-footnote",
+        "micromark-extension-gfm-strikethrough",
+        "micromark-extension-gfm-table",
+        "micromark-extension-gfm-task-list-item",
+        "rehype-highlight",
+        "rehype-sanitize",
+        "remark-breaks",
+        "remark-frontmatter",
+        "remark-parse",
+        "remark-rehype",
+        "unified",
+        "unist-util-visit",
+        "yaml",
+      ],
+    },
+    "packages/crdt": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": ["lib0", "y-protocols"],
+    },
+    "apps/server": {
+      "entry": [
+        "src/main.ts!",
+        "src/ops/healthcheck.ts!",
+        // The programmatic surface the `pnpm gen` OpenAPI export and the test harness drive.
+        "src/index.ts",
+        "src/**/*.spec.ts",
+        "test/**/*.ts",
+        // The migrations: loaded by name through the migrator's provider, never imported statically.
+        "migrations/*.ts!",
+        // The k6 load lane (10-testing-and-quality.md L9): scripts bundled by esbuild, run by k6.
+        "test/load/**/*.{js,mjs}",
+        "tsdown.config.ts",
+        "kysely.config.ts",
+      ],
+      "project": ["src/**/*.ts!", "migrations/*.ts!", "test/**/*.{ts,js,mjs}"],
+      // `src/ops/openapi.ts` is reached only through `src/index.ts` by the `pnpm gen` OpenAPI export
+      // until M1's rest plugin registers it as its first statement (12-milestones.md §4.3; the
+      // module's own header). Delete this entry with that M1 change.
+      "ignore": ["src/ops/openapi.ts"],
+      "ignoreDependencies": [
+        // Declared ahead (see the policy at the top of this file).
+        "@aws-sdk/client-s3",
+        "@fastify/csrf-protection",
+        "@fastify/multipart",
+        "@fastify/swagger",
+        "@fastify/swagger-ui",
+        "@fastify/websocket",
+        "@hocuspocus/server",
+        "@iridium/crdt",
+        "@iridium/markdown",
+        "@modelcontextprotocol/core",
+        "@modelcontextprotocol/fastify",
+        "@modelcontextprotocol/node",
+        "@modelcontextprotocol/server",
+        "fastify-type-provider-zod",
+        "file-type",
+        "rate-limiter-flexible",
+        "yauzl",
+        "yazl",
+        // A command-line tool: `scripts/check-kysely-schema.ts` resolves its bin from this package
+        // (scripts/lib/tools.ts), which no import graph shows.
+        "kysely-codegen",
+        // Provided by the k6 runtime, not npm (`k6`, `k6/execution`, …); apps/server/turbo.json
+        // declares the same as an implicit dependency for `turbo boundaries`.
+        "k6",
+      ],
+    },
+    "apps/web": {
+      "entry": ["src/main.tsx!", "index.html", "src/**/*.spec.{ts,tsx}", "vite.config.ts"],
+      "project": ["src/**/*.{ts,tsx}!"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": ["@iridium/api-client", "@iridium/collab-client", "@iridium/contracts"],
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/main.ts!",
+        "src/preload/index.cts!",
+        "src/renderer/main.tsx!",
+        "src/renderer/index.html",
+        "src/**/*.spec.{ts,tsx}",
+        "tsdown.main.config.ts",
+        "tsdown.preload.config.ts",
+        "vite.renderer.config.ts",
+        "scripts/*.mjs",
+      ],
+      "project": ["src/**/*.{ts,tsx,cts}!", "scripts/*.mjs"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": [
+        "@iridium/api-client",
+        "@iridium/collab-client",
+        "@iridium/contracts",
+        "@iridium/mcp-bridge",
+      ],
+    },
+    "apps/e2e": {
+      "entry": ["**/*.{e2e.spec,setup}.ts", "fixtures/**/*.ts"],
+      "project": ["**/*.ts"],
+      // Declared ahead (see the policy at the top of this file).
+      "ignoreDependencies": ["@iridium/api-client", "@iridium/contracts", "@iridium/testkit"],
+    },
+    "spikes/*": {
+      // Throwaway harnesses (12-milestones.md D12-5): analysed so a dead dependency is still reported.
+      "entry": ["src/**/*.{ts,tsx}", "*.{ts,mjs}"],
+      "project": ["**/*.{ts,tsx,mjs}"],
+    },
+    "tooling/tsconfig": {
+      "entry": [],
+      "project": [],
+    },
+    "tooling/sql": {
+      "entry": [],
+      "project": [],
+    },
+    "tooling/oxlint-config": {
+      "entry": ["*.ts"],
+      "project": ["*.ts"],
+    },
+    "tooling/mutation": {
+      "entry": ["vitest.stryker.config.ts", "*.mjs"],
+      "project": ["*.ts", "*.mjs"],
+      // The Vitest 4 companions declared for peer resolution only (pnpm-workspace.yaml, the
+      // `mutation` catalog): nothing imports them, and that is the point.
+      "ignoreDependencies": [
+        "@vitest/browser",
+        "@vitest/browser-playwright",
+        "@vitest/coverage-v8",
+        "@vitest/ui",
+        "playwright",
+      ],
+    },
+    "tooling/api-codegen": {
+      "entry": [],
+      "project": [],
+      // A command-line tool with no sources beside it: `scripts/generate-api-types.ts` resolves the
+      // openapi-typescript bin from this package (scripts/lib/tools.ts; decision A2 as amended).
+      "ignoreDependencies": ["openapi-typescript"],
+    },
+  },
+}

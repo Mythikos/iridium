@@ -7,6 +7,8 @@ export default defineConfig({
   env: { browser: true },
   settings: { react: { version: '19.3.0' } },
   rules: {
+    // React 19 automatic runtime (tooling/tsconfig/react.json sets jsx: react-jsx); React is never in scope.
+    'react/react-in-jsx-scope': 'off',
     'react/jsx-no-target-blank': 'error',
     'react/no-danger': 'error', // dangerouslySetInnerHTML is banned in @iridium/markdown-react (02, package table)
     'react/jsx-key': 'error',

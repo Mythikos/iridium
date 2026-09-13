@@ -2,6 +2,10 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'tooling/*'
+  # Spike harnesses whose dependency set differs from any product package's (12-milestones.md D12-5:
+  # spike code never becomes product code). Each is a leaf tagged `spike`; `turbo boundaries` lets
+  # nothing depend on one.
+  - 'spikes/*'
 
 # Every external version the plan pins (02-system-architecture.md dependency table,
 # 13-decision-log.md ADRs, 12-milestones.md section 4.2 step 3). Exact versions only.
@@ -15,7 +19,6 @@ catalog:
   tsdown: 0.23.0
   vite: 8.3.0
   '@vitejs/plugin-react': 6.1.1
-  vite-plugin-electron: 1.1.2
   knip: 6.35.1
   lefthook: 2.1.12
   '@commitlint/cli': 21.2.2
@@ -26,21 +29,29 @@ catalog:
   vitest: 5.0.0
   '@vitest/browser-playwright': 5.0.0
   '@vitest/coverage-v8': 5.0.0
-  vitest-browser-react: 2.3.0
+  axe-core: 4.13.0
+  vitest-axe: 0.1.0
   '@fast-check/vitest': 0.5.0
   fast-check: 4.10.0
   '@playwright/test': 1.63.0
-  electron-playwright-helpers: 3.1.2
+  playwright: 1.63.0
   testcontainers: 12.1.0
   '@testcontainers/mysql': 12.1.0
   '@testcontainers/toxiproxy': 12.1.0
   ws: 8.21.3
+  '@types/ws': 8.18.1
   msw: 2.15.0
   ajv: 8.20.0
+  ajv-formats: 3.0.1
   '@apidevtools/swagger-parser': 13.0.0
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
   '@stryker-mutator/typescript-checker': 10.0.0
+  '@stryker-mutator/api': 10.0.0
+  # Load lane (10-testing-and-quality.md L9): k6 scripts are bundled with esbuild, which neither Vite 8
+  # nor tsdown carries any more (both bundle with rolldown; spike S6), and typed against @types/k6.
+  esbuild: 0.28.2
+  '@types/k6': 2.2.0
   # Codegen pipeline
   '@redocly/cli': 2.52.1
   openapi-typescript: 7.13.0
@@ -63,6 +74,7 @@ catalog:
   '@fastify/helmet': 13.1.1
   '@fastify/multipart': 10.1.1
   '@fastify/rate-limit': 11.2.0
+  '@fastify/static': 10.1.3
   '@fastify/swagger': 9.8.1
   '@fastify/swagger-ui': 6.1.1
   '@fastify/under-pressure': 9.1.0
@@ -71,6 +83,7 @@ catalog:
   kysely: 0.29.5
   mysql2: 3.24.4
   pino: 10.3.1
+  '@prometheus-io/client': 0.16.1
   piscina: 5.3.2
   '@node-rs/argon2': 2.2.1
   rate-limiter-flexible: 11.2.0
@@ -81,8 +94,6 @@ catalog:
   '@modelcontextprotocol/node': 2.0.0
   '@modelcontextprotocol/fastify': 2.0.0
   '@modelcontextprotocol/core': 2.0.0
-  '@modelcontextprotocol/conformance': 0.1.16
-  '@modelcontextprotocol/inspector': 2.6.0
   # Markdown pipeline
   unified: 11.0.5
   remark-parse: 11.0.0
@@ -111,6 +122,10 @@ catalog:
   unist-util-visit: 5.1.0
   '@types/hast': 3.0.5
   '@types/mdast': 4.0.4
+  # Transfer (zip import/export) and attachment MIME sniffing (pinned by S8)
+  file-type: 22.1.0
+  yauzl: 3.4.0
+  yazl: 3.3.1
   # API client
   openapi-fetch: 0.17.0
   # Editor (one module instance for @codemirror/state and @codemirror/view; see overrides)
@@ -121,6 +136,7 @@ catalog:
   '@codemirror/search': 6.7.2
   '@codemirror/autocomplete': 6.20.3
   '@codemirror/lang-markdown': 6.5.2
+  '@codemirror/lang-yaml': 6.1.3
   '@lezer/markdown': 1.7.2
   '@lezer/common': 1.5.2
   '@lezer/highlight': 1.2.3
@@ -132,11 +148,14 @@ catalog:
   # UI
   react: 19.3.0
   react-dom: 19.3.0
+  '@types/react': 19.3.0
+  '@types/react-dom': 19.3.0
   '@tanstack/react-router': 1.170.35
   '@tanstack/react-query': 5.102.8
   zustand: 5.0.15
   '@base-ui/react': 1.8.0
   tailwindcss: 4.3.3
+  '@tailwindcss/vite': 4.3.3
   lucide-react: 1.45.0
   '@headless-tree/core': 1.7.0
   '@headless-tree/react': 1.7.0
@@ -150,6 +169,22 @@ catalog:
   electron-builder: 26.16.1
 
 # Dependency policy (13-decision-log.md A1; 12-milestones.md section 4.2 step 3)
+# Named catalogs: the one place a workspace may pin a version the default catalog does not carry.
+# `mutation` exists because spike S5 proved Stryker 10's vitest-runner cannot discover tests under
+# Vitest 5.0.0; tooling/mutation runs on the V4 line, every other test project stays on 5.0.0
+# (docs/spikes/S05-stryker-vitest5.md, "Fallback executed").
+catalogs:
+  mutation:
+    vitest: 4.1.11
+    # The Vitest 4 companions the lane declares for peer resolution only: pnpm pairs a Vitest
+    # optional peer with whichever version the workspace graph holds, and the graph holds these at
+    # 5.0.0 (the root's coverage provider, @iridium/ui's browser provider). Declaring the 4.1.11
+    # family here keeps every pairing inside one Vitest line; Stryker loads none of them.
+    '@vitest/browser': 4.1.11
+    '@vitest/browser-playwright': 4.1.11
+    '@vitest/coverage-v8': 4.1.11
+    '@vitest/ui': 4.1.11
+
 catalogMode: strict
 saveExact: true
 engineStrict: true
@@ -164,11 +199,17 @@ minimumReleaseAgeExclude:
   - '@tanstack/virtual-core@3.17.10'
   - 'fast-check@4.10.0'
   - 'fastify@5.12.4'
+  # Added by spike S8 (2026-09-13): the MIME sniffer pin, published 2026-09-11T10:28:53Z,
+  # matures out of the window by 2026-09-14T10:28:53Z and is removed then.
+  - 'file-type@22.1.0'
   - 'lucide-react@1.45.0'
   - 'micromark-extension-gfm-table@2.1.2'
   - 'vite@8.3.0'
   - 'yaml@2.9.1'
   - 'zod@4.6.2'
+  # The plan's OpenAPI linter pin, published 2026-09-11T13:45:47Z; matures out of the window by
+  # 2026-09-14T13:45:47Z and is removed then.
+  - '@redocly/cli@2.52.1'
 trustPolicy: no-downgrade
 # Exact old versions that no-downgrade flags because a later version gained provenance and these predate it.
 # Every entry is a pin, never a range, and is reviewed when its dependent moves (13-decision-log.md A1).
@@ -179,6 +220,9 @@ allowBuilds:
   electron: true
   lefthook: true
   '@node-rs/argon2': true
+  # esbuild bundles the k6 load scripts (spike S6); its install script checks the platform binary
+  # package it resolved and downloads one only when that package is missing.
+  esbuild: true
   # Transitive packages that ship install scripts the product does not need: denied explicitly so
   # pnpm 12 never prompts and a new script-bearing dependency fails the install until it is reviewed.
   cpu-features: false
@@ -188,11 +232,26 @@ allowBuilds:
   ssh2: false
 strictPeerDependencies: true
 dedupePeerDependents: true
+peerDependencyRules:
+  allowedVersions:
+    # openapi-typescript 7.13.0 declares `typescript: ^5.x` and runs on the TypeScript 6 JavaScript
+    # compiler API, which is the 5.x API with deprecations; tooling/api-codegen aliases it to
+    # @typescript/typescript6 (A2, R-T10). Scoped to that one parent: nothing else may accept TS 6.
+    'openapi-typescript>typescript': '6'
 publicHoistPattern: []
 
 # One module instance each (A14): the whole closure resolves to the catalog version
 overrides:
   yjs: 'catalog:'
+  # One Node type environment: transitive `@types/*` packages pull `@types/node@*`, which would
+  # otherwise resolve to whatever is newest and make `pnpm dedupe --check` chase it (Node 24 is the
+  # only runtime, A4).
+  '@types/node': 'catalog:'
+  # Test-only libraries other test libraries depend on: `@fast-check/vitest` carries its own
+  # `fast-check` range and `vitest-axe` its own `axe-core` range; the override makes the catalog pin
+  # the copy the specs import, so one arbitrary and one rule set exist per run.
+  'fast-check': 'catalog:'
+  'axe-core': 'catalog:'
   lib0: 'catalog:'
   y-protocols: 'catalog:'
   '@codemirror/state': 'catalog:'

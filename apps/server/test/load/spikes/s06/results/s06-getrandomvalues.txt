@@ -1,0 +1,8 @@
+time="2026-09-13T06:25:37-07:00" level=info msg="Uint8Array(8)            -> [38,64,41,233,17,93,151,53]" source=console
+time="2026-09-13T06:25:37-07:00" level=info msg="Uint16Array(4)           -> [2,254,58,86]" source=console
+time="2026-09-13T06:25:37-07:00" level=info msg="Uint32Array(4)           -> [233,126,159,78]" source=console
+time="2026-09-13T06:25:37-07:00" level=info msg="Uint32Array(4) raw bytes -> [233,0,0,0,126,0,0,0,159,0,0,0,78,0,0,0]" source=console
+time="2026-09-13T06:25:37-07:00" level=info msg="10000 draws of getRandomValues(new Uint32Array(1)): max=255 distinct=256 (a 32-bit generator would reach 4294967295)" source=console
+
+
+  █ TOTAL RESULTS 

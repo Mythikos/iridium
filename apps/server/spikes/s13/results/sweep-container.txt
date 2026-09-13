@@ -1,0 +1,22 @@
+Parameter sweep, run inside the same node:24.21.0-bookworm-slim container (--cpus 4 --memory 4g),
+5 samples per candidate, median reported. Goal: find memoryCost/timeCost landing sequential
+latency in the 150-300ms window on this hardware.
+
+{"memoryCost":65536,"timeCost":3,"samplesMs":[55.28,52.81,52.15,57.17,47.72],"medianMs":52.81}
+{"memoryCost":65536,"timeCost":6,"samplesMs":[89.2,90.7,88.85,89.54,88.85],"medianMs":89.2}
+{"memoryCost":65536,"timeCost":9,"samplesMs":[130.62,130.24,132.35,131.34,141.12],"medianMs":131.34}
+{"memoryCost":131072,"timeCost":6,"samplesMs":[209.32,194.76,193.48,197.66,193.17],"medianMs":194.76}
+{"memoryCost":131072,"timeCost":9,"samplesMs":[285.8,291.3,305.36,302.65,305.46],"medianMs":302.65}
+{"memoryCost":196608,"timeCost":6,"samplesMs":[328.96,380.76,348.87,346.54,365.25],"medianMs":348.87}
+
+Second pass, narrowing around the memoryCost=131072 KiB neighborhood:
+
+{"memoryCost":131072,"timeCost":5,"samplesMs":[198.89,178.52,179.13,179.57,180.07],"medianMs":179.57}
+{"memoryCost":131072,"timeCost":6,"samplesMs":[214.29,218.04,208.24,213.98,207.18],"medianMs":213.98}
+{"memoryCost":131072,"timeCost":7,"samplesMs":[248.89,245.05,244.77,244.54,242.46],"medianMs":244.77}
+{"memoryCost":98304,"timeCost":6,"samplesMs":[153.48,160.26,155.01,158.21,157.63],"medianMs":157.63}
+
+Chosen pair: memoryCost=131072 KiB (128 MiB), timeCost=6, parallelism=1 — centered in the
+window with headroom on both sides (98304/6 sits only ~5-8ms above the 150ms floor, too close
+to run-to-run variance for comfort). Confirmed with the full 20-sample measurement in
+container-4cpu-4gb-fallback.json: p50 213.508ms, p95 224.58ms.

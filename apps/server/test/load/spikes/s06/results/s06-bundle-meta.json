@@ -1,0 +1,80 @@
+{
+  "esbuild": "0.25.12",
+  "bundledVersions": {
+    "yjs": "13.6.32",
+    "lib0": "0.2.117",
+    "y-protocols": "1.0.7"
+  },
+  "flags": ["--bundle", "--format=cjs", "--platform=browser", "--external:k6*", "--target=es2022"],
+  "entry": "src/s06-collab.js",
+  "outfile": "s06-collab.bundle.js",
+  "bundleBytes": 267004,
+  "moduleCount": 40,
+  "imports": ["k6", "k6/execution", "k6/metrics", "k6/websockets"],
+  "bytesByPackage": {
+    ".pnpm": 471048,
+    "(entry)": 26589
+  },
+  "largestInputs": [
+    {
+      "path": "../../../../../../node_modules/.pnpm/yjs@13.6.32/node_modules/yjs/dist/yjs.mjs",
+      "bytes": 299797
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/schema.js",
+      "bytes": 30563
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/encoding.js",
+      "bytes": 26567
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/decoding.js",
+      "bytes": 17847
+    },
+    {
+      "path": "src/s06-collab.js",
+      "bytes": 14544
+    },
+    {
+      "path": "src/wire.js",
+      "bytes": 12045
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/logging.js",
+      "bytes": 9825
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/awareness.js",
+      "bytes": 9647
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/dom.js",
+      "bytes": 6768
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/prng.js",
+      "bytes": 6092
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/sync.js",
+      "bytes": 4988
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/array.js",
+      "bytes": 4725
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/string.js",
+      "bytes": 4449
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/environment.js",
+      "bytes": 4212
+    },
+    {
+      "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/buffer.js",
+      "bytes": 4133
+    }
+  ]
+}

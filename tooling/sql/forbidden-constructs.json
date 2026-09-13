@@ -1,0 +1,81 @@
+{
+  "$comment": "The committed MySQL dialect denylist that db.dialect-floor.guard reads (10-testing-and-quality.md, guard table; 03-data-model.md section 1.1; 11-operations-and-deployment.md 'The MySQL dialect rule', D03-23). Every statement Iridium executes must have identical semantics on MySQL 8.4.11 and 9.7.2. The floor is 8.4.11: a construct that requires 9.x is forbidden, and a construct 8.4 merely deprecates is forbidden too, because a deprecation is a removal with a date on it. Entries are data, so adding a construct is a one-line change and never a code change.",
+  "$matching": "Each token is matched as a case-sensitive literal substring over apps/server/src/**/*.ts, apps/server/migrations/**/*.ts, infra/docker/mysql/**, docs/ops/*.sql and apps/server/src/ops/**. Case-sensitivity is what separates the SQL keyword VECTOR from the English word in a comment about a Yjs state vector; every lowercase token below is a literal variable, plugin or flag name.",
+  "constructs": [
+    {
+      "token": "VECTOR_DIM",
+      "since": "MySQL 9.0",
+      "reason": "Vector functions do not exist on the 8.4.11 floor. Iridium stores no embeddings; search is the InnoDB FULLTEXT index ft_note_search (03-data-model.md section 9.4)."
+    },
+    {
+      "token": "STRING_TO_VECTOR",
+      "since": "MySQL 9.0",
+      "reason": "Vector functions do not exist on the 8.4.11 floor. Iridium stores no embeddings; search is the InnoDB FULLTEXT index ft_note_search (03-data-model.md section 9.4)."
+    },
+    {
+      "token": "VECTOR_TO_STRING",
+      "since": "MySQL 9.0",
+      "reason": "Vector functions do not exist on the 8.4.11 floor. Iridium stores no embeddings; search is the InnoDB FULLTEXT index ft_note_search (03-data-model.md section 9.4)."
+    },
+    {
+      "token": "DISTANCE(",
+      "since": "MySQL 9.0",
+      "reason": "The vector distance function does not exist on the 8.4.11 floor."
+    },
+    {
+      "token": "VECTOR",
+      "since": "MySQL 9.0",
+      "reason": "The VECTOR column type does not exist on the 8.4.11 floor. Binary state is VARBINARY/BLOB (03-data-model.md section 1.2)."
+    },
+    {
+      "token": "CREATE JSON DUALITY VIEW",
+      "since": "MySQL 9.7",
+      "reason": "JSON duality views do not exist on the 8.4.11 floor. Iridium's read model is the committed note_projections rows (03-data-model.md section 9)."
+    },
+    {
+      "token": "JSON DUALITY",
+      "since": "MySQL 9.7",
+      "reason": "JSON duality views do not exist on the 8.4.11 floor. Iridium's read model is the committed note_projections rows (03-data-model.md section 9)."
+    },
+    {
+      "token": "hypergraph_optimizer",
+      "since": "MySQL 9.7",
+      "reason": "The hypergraph optimizer switch does not exist on the 8.4.11 floor; a plan that depends on it would be a plan only one supported line can produce."
+    },
+    {
+      "token": "CREATE LIBRARY",
+      "since": "MySQL 9.x",
+      "reason": "JavaScript stored libraries do not exist on the 8.4.11 floor, and Iridium runs no code inside the database."
+    },
+    {
+      "token": "LANGUAGE JAVASCRIPT",
+      "since": "MySQL 9.x",
+      "reason": "JavaScript stored programs do not exist on the 8.4.11 floor, and Iridium runs no code inside the database."
+    },
+    {
+      "token": "mysql_native_password",
+      "since": "removed in MySQL 9.0",
+      "reason": "Every role is IDENTIFIED WITH caching_sha2_password on both lines; infra/docker/mysql/init/01_roles.sh asserts it and fails container initialisation otherwise (03-data-model.md section 1.1)."
+    },
+    {
+      "token": "default_authentication_plugin",
+      "since": "removed in MySQL 8.4.0",
+      "reason": "An unknown variable makes mysqld exit at startup, and one my.cnf is mounted into every environment. Use authentication_policy = caching_sha2_password, the supported spelling on 8.4 and 9.x."
+    },
+    {
+      "token": "ft_min_word_len",
+      "since": "MyISAM only",
+      "reason": "Every Iridium table is InnoDB; innodb_ft_min_token_size = 2 is the setting that governs the FULLTEXT tokenizer, and it is frozen into ft_note_search when migration 0020 builds it."
+    },
+    {
+      "token": "--master-data",
+      "since": "removed in MySQL 8.4",
+      "reason": "Use --source-data. The backup set's mysqldump invocation is one exported constant, so a removed flag would first fail in a restore drill."
+    },
+    {
+      "token": "VALUES(",
+      "since": "deprecated on 8.4 and on 9.7",
+      "reason": "The VALUES(col) function inside ON DUPLICATE KEY UPDATE is deprecated on both supported lines; use the row-alias form `INSERT ... VALUES (...) AS new ON DUPLICATE KEY UPDATE col = new.col` (03-data-model.md section 9.2, D03-23). The token is the function-call spelling with no space, so write an ordinary value list as `VALUES (...)`."
+    }
+  ]
+}

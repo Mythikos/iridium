@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tools-call-image",
+    "name": "ToolsCallImage",
+    "description": "Tool returns image content",
+    "status": "FAILURE",
+    "timestamp": "2026-09-13T12:47:13.766Z",
+    "errorMessage": "Failed: MCP error -32602: Tool test_image_content not found",
+    "specReferences": [
+      {
+        "id": "MCP-Tools-Call",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/server/tools#calling-tools"
+      }
+    ]
+  }
+]

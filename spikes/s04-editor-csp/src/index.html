@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The per-load nonce. Every host substitutes the same literal that the product substitutes
+      (`CSP_NONCE_PLACEHOLDER` in apps/desktop/src/main/csp.ts and
+      packages/ui/vite.renderer.config.ts): the desktop scheme handler, the Fastify host from
+      `reply.cspNonce`, and the Vitest Browser Mode middleware.
+    -->
+    <meta name="csp-nonce" content="__IRIDIUM_CSP_NONCE__" />
+    <title>Iridium spike S04 — CodeMirror under a nonce-only style policy</title>
+    <link rel="stylesheet" href="./static.css" />
+    <link rel="stylesheet" href="./hljs.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

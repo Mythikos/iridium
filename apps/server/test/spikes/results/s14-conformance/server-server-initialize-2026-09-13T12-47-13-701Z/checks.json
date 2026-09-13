@@ -1,0 +1,19 @@
+[
+  {
+    "id": "server-initialize",
+    "name": "ServerInitialize",
+    "description": "Server responds to initialize request with valid structure",
+    "status": "SUCCESS",
+    "timestamp": "2026-09-13T12:47:13.727Z",
+    "specReferences": [
+      {
+        "id": "MCP-Initialize",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle#initialization"
+      }
+    ],
+    "details": {
+      "serverUrl": "http://127.0.0.1:50395/mcp",
+      "connected": true
+    }
+  }
+]

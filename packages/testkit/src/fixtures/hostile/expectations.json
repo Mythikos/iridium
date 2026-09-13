@@ -1,0 +1,212 @@
+{
+  "$schema": "./expectations.schema.json",
+  "fixtureVersion": 1,
+  "note": "Per file: what must NOT appear in the sanitized hast (tags, attributes, URL scheme prefixes) and what must NOT be observable in a browser host (dialogs, navigations, new windows, requests to the sink host, window.iridium access). `mustContain` is the positive half: text that has to survive.",
+  "sinkHost": "sink.invalid",
+  "files": {
+    "script-injection.md": {
+      "class": "script-injection",
+      "forbiddenTags": [
+        "script",
+        "template"
+      ],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [],
+      "forbiddenEffects": [
+        "script-execution",
+        "network-request-to-sink"
+      ],
+      "mustContain": []
+    },
+    "event-handlers.md": {
+      "class": "event-handlers",
+      "forbiddenTags": [
+        "body",
+        "input"
+      ],
+      "forbiddenAttributes": [
+        "onerror",
+        "onload",
+        "onfocus",
+        "onanimationstart",
+        "ontoggle",
+        "onbeforetoggle",
+        "autofocus"
+      ],
+      "forbiddenUrlSchemes": [],
+      "forbiddenEffects": [
+        "script-execution"
+      ],
+      "mustContain": []
+    },
+    "url-schemes.md": {
+      "class": "url-schemes",
+      "forbiddenTags": [],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [
+        "javascript:",
+        "vbscript:",
+        "data:text/html",
+        "data:image/svg+xml",
+        "file:",
+        "blob:",
+        "about:",
+        "chrome:",
+        "iridium-attachment:"
+      ],
+      "forbiddenEffects": [
+        "navigation",
+        "new-window",
+        "script-execution"
+      ],
+      "mustContain": []
+    },
+    "sinks.md": {
+      "class": "sinks",
+      "forbiddenTags": [
+        "iframe",
+        "embed",
+        "object",
+        "form",
+        "input",
+        "base",
+        "meta",
+        "link",
+        "portal"
+      ],
+      "forbiddenAttributes": [
+        "srcset",
+        "action",
+        "http-equiv"
+      ],
+      "forbiddenUrlSchemes": [
+        "javascript:"
+      ],
+      "forbiddenEffects": [
+        "navigation",
+        "network-request-to-sink"
+      ],
+      "mustContain": []
+    },
+    "dom-clobbering.md": {
+      "class": "dom-clobbering",
+      "forbiddenTags": [
+        "form",
+        "input"
+      ],
+      "forbiddenAttributes": [
+        "name"
+      ],
+      "forbiddenUrlSchemes": [],
+      "forbiddenIds": [
+        "document",
+        "body",
+        "__proto__",
+        "location"
+      ],
+      "requiredIdPrefix": "user-content-",
+      "forbiddenEffects": [
+        "script-execution"
+      ],
+      "mustContain": []
+    },
+    "css-injection.md": {
+      "class": "css-injection",
+      "forbiddenTags": [
+        "style"
+      ],
+      "forbiddenAttributes": [
+        "style"
+      ],
+      "forbiddenUrlSchemes": [
+        "javascript:"
+      ],
+      "forbiddenClassPrefixes": [
+        "hljs-"
+      ],
+      "forbiddenEffects": [
+        "network-request-to-sink"
+      ],
+      "mustContain": []
+    },
+    "svg-mathml.md": {
+      "class": "svg-mathml",
+      "forbiddenTags": [
+        "use",
+        "animate",
+        "foreignObject",
+        "maction",
+        "math",
+        "svg"
+      ],
+      "forbiddenAttributes": [
+        "attributeName",
+        "actiontype"
+      ],
+      "forbiddenUrlSchemes": [
+        "javascript:"
+      ],
+      "forbiddenEffects": [
+        "script-execution",
+        "network-request-to-sink"
+      ],
+      "mustContain": []
+    },
+    "markdown-specific.md": {
+      "class": "markdown-specific",
+      "forbiddenTags": [
+        "script"
+      ],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [
+        "javascript:"
+      ],
+      "forbiddenEffects": [
+        "script-execution"
+      ],
+      "mustContain": [
+        "<script>window.__pwned=1</script>",
+        "<script>window.__pwned=2</script>"
+      ]
+    },
+    "frontmatter.md": {
+      "class": "frontmatter",
+      "forbiddenTags": [
+        "script"
+      ],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [],
+      "forbiddenEffects": [
+        "script-execution",
+        "excessive-memory"
+      ],
+      "mustContain": []
+    },
+    "unicode.md": {
+      "class": "unicode",
+      "forbiddenTags": [],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [
+        "javascript:"
+      ],
+      "forbiddenEffects": [
+        "navigation",
+        "script-execution"
+      ],
+      "mustContain": []
+    },
+    "attachment-abuse.md": {
+      "class": "attachment-abuse",
+      "forbiddenTags": [],
+      "forbiddenAttributes": [],
+      "forbiddenUrlSchemes": [
+        "iridium-attachment:"
+      ],
+      "forbiddenEffects": [
+        "network-request-to-sink",
+        "new-window"
+      ],
+      "mustContain": []
+    }
+  }
+}

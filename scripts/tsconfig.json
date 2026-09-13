@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // The codegen pipeline. It runs under Node's native type stripping (`node scripts/gen.ts`), so the
+  // `erasableSyntaxOnly` of the base configuration is what keeps it runnable: no enums, no parameter
+  // properties, no namespaces. Nothing here is compiled — `pnpm exec tsc -p scripts` is a check.
+  //
+  // `noEmit` rather than a build output, and no `references`: the scripts import the server, the
+  // testkit and the desktop shell by *source path* (`../apps/server/src/app.ts`), which is exactly how
+  // Node resolves them at run time. A project reference would type-check those packages a second time
+  // under this project's settings instead of their own.
+  "extends": "../tooling/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "checkJs": false,
+    // The scripts import `.ts` files across workspace boundaries by relative path. That is the same
+    // resolution Node performs, and it is why these two options are on here as they are in the base.
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

@@ -1,0 +1,112 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Iridium API",
+    "description": "The REST surface of an Iridium server. Every path below is relative to `<PUBLIC_ORIGIN>/api/v1`; the operations published outside that prefix carry their own absolute paths (09-api-reference.md §2.18). This document is generated from the running server's zod schemas by `pnpm gen` and committed; `gen.drift.guard` fails any change to a schema that is not regenerated.",
+    "version": "1"
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-iridium_session",
+        "description": "A web session. Issued with `Secure; HttpOnly; SameSite=Lax; Path=/`. Ignored entirely when an `Authorization` header is present (09-api-reference.md §1.2)."
+      },
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "irid_ses|irid_pat|irid_oat",
+        "description": "A desktop session (`irid_ses_…`), an integration token (`irid_pat_…`) on `/api/v1` and `/mcp`, or an OAuth access token (`irid_oat_…`) on `/mcp/connect` only."
+      }
+    },
+    "schemas": {}
+  },
+  "paths": {},
+  "servers": [
+    {
+      "url": "{publicOrigin}/api/v1",
+      "description": "An Iridium server's own origin.",
+      "variables": {
+        "publicOrigin": {
+          "default": "https://iridium.example",
+          "description": "The deployment's `PUBLIC_ORIGIN`, `https://` in every deployment except the documented development profile (09-api-reference.md §1.2)."
+        }
+      }
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Sign-in, sign-out, set-password and re-authentication."
+    },
+    {
+      "name": "meta",
+      "description": "Server metadata, the OpenAPI document and the documentation UI."
+    },
+    {
+      "name": "me",
+      "description": "The calling user and their own sessions."
+    },
+    {
+      "name": "tokens",
+      "description": "Integration tokens and their client snippets."
+    },
+    {
+      "name": "oauth",
+      "description": "Iridium's own OAuth 2.1 authorization server."
+    },
+    {
+      "name": "vaults",
+      "description": "Vault lifecycle and settings."
+    },
+    {
+      "name": "members",
+      "description": "Vault membership and roles."
+    },
+    {
+      "name": "tree",
+      "description": "The vault tree."
+    },
+    {
+      "name": "nodes",
+      "description": "Categories and notes as tree nodes."
+    },
+    {
+      "name": "notes",
+      "description": "Note metadata and Markdown."
+    },
+    {
+      "name": "revisions",
+      "description": "Revision history and restore."
+    },
+    {
+      "name": "search",
+      "description": "Full-text search within a vault and across vaults."
+    },
+    {
+      "name": "attachments",
+      "description": "Attachment metadata and bytes."
+    },
+    {
+      "name": "imports",
+      "description": "Import jobs."
+    },
+    {
+      "name": "exports",
+      "description": "Export jobs and downloads."
+    },
+    {
+      "name": "admin",
+      "description": "Server administration."
+    },
+    {
+      "name": "desktop",
+      "description": "Desktop update policy and release feeds."
+    },
+    {
+      "name": "ops",
+      "description": "Liveness, readiness and metrics."
+    }
+  ]
+}

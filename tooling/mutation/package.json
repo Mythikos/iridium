@@ -5,18 +5,24 @@
   "description": "Stryker 10 mutation-testing lane with its own TypeScript 6 alias (13-decision-log.md A2)",
   "type": "module",
   "scripts": {
-    "mutation": "stryker run stryker.config.jsonc",
+    "mutation": "node run.mjs",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint -c ../../oxlint.config.ts ."
   },
   "devDependencies": {
-    "@iridium/testkit": "workspace:*",
     "@iridium/tsconfig": "workspace:*",
+    "@stryker-mutator/api": "catalog:",
     "@stryker-mutator/core": "catalog:",
     "@stryker-mutator/typescript-checker": "catalog:",
     "@stryker-mutator/vitest-runner": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/browser": "catalog:mutation",
+    "@vitest/browser-playwright": "catalog:mutation",
+    "@vitest/coverage-v8": "catalog:mutation",
+    "@vitest/ui": "catalog:mutation",
     "oxlint": "catalog:",
+    "playwright": "catalog:",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "catalog:"
+    "vitest": "catalog:mutation"
   }
 }

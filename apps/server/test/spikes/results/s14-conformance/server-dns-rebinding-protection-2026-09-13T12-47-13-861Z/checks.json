@@ -1,0 +1,58 @@
+[
+  {
+    "id": "localhost-host-rebinding-rejected",
+    "name": "DNSRebindingRejected",
+    "description": "Server rejects requests with non-localhost Host/Origin headers",
+    "timestamp": "2026-09-13T12:47:13.861Z",
+    "specReferences": [
+      {
+        "id": "MCP-DNS-Rebinding-Protection",
+        "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices#local-mcp-server-compromise"
+      },
+      {
+        "id": "MCP-Transport-Security",
+        "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#security-warning"
+      }
+    ],
+    "status": "SUCCESS",
+    "details": {
+      "hostHeader": "evil.example.com",
+      "originHeader": "http://evil.example.com",
+      "statusCode": 421,
+      "body": {
+        "type": "urn:iridium:problem:host_rejected",
+        "title": "Wrong host",
+        "status": 421,
+        "code": "host_rejected",
+        "requestId": "01a09ace-b7c7-7534-beab-11d3645a38ef",
+        "detail": "This server answers only to 127.0.0.1:50395."
+      }
+    }
+  },
+  {
+    "id": "localhost-host-valid-accepted",
+    "name": "LocalhostHostAccepted",
+    "description": "Server accepts requests with valid localhost Host/Origin headers",
+    "timestamp": "2026-09-13T12:47:13.861Z",
+    "specReferences": [
+      {
+        "id": "MCP-DNS-Rebinding-Protection",
+        "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices#local-mcp-server-compromise"
+      },
+      {
+        "id": "MCP-Transport-Security",
+        "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#security-warning"
+      }
+    ],
+    "status": "FAILURE",
+    "errorMessage": "Expected HTTP 2xx for valid localhost Host/Origin headers, got 403",
+    "details": {
+      "hostHeader": "127.0.0.1:50395",
+      "originHeader": "http://127.0.0.1:50395",
+      "statusCode": 403,
+      "body": {
+        "error": "origin_not_allowed"
+      }
+    }
+  }
+]

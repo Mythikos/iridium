@@ -1,0 +1,52 @@
+# Packaging, fuses and 1.0 distribution (07-client-applications.md §7.14.2).
+#
+# Six unsigned bundles per release: zip on Windows and macOS, tar.gz on Linux, x64 and arm64. No
+# installer, no code signature, no notarisation and no in-application updater at 1.0 (G8, D07-43);
+# every seam the post-1.0 signing epic needs is kept configured here so that epic is a change to this
+# file rather than a redesign. `desktop.artifact-names.guard` and `desktop.fuses.guard` read it.
+appId: com.iridium.desktop
+productName: Iridium
+copyright: © Iridium
+directories: { output: release, buildResources: build }
+files: ['dist/**', 'package.json']
+extraResources:
+  - { from: '../../packages/mcp-bridge/dist/iridium-mcp.mjs', to: 'bin/iridium-mcp.mjs' }
+  - { from: 'build/linux/iridium.desktop', to: 'iridium.desktop' } # Linux deep-link registration (§7.14.5)
+asar: true # integrity validation enabled via fuses; asar.disableIntegrity never set
+protocols: [{ name: Iridium, schemes: [iridium] }]
+electronFuses: # unchanged from A53 — every one of the seven, at 1.0 and after
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+win:
+  target: [{ target: zip, arch: [x64, arm64] }]
+  artifactName: 'Iridium-${version}-win32-${arch}.${ext}'
+  # No win.azureSignOptions at 1.0. publisherName is recorded in the installed app's app-update.yml
+  # and is verified against every future update, so it is chosen once by the post-1.0 signing epic
+  # (D07-45) and is never set provisionally.
+mac:
+  target: [{ target: zip, arch: [x64, arm64] }]
+  artifactName: 'Iridium-${version}-darwin-${arch}.${ext}'
+  category: public.app-category.productivity
+  identity: '-' # ad-hoc signature: macOS refuses to execute an unsigned arm64 Mach-O
+  hardenedRuntime: false # meaningful only under a Developer ID signature; the epic sets it true
+  entitlements: build/entitlements.mac.plist # kept, unused until hardenedRuntime returns
+  notarize: false
+linux:
+  target: [{ target: tar.gz, arch: [x64, arm64] }]
+  artifactName: 'Iridium-${version}-linux-${arch}.${ext}'
+  category: Office
+publish:
+  [
+    {
+      provider: generic,
+      url: 'https://updates.invalid/desktop/updates/${channel}/',
+      channel: stable,
+    },
+  ]
+# placeholder, deliberately kept: it is what bakes app-update.yml into the package, which is the file
+# the post-1.0 updater overrides at runtime with setFeedURL (D07-35). Nothing reads it at 1.0.

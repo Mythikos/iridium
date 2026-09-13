@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./src/*": "./src/*",
+    "./vite.renderer.config.ts": "./vite.renderer.config.ts",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -38,6 +39,10 @@
     "zustand": "catalog:"
   },
   "devDependencies": {
-    "@iridium/tsconfig": "workspace:*"
+    "@iridium/tsconfig": "workspace:*",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "vitest": "catalog:",
+    "vitest-axe": "catalog:"
   }
 }

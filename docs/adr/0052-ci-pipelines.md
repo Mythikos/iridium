@@ -1,0 +1,31 @@
+# A52 — CI: `ci.yml` / `nightly.yml` / `release.yml` with digest-pinned actions and license compliance
+
+**Status:** Accepted (2026-09-11); the `nightly.yml` cross-browser smoke lane is **superseded in part by AG6 (2026-09-12)**, the `nightly.yml` MySQL 8.4.11 lane is **superseded in part by A59 (2026-09-12)**, and `release.yml`'s signing and notarisation secrets are **superseded in part by G8 (2026-09-12)** — 1.0 publishes six unsigned bundles with a published SHA-256 each (A53), while the test-signed E2E package smoke, which proves the fuse variant rather than a distribution signature, is unaffected. Every other lane stands, and the job list in the Decision below is kept as the record of what was accepted (D13-2, D13-14).
+
+## Context
+
+Everything security-relevant must be a build failure, not a review comment. GitHub-hosted runners require Linux for service containers (digest §8.2); Electron E2E needs three OSes and native MySQL on Windows/macOS (`shogo82148/actions-setup-mysql`). No plan had a license-compliance check; GPL `remark-obsidian` (digest §7.2) shows why one is needed.
+
+## Decision
+
+`ci.yml` (PR and push, concurrency-cancelled; `actions/checkout@v7.0.1`, `pnpm/action-setup@v6.1.0`, `actions/setup-node@v7.0.0`, all pinned by digest, Renovate `helpers:pinGitHubActionDigests`): job `static` (`tsc -b --builders 8`, `oxlint --type-aware`, `oxfmt --check`, `knip --production`, `turbo boundaries`, Redocly lint, `pnpm gen && git diff --exit-code`, `pnpm audit --audit-level high`, dedupe check, **license scan** with allowlist MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / ISC / MPL-2.0 / 0BSD / Unlicense / BlueOak-1.0.0 (the last added at M0, 2026-09-13; 10-testing-and-quality.md records why) and denylist GPL / AGPL / LGPL / BSL / UNLICENSED, tool pinned at M0) → `unit` [ubuntu, windows] (unit + component + property-light, blob reporter) → `integration` (ubuntu with Docker: integration + contract + mcp + Schemathesis light) → `e2e-web` (4 shards, `mysql:9.7.2-oraclelinux9` service container) → `e2e-electron` [ubuntu xvfb, windows, macos] → `chaos-core` (≈20 kill iterations) → `merge-reports` (coverage thresholds, Playwright report). Critical path budget ≤ 15 minutes wall-clock per run (a performance budget for the pipeline, enforced by job timeouts, not an effort estimate). `nightly.yml`: property-long, chaos-extended (200 kill iterations, all toxics), load (k6 or fallback generator), mutation (A2), Schemathesis full, backup-restore drill (A47), cross-browser smoke (firefox/webkit), electron full, MySQL 8.4.11 lane (A9), real MCP client matrix (Claude Code ≥ 2.1.232 v2 runtime, VS Code, Cursor, bridge), proxied-stack MCP header passthrough (A48), `compose.prod.yaml` clean-VM boot. `release.yml` (tags from `changeset git-tag`): server image via `docker/build-push-action@v7.3.0` with SBOM and provenance, electron-builder matrix with signing/notarisation secrets, test-signed E2E package smoke, final packages, update-feed artifacts published with `iridium desktop-updates publish`, `changesets/action@v2.1.2` Version PR.
+
+## Alternatives Considered
+
+No plan proposed a different CI shape; the differences were in what was missing (license scan, proxied-stack MCP test, clean-VM compose boot), all of which are now included.
+
+## Consequences
+
+Positive: a dependency with a disallowed license, an OpenAPI drift, a duplicate Yjs instance, a failing chain verification, or a desktop bundle whose file names, digests or fuse bits disagree with the release contract (`release.bundle-integrity`) cannot merge or ship — the clause as accepted named an unsigned installer, which G8 retired along with the installers themselves (A53). Negative: three-OS Electron E2E and Docker-based lanes make CI minutes the scarce resource; the ≤ 15 minute critical-path budget is protected by sharding and by moving long suites to nightly.
+
+## Verification
+
+The pipelines are verified by running them at M0 exit (skeleton-green skeletons), and by M8's requirement that all nine acceptance rows are green on PR and nightly for 7 consecutive nightly runs.
+
+## References
+
+Digest §8.2 (runner labels, action tags, `actions-setup-mysql`), §9.2 (Renovate, Changesets 3, pnpm 12 CI semantics), §7.2 (GPL plugin); all four plans' CI sections; gap fix (license scan). Implemented in `10-testing-and-quality.md` and `11-operations-and-deployment.md`. The MySQL lane assignment in this ADR's `nightly.yml` list is superseded by A59: the `mysql-84` job is deleted and `integration` and `chaos-core` become two-entry matrices, both entries required on `main`. The cross-browser smoke lane is superseded by AG6: the `browser-smoke` job and the `firefox-smoke` and `webkit-smoke` Playwright projects are deleted, and `release.yml`'s signing and notarisation secrets are superseded by G8 (A53), which ships unsigned bundles at 1.0.
+
+---
+
+Source: docs/plan/13-decision-log.md, decision A52. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).

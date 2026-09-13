@@ -1,0 +1,4 @@
+{
+  "$comment": "The recorded number of `// Stryker disable` comments in the repository, read by scripts/check-stryker-disables.ts. The rule is 10-testing-and-quality.md, \"Mutation\": disables are counted and the check fails if the count grows. Raising this number is a deliberate edit in the same commit as the disable it admits, and it is never raised for a file under apps/server/src/auth, apps/server/src/authz, apps/server/src/collab/persistence or packages/markdown/src/sanitize, where a surviving mutant is a missing test.",
+  "ceiling": 0
+}

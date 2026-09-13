@@ -1,0 +1,63 @@
+/* Spike S04 — the only stylesheet the harness page owns. Served from the app origin, so it is
+   allowed by `style-src 'self'` without a nonce; its presence proves the strict policy is active
+   and still permits same-origin stylesheets. */
+:root {
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #111113;
+  color: #e6e6e8;
+}
+
+#root {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.s04-editor,
+.s04-preview {
+  border: 1px solid #2a2a2e;
+  border-radius: 6px;
+  overflow: auto;
+  min-height: 300px;
+}
+
+.s04-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.s04-popup {
+  background: #1c1c20;
+  border: 1px solid #3a3a40;
+  border-radius: 6px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+}
+
+.s04-palette {
+  background: #1c1c20;
+  border: 1px solid #3a3a40;
+  border-radius: 8px;
+  padding: 10px;
+  width: 420px;
+  position: fixed;
+  top: 15%;
+  left: 50%;
+  margin-left: -210px;
+}
+
+.s04-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 50%);
+}

@@ -1,0 +1,460 @@
+{
+  "spike": "S6",
+  "generatedAt": "2026-09-13T13:32:31.225Z",
+  "node": "24.11.0",
+  "k6": {
+    "binary": "C:/Users/Vincent/AppData/Local/Temp/claude/D--Repository-Other-iridium/b6d20f0c-f75b-4d68-9394-a22aa8942a89/scratchpad/m0/tools/k6-v2.2.0-windows-amd64/k6.exe",
+    "exitCode": 0,
+    "vusPerScenario": 1,
+    "markers": 200
+  },
+  "bundle": {
+    "esbuild": "0.25.12",
+    "bundledVersions": {
+      "yjs": "13.6.32",
+      "lib0": "0.2.117",
+      "y-protocols": "1.0.7"
+    },
+    "flags": [
+      "--bundle",
+      "--format=cjs",
+      "--platform=browser",
+      "--external:k6*",
+      "--target=es2022"
+    ],
+    "entry": "src/s06-collab.js",
+    "outfile": "s06-collab.bundle.js",
+    "bundleBytes": 267004,
+    "moduleCount": 40,
+    "imports": ["k6", "k6/execution", "k6/metrics", "k6/websockets"],
+    "bytesByPackage": {
+      ".pnpm": 471048,
+      "(entry)": 26589
+    },
+    "largestInputs": [
+      {
+        "path": "../../../../../../node_modules/.pnpm/yjs@13.6.32/node_modules/yjs/dist/yjs.mjs",
+        "bytes": 299797
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/schema.js",
+        "bytes": 30563
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/encoding.js",
+        "bytes": 26567
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/decoding.js",
+        "bytes": 17847
+      },
+      {
+        "path": "src/s06-collab.js",
+        "bytes": 14544
+      },
+      {
+        "path": "src/wire.js",
+        "bytes": 12045
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/logging.js",
+        "bytes": 9825
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/awareness.js",
+        "bytes": 9647
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/dom.js",
+        "bytes": 6768
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/prng.js",
+        "bytes": 6092
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/y-protocols@1.0.7_yjs@13.6.32/node_modules/y-protocols/sync.js",
+        "bytes": 4988
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/array.js",
+        "bytes": 4725
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/string.js",
+        "bytes": 4449
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/environment.js",
+        "bytes": 4212
+      },
+      {
+        "path": "../../../../../../node_modules/.pnpm/lib0@0.2.117/node_modules/lib0/buffer.js",
+        "bytes": 4133
+      }
+    ]
+  },
+  "server": {
+    "ready": {
+      "event": "ready",
+      "port": 55657,
+      "origin": "http://127.0.0.1:55657",
+      "wsUrl": "ws://127.0.0.1:55657/collab",
+      "publicHost": "127.0.0.1:55657",
+      "token": "spike-ticket",
+      "desktopOrigin": "app://iridium"
+    },
+    "shutdown": {
+      "event": "shutdown",
+      "counts": {
+        "onConnect": 2,
+        "onAuthenticate": 2,
+        "authRejected": 0,
+        "onLoadDocument": 1,
+        "onChange": 200,
+        "onStoreDocument": 23,
+        "afterStoreDocument": 23,
+        "statelessBroadcasts": 23
+      },
+      "documents": ["s06-note"],
+      "texts": {
+        "s06-note": {
+          "bytes": 0,
+          "markers": 0
+        }
+      },
+      "lastPersistedHeads": {
+        "1": 200
+      },
+      "lastPersistedBytes": 5292,
+      "lastPersistedMarkers": 200,
+      "lastPersistedText": "[[S06:1:1:1789306342215]][[S06:1:2:1789306342241]][[S06:1:3:1789306342266]][[S06:1:4:1789306342291]][[S06:1:5:1789306342317]][[S06:1:6:1789306342342]][[S06:1:7:1789306342367]][[S06:1:8:1789306342392]][[S06:1:9:1789306342418]][[S06:1:10:1789306342443]][[S06:1:11:1789306342469]][[S06:1:12:1789306342494]][[S06:1:13:1789306342520]][[S06:1:14:1789306342545]][[S06:1:15:1789306342570]][[S06:1:16:1789306342596]][[S06:1:17:1789306342621]][[S06:1:18:1789306342647]][[S06:1:19:1789306342672]][[S06:1:20:1789306342698]][[S06:1:21:1789306342723]][[S06:1:22:1789306342748]][[S06:1:23:1789306342773]][[S06:1:24:1789306342799]][[S06:1:25:1789306342824]][[S06:1:26:1789306342850]][[S06:1:27:1789306342875]][[S06:1:28:1789306342901]][[S06:1:29:1789306342927]][[S06:1:30:1789306342952]][[S06:1:31:1789306342977]][[S06:1:32:1789306343002]][[S06:1:33:1789306343027]][[S06:1:34:1789306343052]][[S06:1:35:1789306343078]][[S06:1:36:1789306343103]][[S06:1:37:1789306343128]][[S06:1:38:1789306343154]][[S06:1:39:1789306343180]][[S06:1:40:1789306343205]][[S06:1:41:1789306343232]][[S06:1:42:1789306343258]][[S06:1:43:1789306343283]][[S06:1:44:1789306343309]][[S06:1:45:1789306343334]][[S06:1:46:1789306343361]][[S06:1:47:1789306343388]][[S06:1:48:1789306343414]][[S06:1:49:1789306343441]][[S06:1:50:1789306343468]][[S06:1:51:1789306343494]][[S06:1:52:1789306343520]][[S06:1:53:1789306343547]][[S06:1:54:1789306343573]][[S06:1:55:1789306343599]][[S06:1:56:1789306343625]][[S06:1:57:1789306343651]][[S06:1:58:1789306343677]][[S06:1:59:1789306343703]][[S06:1:60:1789306343729]][[S06:1:61:1789306343755]][[S06:1:62:1789306343781]][[S06:1:63:1789306343807]][[S06:1:64:1789306343833]][[S06:1:65:1789306343859]][[S06:1:66:1789306343885]][[S06:1:67:1789306343912]][[S06:1:68:1789306343937]][[S06:1:69:1789306343979]][[S06:1:70:1789306344005]][[S06:1:71:1789306344032]][[S06:1:72:1789306344059]][[S06:1:73:1789306344085]][[S06:1:74:1789306344110]][[S06:1:75:1789306344137]][[S06:1:76:1789306344162]][[S06:1:77:1789306344187]][[S06:1:78:1789306344214]][[S06:1:79:1789306344240]][[S06:1:80:1789306344266]][[S06:1:81:1789306344292]][[S06:1:82:1789306344318]][[S06:1:83:1789306344344]][[S06:1:84:1789306344369]][[S06:1:85:1789306344395]][[S06:1:86:1789306344422]][[S06:1:87:1789306344452]][[S06:1:88:1789306344478]][[S06:1:89:1789306344504]][[S06:1:90:1789306344530]][[S06:1:91:1789306344556]][[S06:1:92:1789306344582]][[S06:1:93:1789306344608]][[S06:1:94:1789306344633]][[S06:1:95:1789306344659]][[S06:1:96:1789306344684]][[S06:1:97:1789306344710]][[S06:1:98:1789306344736]][[S06:1:99:1789306344763]][[S06:1:100:1789306344789]][[S06:1:101:1789306344815]][[S06:1:102:1789306344841]][[S06:1:103:1789306344867]][[S06:1:104:1789306344895]][[S06:1:105:1789306344922]][[S06:1:106:1789306344964]][[S06:1:107:1789306344990]][[S06:1:108:1789306345018]][[S06:1:109:1789306345044]][[S06:1:110:1789306345070]][[S06:1:111:1789306345096]][[S06:1:112:1789306345122]][[S06:1:113:1789306345151]][[S06:1:114:1789306345178]][[S06:1:115:1789306345205]][[S06:1:116:1789306345230]][[S06:1:117:1789306345259]][[S06:1:118:1789306345285]][[S06:1:119:1789306345311]][[S06:1:120:1789306345340]][[S06:1:121:1789306345365]][[S06:1:122:1789306345393]][[S06:1:123:1789306345418]][[S06:1:124:1789306345444]][[S06:1:125:1789306345472]][[S06:1:126:1789306345499]][[S06:1:127:1789306345525]][[S06:1:128:1789306345551]][[S06:1:129:1789306345576]][[S06:1:130:1789306345603]][[S06:1:131:1789306345629]][[S06:1:132:1789306345655]][[S06:1:133:1789306345681]][[S06:1:134:1789306345706]][[S06:1:135:1789306345733]][[S06:1:136:1789306345761]][[S06:1:137:1789306345788]][[S06:1:138:1789306345814]][[S06:1:139:1789306345840]][[S06:1:140:1789306345867]][[S06:1:141:1789306345893]][[S06:1:142:1789306345919]][[S06:1:143:1789306345945]][[S06:1:144:1789306345971]][[S06:1:145:1789306345997]][[S06:1:146:1789306346025]][[S06:1:147:1789306346053]][[S06:1:148:1789306346079]][[S06:1:149:1789306346104]][[S06:1:150:1789306346131]][[S06:1:151:1789306346157]][[S06:1:152:1789306346184]][[S06:1:153:1789306346211]][[S06:1:154:1789306346237]][[S06:1:155:1789306346263]][[S06:1:156:1789306346290]][[S06:1:157:1789306346372]][[S06:1:158:1789306346403]][[S06:1:159:1789306346431]][[S06:1:160:1789306346460]][[S06:1:161:1789306346485]][[S06:1:162:1789306346513]][[S06:1:163:1789306346540]][[S06:1:164:1789306346567]][[S06:1:165:1789306346593]][[S06:1:166:1789306346619]][[S06:1:167:1789306346646]][[S06:1:168:1789306346673]][[S06:1:169:1789306346701]][[S06:1:170:1789306346728]][[S06:1:171:1789306346754]][[S06:1:172:1789306346780]][[S06:1:173:1789306346806]][[S06:1:174:1789306346833]][[S06:1:175:1789306346861]][[S06:1:176:1789306346888]][[S06:1:177:1789306346915]][[S06:1:178:1789306346941]][[S06:1:179:1789306346968]][[S06:1:180:1789306346995]][[S06:1:181:1789306347021]][[S06:1:182:1789306347049]][[S06:1:183:1789306347076]][[S06:1:184:1789306347104]][[S06:1:185:1789306347131]][[S06:1:186:1789306347157]][[S06:1:187:1789306347183]][[S06:1:188:1789306347209]][[S06:1:189:1789306347235]][[S06:1:190:1789306347263]][[S06:1:191:1789306347290]][[S06:1:192:1789306347315]][[S06:1:193:1789306347341]][[S06:1:194:1789306347367]][[S06:1:195:1789306347393]][[S06:1:196:1789306347419]][[S06:1:197:1789306347444]][[S06:1:198:1789306347470]][[S06:1:199:1789306347495]][[S06:1:200:1789306347521]]",
+      "lastPending": {
+        "pending": false
+      },
+      "lastClients": [
+        {
+          "client": 40163001,
+          "items": 1
+        }
+      ],
+      "warnLogLines": 4,
+      "warnLines": [
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:32:20.114Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 46316,
+          "instanceId": "DESKTOP-6PDT5SM:46316:01a09af8",
+          "warning": "UV_THREADPOOL_SIZE is unset: argon2id at 150-300 ms serialises on the default libuv pool of 4. Set it to at least 8 in the environment the process starts with (image ENV, Compose environment, systemd Environment=); a process cannot widen its own pool.",
+          "msg": "UV_THREADPOOL_SIZE is unset: argon2id at 150-300 ms serialises on the default libuv pool of 4. Set it to at least 8 in the environment the process starts with (image ENV, Compose environment, systemd Environment=); a process cannot widen its own pool."
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:32:20.161Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 46316,
+          "instanceId": "DESKTOP-6PDT5SM:46316:01a09af8",
+          "event": "readyz.recovered",
+          "state": "ready",
+          "reason": "ready",
+          "msg": "readiness is now ready"
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:32:20.219Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 46316,
+          "instanceId": "DESKTOP-6PDT5SM:46316:01a09af8",
+          "requestId": "01a09af8-037b-781c-a913-c83c8432bd57",
+          "event": "authz.origin_rejected",
+          "route": "/collab",
+          "originPresent": true,
+          "msg": "websocket origin rejected"
+        },
+        {
+          "level": "warn",
+          "time": "2026-09-13T13:32:20.221Z",
+          "service": "iridium-server",
+          "version": "0.0.0",
+          "commit": "unknown",
+          "pid": 46316,
+          "instanceId": "DESKTOP-6PDT5SM:46316:01a09af8",
+          "requestId": "01a09af8-037d-7eed-8afe-30a1491a886b",
+          "event": "authz.origin_rejected",
+          "route": "/collab",
+          "originPresent": false,
+          "msg": "websocket origin rejected"
+        }
+      ]
+    }
+  },
+  "summary": {
+    "spike": "S6",
+    "generatedAt": "2026-09-13T13:32:31.215Z",
+    "k6": {
+      "scenarios": ["observer", "probe", "origins"],
+      "thresholds": {
+        "yjs_propagation_ms": ["p(95)<250"],
+        "checks": ["rate==1.0"],
+        "durable_ack_ms": ["p(95)<1000"],
+        "iridium_ws_connecting_ms": ["p(95)<500"],
+        "ws_connecting": ["p(95)<500"]
+      }
+    },
+    "environment": {
+      "wsUrl": "ws://127.0.0.1:55657/collab",
+      "origin": "http://127.0.0.1:55657",
+      "document": "s06-note",
+      "vusPerScenario": 1,
+      "clientIdBase": 40163000,
+      "markers": 200,
+      "markerIntervalMs": 25
+    },
+    "metrics": {
+      "data_received": {
+        "values": {
+          "count": 33787,
+          "rate": 3071.256449313574
+        },
+        "type": "counter",
+        "contains": "data"
+      },
+      "iteration_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 5938.4216,
+          "p(90)": 9988.5124,
+          "p(95)": 10494.773749999998,
+          "max": 11001.0351,
+          "count": 3,
+          "min": 1500.6056,
+          "avg": 6146.687433333333
+        }
+      },
+      "s06_stateless_persisted": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 23,
+          "rate": 2.090712354876497
+        }
+      },
+      "s06_markers_sent": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "rate": 18.18010743370867,
+          "count": 200
+        }
+      },
+      "yjs_propagation_ms": {
+        "contains": "time",
+        "values": {
+          "max": 7,
+          "count": 200,
+          "min": 0,
+          "avg": 1.775,
+          "med": 2,
+          "p(90)": 3,
+          "p(95)": 4
+        },
+        "thresholds": {
+          "p(95)<250": {
+            "ok": true
+          }
+        },
+        "type": "trend"
+      },
+      "s06_propagation_zero_ms_samples": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 4,
+          "rate": 0.3636021486741734
+        }
+      },
+      "checks": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 18,
+          "fails": 0,
+          "rate": 1
+        },
+        "thresholds": {
+          "rate==1.0": {
+            "ok": true
+          }
+        }
+      },
+      "iterations": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 3,
+          "rate": 0.27270161150563005
+        }
+      },
+      "vus_max": {
+        "values": {
+          "max": 3,
+          "value": 3,
+          "min": 3
+        },
+        "type": "gauge",
+        "contains": "default"
+      },
+      "ws_msgs_received": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "rate": 59.539851845395894,
+          "count": 655
+        }
+      },
+      "ws_session_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 7312.8511,
+          "count": 3,
+          "min": 9.9016,
+          "avg": 4420.391433333333,
+          "med": 5938.4216,
+          "p(90)": 7037.9652,
+          "p(95)": 7175.408149999999
+        }
+      },
+      "data_sent": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "count": 13605,
+          "rate": 1236.7018081780323
+        }
+      },
+      "s06_markers_observed": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 200,
+          "rate": 18.18010743370867
+        }
+      },
+      "iridium_ws_connecting_ms": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 10.549999999999999,
+          "max": 11,
+          "count": 2,
+          "min": 2,
+          "avg": 6.5,
+          "med": 6.5,
+          "p(90)": 10.1
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "vus": {
+        "values": {
+          "min": 1,
+          "max": 2,
+          "value": 1
+        },
+        "type": "gauge",
+        "contains": "default"
+      },
+      "ws_sessions": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 5,
+          "rate": 0.4545026858427168
+        }
+      },
+      "durable_ack_ms": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "min": 1,
+          "avg": 109.085,
+          "med": 108,
+          "p(90)": 203.1,
+          "p(95)": 214,
+          "max": 242,
+          "count": 200
+        },
+        "thresholds": {
+          "p(95)<1000": {
+            "ok": true
+          }
+        }
+      },
+      "ws_connecting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 7.9991,
+          "p(90)": 10.1513,
+          "p(95)": 10.5351,
+          "max": 10.9189,
+          "count": 5,
+          "min": 1.2831,
+          "avg": 6.840179999999999
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "ws_msgs_sent": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 210,
+          "rate": 19.089112805394105
+        }
+      },
+      "iridium_sync_status_ms": {
+        "contains": "time",
+        "values": {
+          "min": 0,
+          "avg": 1.77,
+          "med": 2,
+          "p(90)": 3,
+          "p(95)": 3.049999999999983,
+          "max": 7,
+          "count": 200
+        },
+        "type": "trend"
+      },
+      "iridium_sync_ms": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 13,
+          "count": 2,
+          "min": 3,
+          "avg": 8,
+          "med": 8,
+          "p(90)": 12,
+          "p(95)": 12.5
+        }
+      }
+    },
+    "thresholdFailures": []
+  }
+}

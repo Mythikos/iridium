@@ -1,0 +1,298 @@
+{
+  "generatedBy": "scripts/build-non-goals.ts",
+  "source": "01-vision-scope-and-principles.md §4.4",
+  "description": "Every declared non-goal, in the order 01-vision-scope-and-principles.md §4.4 states them: the deferral table, then the bullet list, then the two composite claims of spec §1. `guards.non-goals.guard` asserts that these ids equal the `NonGoalId` union of `packages/contracts/src/non-goals.ts` and then runs one absence assertion per id.",
+  "nonGoals": [
+    {
+      "id": "plugin-ecosystem",
+      "title": "Plugin ecosystem",
+      "whatTheMvpDoesInstead": "No plugin API, no third-party code in the renderer (nonce CSP, Electron fuses, onlyLoadAppFromAsar). The command registry (packages/ui/src/commands/registry.ts) drives the palette, keymaps, native menu and E2E, and is internal",
+      "seamKept": "The registry is the only extension-shaped surface; nothing loads code at runtime",
+      "section": "07-client-applications.md",
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no dynamic `import(` or `require(` of a non-bundled specifier in `apps/desktop/src` or `packages/ui/src`; no `plugins`/`extensions` directory in either; `commands/registry.ts` is re-exported from no package entry point, so the one extension-shaped surface stays internal"
+    },
+    {
+      "id": "graph-view",
+      "title": "Graph view",
+      "whatTheMvpDoesInstead": "Backlinks and unresolved-links panes computed from note_links",
+      "seamKept": "note_links already holds every edge with kind, status, offsets and resolved targets",
+      "section": "03-data-model.md, 07-client-applications.md",
+      "sinceMilestone": "M4",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no route, CLI command, MCP tool, command-registry id or router route id matching `/graph|network-view|canvas-view/i`; no graph-layout dependency (`d3-force`, `cytoscape`, `vis-network`, `sigma`, `react-force-graph`)"
+    },
+    {
+      "id": "advanced-wysiwyg",
+      "title": "Advanced WYSIWYG / live-preview editing",
+      "whatTheMvpDoesInstead": "Source, reading and split modes; formatting shortcuts edit Markdown source through StateCommands tagged input.format",
+      "seamKept": "The editor is CodeMirror 6 on a Y.Text; a future live preview is a decoration layer over the same source, never a second document model",
+      "section": "07-client-applications.md",
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no `contenteditable` in `packages/ui` or `packages/markdown-react` outside CodeMirror's own view; no ProseMirror, Slate, Lexical, TipTap or Quill dependency"
+    },
+    {
+      "id": "automatic-link-rewriting",
+      "title": "Automatic link rewriting",
+      "whatTheMvpDoesInstead": "The rename-impact dialog before a rename or move, from PATCH /nodes/:nodeId {dryRun:true} → affectedLinks, GET /nodes/:nodeId/inbound-links and GET /notes/:noteId/rename-impact",
+      "seamKept": "note_links records start_offset/end_offset per link so a future rewrite job can apply a minimal edit through a DirectConnection",
+      "section": "08-markdown-pipeline-import-export.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no `jobs.type` enum member and no CLI command that rewrites links; the writers of note content are exactly the allowlist of `collab.no-reinit.guard`; `note_links` is written only by the projection writer"
+    },
+    {
+      "id": "full-obsidian-syntax-compatibility",
+      "title": "Full Obsidian syntax compatibility",
+      "whatTheMvpDoesInstead": "detectObsidianSyntax() produces import findings and per-note obsidian_findings; wikilinks and embeds are indexed in note_links; everything renders as literal text; the compatibility badge shows what a note relies on",
+      "seamKept": "vaults.markdown_flavor ('gfm' | 'obsidian-compat'), soft_breaks, attachment_folder exist; the first-party remarkWikiLink, remarkCallout, remarkHighlight, remarkComment plugin seam is designed. G2 was answered no on 2026-09-12: read-only rendering of Obsidian syntax is not pulled into the MVP, so markdown_flavor and the plugin seam stay reserved and wikilinks, callouts, highlights and comments render as literal text",
+      "section": "08-markdown-pipeline-import-export.md",
+      "sinceMilestone": "M2",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "the registered remark and rehype plugin lists equal their committed sets, and `remarkWikiLink`, `remarkCallout`, `remarkHighlight` and `remarkComment` are absent from the default pipeline. The owner answered G2 **no** on 2026-09-12 — Obsidian syntax is detected, reported and indexed in `note_links`, and wikilinks, callouts, highlights and comments render as literal text — so this assertion is now an unconditional absence rather than a state that might flip. The decision is recorded as a field of this non-goal's `docs/non-goals.json` entry (`decision: 'G2 answered no, 2026-09-12'`) rather than as an open question, and reversing it later is the same three-part commit as any other non-goal crossing: edit 01-vision-scope-and-principles.md §4.4, regenerate the JSON, change the assertion — in the same commit that extends the HP-4 corpus and `markdown.sanitize.prop`, which is the coupling 14-risks-and-open-questions.md asks for",
+      "decision": "G2 answered no, 2026-09-12"
+    },
+    {
+      "id": "per-note-acl-overrides",
+      "title": "Per-note / per-category ACL overrides",
+      "whatTheMvpDoesInstead": "Vault-level roles only; every permission is evaluated against the vault",
+      "seamKept": "authorize(principal, permission, {vaultId?}) takes a context object; a node-level rule would be an additional deny inside the same function, never a bypass",
+      "section": "04-auth-and-access-control.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "`authorize()`'s context type has exactly the key `vaultId`; every route's `config.auth` uses one of the four documented `vaultFrom` forms; no `nodes`, `notes` or `note_*` column named `role`, `permissions`, `acl`, `visibility` or `shared_with` exists in the `Database` interface or in any migration"
+    },
+    {
+      "id": "public-sharing",
+      "title": "Public sharing",
+      "whatTheMvpDoesInstead": "No anonymous principal; every request is authenticated and authorised against explicit membership",
+      "seamKept": "The Principal union in @iridium/contracts is closed (user, token, system); adding a kind is a deliberate contract change",
+      "section": "04-auth-and-access-control.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "the `Principal` union is exactly `user | token | system`; no route declares `{ public: true }` outside the documented public set; no `share` or `publish` route, command or tool"
+    },
+    {
+      "id": "cross-vault-moves",
+      "title": "Cross-vault moves",
+      "whatTheMvpDoesInstead": "nodes.vault_id and attachments.vault_id are immutable; a move whose target parent is in another vault is rejected",
+      "seamKept": "Export then import is the supported path; the manifest carries ids and revisions",
+      "section": "03-data-model.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no request object in `openapi.json` carries a vault-changing member (`vaultId`, `targetVaultId`, `newVaultId`) on a node, note or attachment path; no Kysely `.set(` in `apps/server/src` assigns `vault_id` outside the node-creation and import-commit paths. The *behaviour* is `tree.invalid-move.integration`'s `cross_vault` case; this is the assertion that there is no other door"
+    },
+    {
+      "id": "filesystem-git-sync",
+      "title": "Bidirectional filesystem / Git sync",
+      "whatTheMvpDoesInstead": "Export and import; the optional iridium mirror --vault --dir writes a read-only tree driven by projected_seq and never watches or writes back",
+      "seamKept": "The mirror reads the same ContentReadCore as everything else",
+      "section": "08-markdown-pipeline-import-export.md",
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no `chokidar`, `fs.watch`, `fs.watchFile`, `nodegit` or `isomorphic-git` in `apps/server/src` or the client packages; `mirror` is the only filesystem writer and has no reader (`mirror.readonly.integration` proves the runtime half)"
+    },
+    {
+      "id": "offline-first-editing",
+      "title": "Offline-first editing",
+      "whatTheMvpDoesInstead": "Online-first: a detected disconnect pauses editing (read-only compartment), pending changes stay in the session, the client warns before closing with unsaved work, reconnection re-authorises before merging, rejected changes stay recoverable (\"Export my text\")",
+      "seamKept": "SaveStateMachine is pure and property-tested; NoteSession owns the Y.Doc so a local persistence provider could be attached later; y-indexeddb is not used",
+      "section": "05-collaboration-and-durability.md, 07-client-applications.md",
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no `y-indexeddb`, `y-leveldb`, `y-websocket` or `y-webrtc` reachable from the importers of `packages/{collab-client,editor,ui}` or `apps/{web,desktop}`; no `Y.encodeStateAsUpdate` call adjacent to a storage API in those packages; the `host.storage` key allowlist contains no note-id pattern"
+    },
+    {
+      "id": "mobile-clients",
+      "title": "Mobile clients",
+      "whatTheMvpDoesInstead": "The desktop application is the supported client at 1.0 (§4.6); the web host runs in current Chrome and Edge on desktop-class screens as a development and internal surface; Firefox, WebKit and mobile browsers are out of scope, with no lane and no best-effort claim (owner decision on G6, 2026-09-12)",
+      "seamKept": "IridiumHost isolates every platform concern",
+      "section": "07-client-applications.md",
+      "sinceMilestone": "M4",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "no `react-native`, Capacitor or Cordova dependency in any workspace manifest; no `@media` breakpoint below the desktop floor declared in `packages/ui/src/styles/tokens.css`; no Playwright project with a viewport narrower than that floor (the projects are exactly `setup`, `chromium` and `electron` — see the *Cross-browser support* row)"
+    },
+    {
+      "id": "enterprise-sso",
+      "title": "Enterprise SSO",
+      "whatTheMvpDoesInstead": "Password login only Iridium's OAuth 2.1 authorization server authorizes agents against Iridium's own accounts (G1, answered yes on 2026-09-12); it is not an identity provider for anything but Iridium's own API, and OIDC/SAML sign-in for people remains deferred to the post-1.0 roadmap (spec §10, and the Enterprise SSO row above).",
+      "seamKept": "All login methods finish through one session-issuing path; the deferred tables auth_providers, identities, groups, group_members are designed; sessions.mfa_verified_at is reserved; the iridium://auth/callback deep link is reserved",
+      "section": "04-auth-and-access-control.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table); 01-vision-scope-and-principles.md §4.4 (bullet)",
+      "absenceAssertion": "exactly one `SessionIssuer` implementation in the module graph; the deferred tables `auth_providers`, `identities`, `groups` and `group_members` appear in no migration and in no `Database` key; `sessions.mfa_verified_at` has no reader; no route under `/auth/` outside the documented set; no OIDC or SAML dependency (`openid-client`, `@node-saml/node-saml`, `samlify`). **The OAuth tables are deliberately present and are not enterprise SSO.** `oauth_clients`, `oauth_consents`, `oauth_consent_vaults`, `oauth_authorization_codes` and `oauth_refresh_tokens` ship at M3 with Iridium's own OAuth 2.1 authorization server, which authorizes Iridium accounts against Iridium's own resource server and federates no identity from anywhere; it is built on `node:crypto` and the existing token machinery and adds no OAuth server library. They are named here as an explicit exclusion from this assertion so that the guard fails on a *new* SSO table rather than on the day the connectors land"
+    },
+    {
+      "id": "multi-server-collaboration",
+      "title": "Multi-server collaboration",
+      "whatTheMvpDoesInstead": "One process owns all active documents",
+      "seamKept": "AuthzBus, TicketStore, the rate-limit store, CollabServer, CollabPersistence, SearchIndex and StorageDriver are interfaces with in-process or MySQL implementations; jobs.locked_by is reserved for leader election",
+      "section": "02-system-architecture.md",
+      "sinceMilestone": "M1",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "one `new Hocuspocus(` construction site (the composed claim; `guards.one-boot-path.guard` owns the primitive); no `@hocuspocus/extension-redis`, `ioredis` or `redis` dependency; `GET_LOCK('iridium_note_` and `GET_LOCK('iridium_jobs_leader'` appear in no non-test source file, so the locks 02-system-architecture.md reserves stay reserved, while `GET_LOCK('iridium_collab_owner'` appears exactly once"
+    },
+    {
+      "id": "built-in-ai-features",
+      "title": "Built-in AI features",
+      "whatTheMvpDoesInstead": "None. Agents are readers through MCP and the read-only REST surface",
+      "seamKept": "vaults.ai_guidance is appended to list_vaults; the note_proposals table is designed for a later proposal flow",
+      "section": "06-mcp-and-agent-access.md",
+      "sinceMilestone": "M3",
+      "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
+      "absenceAssertion": "`tools.schema.json` holds exactly the six read tools, each with `readOnlyHint: true`; no route under `/ai` or `/chat`; no `note_proposals` table in any migration or `Database` key; no `VECTOR` column type and no column named `embedding`; no LLM or vector dependency (`openai`, `@anthropic-ai/sdk`, `langchain`, `llamaindex`, `chromadb`, `@xenova/transformers`, `faiss-node`)"
+    },
+    {
+      "id": "agent-write-access",
+      "title": "Agent write access of any kind",
+      "whatTheMvpDoesInstead": "Write scopes are schema-valid in @iridium/contracts so the contract does not change later, but they are never granted, listed or accepted — by an integration token or by an OAuth consent; note_proposals is the designed seam (see 4.5).",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "cross-browser-support",
+      "title": "Firefox, WebKit and any browser outside current Chrome and Edge",
+      "whatTheMvpDoesInstead": "The desktop application is the supported client at 1.0 and the web host is a development and internal surface on Chromium-class browsers (§4.6). There is no cross-browser Playwright project, no nightly smoke run and no best-effort claim. The seams are IridiumHost and the feature-floor boot check of 07-client-applications.md §9.3, so adding a supported browser later is a Playwright project, a CI lane and a statement — not a port.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": "`playwright.config.ts` declares exactly the projects `setup`, `chromium` and `electron`; the strings `Desktop Firefox`, `Desktop Safari`, `firefox` and `webkit` appear in no Playwright or Vitest browser-selector position in any configuration file; no workflow under `.github/workflows/` declares a `browser-smoke` job or invokes `--project=firefox-smoke` / `--project=webkit-smoke`; `@smoke` is grepped by exactly one invocation, the `electron` one; and no spec under `apps/e2e/web/` carries the `@smoke` tag"
+    },
+    {
+      "id": "mcp-notifications-and-sessions",
+      "title": "MCP notifications, subscriptions/listen, SSE streams and Mcp-Session-Id",
+      "whatTheMvpDoesInstead": "The endpoint is stateless per POST.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M3",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "mcp-binary-resources",
+      "title": "MCP binary resources for attachments",
+      "whatTheMvpDoesInstead": "list_attachments returns metadata; bytes are served by the PAT-enabled REST route.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M3",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "comments-and-suggestions",
+      "title": "Comments and suggestions",
+      "whatTheMvpDoesInstead": "No data model beyond the relative positions revisions already carry.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "scim-mfa-passkeys",
+      "title": "SCIM, MFA and passkeys",
+      "whatTheMvpDoesInstead": "access_tokens.kind='scim' and sessions.mfa_verified_at are reserved columns only.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "external-search-engines",
+      "title": "External search engines",
+      "whatTheMvpDoesInstead": "MySQL FULLTEXT only; Meilisearch is a later driver behind SearchIndex. No VECTOR column, VECTOR_DIM or STRING_TO_VECTOR appears anywhere — they are MySQL 9.x-only and therefore forbidden by the dialect rule that keeps 8.4 a required target (03-data-model.md). CJK n-gram indexing is settled by G5 (answered no on 2026-09-12): the default InnoDB full-text parser with innodb_ft_min_token_size=2, no ngram parser and no second index.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "attachment-encryption",
+      "title": "Application-level attachment encryption",
+      "whatTheMvpDoesInstead": "G4 (answered 2026-09-12) keeps this out: volume encryption or MySQL transparent data encryption is the documented posture, and the attachments.encryption, key_version, iv, auth_tag columns stay reserved.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "vault-hard-deletion",
+      "title": "Vault hard deletion",
+      "whatTheMvpDoesInstead": "Archive is the only retirement path; no MVP route, job or CLI command deletes a vault that ever reached active. vaults.status='deleting' is set only during the aborted-import teardown of a vault still in status='importing' (POST /imports/:jobId/abort, the transfer_cleanup job) and by doctor's root-row quarantine.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "math-and-mermaid-rendering",
+      "title": "Rendering of math, Mermaid, Dataview and query blocks",
+      "whatTheMvpDoesInstead": "They are highlighted as plain fenced code (plainText) and reported by the detector.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M4",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "email-delivery",
+      "title": "E-mail delivery",
+      "whatTheMvpDoesInstead": "Set-password links are delivered out of band by the administrator; server_settings.smtp is a reserved key.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "npm-publishing",
+      "title": "Publishing @iridium/mcp-bridge to npm",
+      "whatTheMvpDoesInstead": "(decision G7, 2026-09-12: no), Yjs v14, electron-builder 27 and Node 26.",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M0",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "desktop-packaging-and-signing",
+      "title": "Signed desktop installers and in-application updates",
+      "whatTheMvpDoesInstead": "1.0 distributes the desktop client as unsigned zipped bundles with a published SHA-256 per artefact (decision G8, 2026-09-12). Code signing (Apple Developer ID with notarisation, Azure Trusted Signing), installer formats (NSIS, MSI) and electron-updater are a single post-1.0 epic; MSIX is not planned in it. The seams are kept: the fuse set, asar integrity, the protocols declaration, the generic publish block that bakes app-update.yml, desktop_releases, GET /desktop/update-policy and the /desktop/updates/<channel>/ feed all ship at 1.0 (07-client-applications.md §7.14, D07-43).",
+      "seamKept": null,
+      "section": null,
+      "sinceMilestone": "M5",
+      "source": "01-vision-scope-and-principles.md §4.4 (bullet list)",
+      "absenceAssertion": null
+    },
+    {
+      "id": "not-a-complete-obsidian-replacement",
+      "title": "Not a complete Obsidian replacement",
+      "whatTheMvpDoesInstead": "A composite claim of spec §1 rather than a §4.4 row: the assertion holds only when every assertion it composes holds, so the scope sentence has one failing test rather than four partial ones.",
+      "seamKept": null,
+      "section": "01-vision-scope-and-principles.md §1.3",
+      "sinceMilestone": "M4",
+      "source": "10-testing-and-quality.md § The non-goal guard (composite claim)",
+      "absenceAssertion": "the composite claim of spec §1: the plugin, graph-view, WYSIWYG and filesystem-sync assertions above must all hold, asserted as one case so the scope sentence has one failing test rather than four partial ones"
+    },
+    {
+      "id": "no-second-content-write-path",
+      "title": "No second content write path",
+      "whatTheMvpDoesInstead": "A composite claim of spec §1 rather than a §4.4 row: the assertion holds only when every assertion it composes holds, so the scope sentence has one failing test rather than four partial ones.",
+      "seamKept": null,
+      "section": "01-vision-scope-and-principles.md §1.3",
+      "sinceMilestone": "M6",
+      "source": "10-testing-and-quality.md § The non-goal guard (composite claim)",
+      "absenceAssertion": "`new Y.Doc(` and `getText('content').insert(`/`.delete(` appear only in the allowlists of `collab.initial-state-only-path.guard` and `collab.no-reinit.guard`; no `openapi.json` operation accepts a full `markdown` body except `nodes.create` and `revisions.restore`; no MCP tool is anything but read-only; no CLI command writes note content except `repair content`; `iridium mirror` never reads the filesystem back"
+    }
+  ]
+}

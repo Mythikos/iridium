@@ -3,10 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The server splits this file on the literal placeholder once at boot and writes the pieces with
+      @fastify/helmet's per-request nonce (07-client-applications.md §6.2, D07-10). A boot assertion
+      fails when the placeholder is absent from the built HTML, so a build-configuration change
+      cannot silently ship a nonce-less page.
+    -->
+    <meta name="iridium-csp-nonce" content="__IRIDIUM_CSP_NONCE__" />
     <title>Iridium</title>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/index.ts"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

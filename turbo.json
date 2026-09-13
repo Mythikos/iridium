@@ -11,8 +11,16 @@
   "globalPassThroughEnv": ["CI", "GITHUB_ACTIONS", "NODE_OPTIONS"],
   "boundaries": {
     "tags": {
-      "core": { "dependencies": { "allow": ["tooling"] } },
-      "iso": { "dependencies": { "allow": ["core", "iso", "tooling"] } },
+      "core": {
+        "dependencies": {
+          "allow": ["tooling"]
+        }
+      },
+      "iso": {
+        "dependencies": {
+          "allow": ["core", "iso", "tooling"]
+        }
+      },
       "browser": {
         "dependencies": {
           "allow": ["core", "iso", "browser", "tooling"],
@@ -26,17 +34,36 @@
         }
       },
       "server": {
-        "dependencies": { "allow": ["core", "iso", "node", "tooling"], "deny": ["browser", "app"] },
-        "dependents": { "allow": [] }
+        "dependencies": {
+          "allow": ["core", "iso", "node", "tooling"],
+          "deny": ["browser", "app"]
+        },
+        "dependents": {
+          "allow": []
+        }
       },
       "app": {
         "dependencies": {
           "allow": ["core", "iso", "browser", "node", "tooling"],
           "deny": ["server"]
         },
-        "dependents": { "allow": [] }
+        "dependents": {
+          "allow": []
+        }
       },
-      "tooling": { "dependencies": { "allow": ["tooling", "core", "iso", "node"] } }
+      "tooling": {
+        "dependencies": {
+          "allow": ["tooling", "core", "iso", "node"]
+        }
+      },
+      "spike": {
+        "dependencies": {
+          "allow": ["core", "iso", "browser", "node", "tooling"]
+        },
+        "dependents": {
+          "allow": []
+        }
+      }
     }
   },
   "tasks": {
@@ -53,8 +80,7 @@
     "format:check": {},
     "test": {
       "dependsOn": ["^build"],
-      "env": ["IRIDIUM_TEST_SEED", "IRIDIUM_PROP_RUNS", "IRIDIUM_PROP_SIZE"],
-      "outputs": ["coverage/**"]
+      "env": ["IRIDIUM_TEST_SEED", "IRIDIUM_PROP_RUNS", "IRIDIUM_PROP_SIZE"]
     },
     "test:integration": {
       "dependsOn": ["^build", "build"],

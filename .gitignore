@@ -8,6 +8,8 @@ test-results/
 *.local
 .env
 .env.*
+# The committed image-pin file of infra/compose.prod.yaml is not a secret
+!infra/.env
 !.env.example
 apps/desktop/release/
 apps/e2e/.auth/
@@ -16,3 +18,9 @@ tooling/mutation/reports/
 *.log
 .DS_Store
 Thumbs.db
+# Stryker mutation lane (tooling/mutation): sandbox, per-run setup shims and reports
+.stryker-tmp/
+stryker-setup-*.js
+
+# Reports the CI scripts write (licence scan, coverage merges, load budgets): uploaded as artifacts, never committed
+/reports/

@@ -17,11 +17,14 @@
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
+    "@iridium/api-client": "workspace:*",
+    "@iridium/collab-client": "workspace:*",
     "@iridium/contracts": "workspace:*",
     "@iridium/ui": "workspace:*"
   },
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "vite": "catalog:"
   }

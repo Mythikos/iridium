@@ -1,0 +1,17 @@
+{
+  "sandbox": true,
+  "contextIsolation": true,
+  "nodeIntegration": false,
+  "nodeIntegrationInWorker": false,
+  "nodeIntegrationInSubFrames": false,
+  "webviewTag": false,
+  "navigateOnDragDrop": false,
+  "devTools": false,
+  "safeDialogs": true,
+  "partition": "persist:iridium",
+  "preload": "<preload>/index.cjs",
+  "webSecurity": true,
+  "allowRunningInsecureContent": false,
+  "experimentalFeatures": false,
+  "spellcheck": true
+}

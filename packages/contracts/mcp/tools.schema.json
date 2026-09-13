@@ -1,0 +1,14 @@
+{
+  "protocolRevision": "2026-07-28",
+  "generatedBy": "scripts/export-mcp-tools.ts",
+  "description": "The frozen MCP tool surface. `mcp.tools-schema.contract` asserts that a live `tools/list` deep-equals `tools`, order included, in both protocol eras. Regenerate with `pnpm gen`.",
+  "registrationOrder": [
+    "list_vaults",
+    "list_notes",
+    "get_note",
+    "search_notes",
+    "list_note_revisions",
+    "list_attachments"
+  ],
+  "tools": []
+}

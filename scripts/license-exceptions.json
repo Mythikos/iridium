@@ -1,0 +1,4 @@
+{
+  "$comment": "Reviewed exceptions to the licence policy of 10-testing-and-quality.md, \"License and supply-chain scan\" (D10-12, D10-15). One object per exception with: package (the npm name), versions (a range in the grammar scripts/check-licenses.ts documents), license (the SPDX expression being excepted), reason, approver, issue (a tracking URL) and expires (an ISO date). scripts/check-licenses.ts fails on an entry whose range no longer matches an installed version, and on one whose package now passes without it; scripts/check-exclusion-owners.ts fails on an entry missing an approver, an issue or an expiry. An empty list is the normal state.",
+  "exceptions": []
+}

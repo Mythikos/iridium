@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ping",
+    "name": "Ping",
+    "description": "Server responds to ping requests",
+    "status": "SUCCESS",
+    "timestamp": "2026-09-13T12:47:13.744Z",
+    "specReferences": [
+      {
+        "id": "MCP-Ping",
+        "url": "https://modelcontextprotocol.io/specification/2025-06-18/basic/utilities/ping"
+      }
+    ],
+    "details": {
+      "result": {}
+    }
+  }
+]

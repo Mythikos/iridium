@@ -1,8 +1,22 @@
 /**
- * @iridium/contracts — the single wire-contract package (zod 4 schemas and inferred types for REST, collab, MCP, IPC, audit, limits, ids, tokens, paths)
+ * `@iridium/contracts` — the single wire-contract package: zod 4 schemas and inferred types for
+ * REST, the collaboration channel, MCP, desktop IPC, audit, limits, ids, tokens and paths
+ * (02-system-architecture.md, "Package responsibilities"). Its only runtime dependency is zod;
+ * it contains no I/O and nothing platform-specific, which is what lets every other package —
+ * browser, Node, Electron — depend on it.
  *
- * M0 placeholder: the package exists so that the workspace graph, boundaries, knip and the
- * single-instance check exercise the real dependency structure. The package work item of
- * 12-milestones.md section 4.3 replaces this module.
+ * This barrel is the package's single `.` export, so a module that is not re-exported here does
+ * not exist for consumers.
  */
-export const packageName = '@iridium/contracts' as const;
+
+export * from './audit.ts';
+export * from './authz.ts';
+export * from './collab.ts';
+export * from './errors.ts';
+export * from './ids.ts';
+export * from './limits.ts';
+export * from './non-goals.ts';
+export * from './paths.ts';
+export * from './schema.ts';
+export * from './search-query.ts';
+export * from './tokens.ts';

@@ -10,6 +10,8 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "boundaries": "turbo boundaries",
+    "gen": "node scripts/gen.ts",
+    "gen:check": "pnpm run gen && git diff --exit-code",
     "knip": "knip --production",
     "test": "vitest --run --passWithNoTests --project unit --project guard --project component",
     "test:unit": "vitest --run --passWithNoTests --project unit",
@@ -33,13 +35,12 @@
     "@changesets/cli": "catalog:",
     "@commitlint/cli": "catalog:",
     "@commitlint/config-conventional": "catalog:",
-    "@fast-check/vitest": "catalog:",
     "@iridium/oxlint-config": "workspace:*",
     "@playwright/test": "catalog:",
+    "@redocly/cli": "catalog:",
     "@types/node": "catalog:",
     "@vitest/browser-playwright": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "fast-check": "catalog:",
     "knip": "catalog:",
     "lefthook": "catalog:",
     "oxfmt": "catalog:",
@@ -47,8 +48,7 @@
     "oxlint-tsgolint": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "vitest-browser-react": "catalog:"
+    "vitest": "catalog:"
   },
   "devEngines": {
     "packageManager": {

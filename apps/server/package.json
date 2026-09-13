@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "iridium": "node dist/main.mjs",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint -c ../../oxlint.config.ts .",
     "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit apps/server",
@@ -25,7 +26,7 @@
     "test:chaos": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project chaos apps/server",
     "test:contract": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project contract apps/server",
     "test:mcp": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project mcp apps/server",
-    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts serve",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@fastify/helmet": "catalog:",
     "@fastify/multipart": "catalog:",
     "@fastify/rate-limit": "catalog:",
+    "@fastify/static": "catalog:",
     "@fastify/swagger": "catalog:",
     "@fastify/swagger-ui": "catalog:",
     "@fastify/under-pressure": "catalog:",
@@ -48,20 +50,32 @@
     "@modelcontextprotocol/node": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
     "@node-rs/argon2": "catalog:",
+    "@prometheus-io/client": "catalog:",
     "fastify": "catalog:",
     "fastify-type-provider-zod": "catalog:",
+    "file-type": "catalog:",
     "kysely": "catalog:",
     "mysql2": "catalog:",
     "pino": "catalog:",
     "piscina": "catalog:",
     "rate-limiter-flexible": "catalog:",
+    "yauzl": "catalog:",
+    "yazl": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@iridium/sql-policy": "workspace:*",
     "@iridium/testkit": "workspace:*",
     "@iridium/tsconfig": "workspace:*",
+    "@types/k6": "catalog:",
+    "@types/ws": "catalog:",
+    "esbuild": "catalog:",
     "kysely-codegen": "catalog:",
     "kysely-ctl": "catalog:",
-    "tsdown": "catalog:"
+    "lib0": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:",
+    "y-protocols": "catalog:",
+    "yjs": "catalog:"
   }
 }

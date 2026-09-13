@@ -1,0 +1,27 @@
+Cross-verification of PHC strings between @node-rs/argon2 2.2.1 (installed for apps/server)
+and the argon2 npm package 0.45.1 (installed into a scratch project, not the repository:
+C:\Users\Vincent\AppData\Local\Temp\claude\D--Repository-Other-iridium\<session>\scratchpad\m0\s13-cross-verify-win).
+argon2@0.45.1 resolved prebuilt binaries (node_modules/argon2/prebuilds/**, prebuild-install
+style) for win32-x64 with no node-gyp compile step — the Windows-toolchain concern in the
+brief did not materialize.
+
+argon2 0.45.1 verifying @node-rs/argon2 2.2.1 output:
+{"label":"defaults (m=65536,t=3,p=1) — windows-host run","verifiedByArgon2npm045":true}
+{"label":"fallback (m=131072,t=6,p=1) — container run","verifiedByArgon2npm045":true}
+
+argon2 0.45.1 hash() round-trip (sanity of the scratch install):
+{"ownHashPhc":"$argon2id$v=19$m=65536,p=1,t=3$JPNdUz0/UT7otbjg7hHVwQ$ofX6u5fdghyf8Pje9Mx5MeF3+Hnk0ht7k2J4phg+wU8"}
+{"ownRoundtripOk":true}
+
+Reverse direction — @node-rs/argon2 2.2.1 verifying the argon2 0.45.1 hash above (note the
+differing key order in the PHC string, m=...,p=...,t=... vs @node-rs/argon2's m=...,t=...,p=...;
+both are valid per the PHC spec and interoperate regardless of order):
+{"nodeRsVerifiesArgon2npmHash":true}
+
+linux-arm64 prebuilt binary load check (QEMU-emulated node:24.21.0-bookworm-slim container;
+timing not meaningful under emulation, existence/load of the prebuilt native addon is):
+added 2 packages in 4s
+{"arch":"arm64","platform":"linux","phc":"$argon2id$v=19$m=65536,t=3,p=1$VzLVG1HJocacdY4bj7DD2w$WnHvCYqNLYSLmskCmuPI6I8t7LxHgeSz09oLD8uypsg"}
+
+darwin-arm64: not tested — no macOS container runtime is available on Windows/Docker Desktop,
+and no Apple-silicon hardware was available in this environment.

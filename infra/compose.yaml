@@ -1,0 +1,189 @@
+# Iridium development services — 11-operations-and-deployment.md, "infra/compose.yaml
+# (development)"; 12-milestones.md section 4.2 step 9.
+#
+# This file is for development and CI parity checks only. The deployment file is
+# infra/compose.prod.yaml; nothing here is hardened and every credential below is a committed
+# development value.
+#
+#   docker compose -f infra/compose.yaml up -d mysql                  # the default developer loop
+#   MYSQL_TAG=9.7.2-oraclelinux9 docker compose -f infra/compose.yaml up -d mysql
+#   docker compose -f infra/compose.yaml --profile s3 up -d           # SeaweedFS for the s3 driver
+#   docker compose -f infra/compose.yaml --profile full up -d         # the server in its own image
+#
+# MYSQL_TAG comes from the committed infra/.env and is the compatibility floor, 8.4.11: a construct
+# that works on 9.7 and not on 8.4 has to fail in the ordinary development loop, not in a lane
+# someone has to go and read. The command above selects the other required line for a single run.
+# Testcontainers does not use this file — the integration suites start their own MySQL from
+# IRIDIUM_MYSQL_IMAGE (10-testing-and-quality.md).
+name: iridium-dev
+
+# Development credentials, committed deliberately. They are mounted at the same /run/secrets/…
+# paths infra/compose.prod.yaml uses, so the *_FILE code path — the one the MySQL entrypoint,
+# init/01_roles.sh and EnvSchema actually take — is the one developers exercise. Compose has no
+# inline form for `secrets:`, and a file-backed secret would mean committing a file that looks like
+# a production secret; a config with literal content says what it is. Never reuse a value here.
+configs:
+  dev_mysql_root_password:
+    content: |
+      iridium-dev-root-not-a-secret
+  dev_db_app_password:
+    content: |
+      iridium-dev-app-not-a-secret
+  dev_db_migrator_password:
+    content: |
+      iridium-dev-migrator-not-a-secret
+  dev_db_backup_password:
+    content: |
+      iridium-dev-backup-not-a-secret
+  # 32 bytes, base64, exactly as EnvSchema requires of every keyring member.
+  dev_auth_password_pepper_v1:
+    content: |
+      aXJpZGl1bS1kZXYtcGVwcGVyLS1kby1ub3QtdXNlISE=
+  dev_audit_hmac_key_v1:
+    content: |
+      aXJpZGl1bS1kZXYtYXVkaXQtLS1kby1ub3QtdXNlISE=
+  dev_mcp_cursor_key_v1:
+    content: |
+      aXJpZGl1bS1kZXYtY3Vyc29yLS1kby1ub3QtdXNlISE=
+
+volumes:
+  mysql-data: {}
+  mysql-conf: {}
+  mysql-init: {}
+  seaweedfs-data: {}
+  attachments-data: {}
+  staging-data: {}
+  exports-data: {}
+  updates-data: {}
+
+services:
+  # Stages docker/mysql into the two volumes the database reads, with the file mode stated. A bind
+  # mount cannot state it: Docker Desktop presents a file bind-mounted from a Windows or macOS host
+  # as 0777, and CONTRIBUTING.md supports a Windows-filesystem clone. Two consequences follow, both
+  # silent, both wrong, and neither visible in `docker compose ps`:
+  #   * mysqld refuses a world-writable option file ("World-writable config file … is ignored"), so
+  #     the server comes up with sql_require_primary_key OFF and innodb_ft_min_token_size 3 — two
+  #     of the settings migration 0001 and the FULLTEXT index are built against;
+  #   * the official entrypoint EXECUTES an init file that carries the execute bit and only SOURCES
+  #     one that does not, and init/01_roles.sh has to be sourced to reach the entrypoint's
+  #     docker_process_sql, mysql_note and mysql_error helpers.
+  # It runs before mysql on every `up`, copies whatever docker/mysql/init holds (so there is no
+  # file list here to keep in step), and exits. infra/compose.prod.yaml keeps the plan's bind
+  # mounts: its hosts are Linux, where the committed 0644 modes arrive intact.
+  mysql-config:
+    image: mysql:${MYSQL_TAG:-8.4.11}
+    entrypoint: ['/bin/sh', '-euc']
+    command:
+      - |
+        rm -rf /staged-conf/* /staged-init/*
+        cp /source/my.cnf /staged-conf/iridium.cnf
+        if [ -d /source/init ]; then cp -R /source/init/. /staged-init/; fi
+        find /staged-conf /staged-init -type f -exec chmod 0444 {} +
+        ls -l /staged-conf /staged-init
+    volumes:
+      - ./docker/mysql:/source:ro
+      - mysql-conf:/staged-conf
+      - mysql-init:/staged-init
+
+  # The exact MySQL the product ships with. `command:` is deliberately absent: every setting comes
+  # from the mounted my.cnf, which must be in effect before migration 0001 runs.
+  mysql:
+    image: mysql:${MYSQL_TAG:-8.4.11}
+    depends_on:
+      mysql-config:
+        condition: service_completed_successfully
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - mysql-conf:/etc/mysql/conf.d:ro
+      - mysql-init:/docker-entrypoint-initdb.d:ro
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: iridium
+      IRIDIUM_DB_APP_PASSWORD_FILE: /run/secrets/db_app_password
+      IRIDIUM_DB_MIGRATOR_PASSWORD_FILE: /run/secrets/db_migrator_password
+      IRIDIUM_DB_BACKUP_PASSWORD_FILE: /run/secrets/db_backup_password
+    configs:
+      - source: dev_mysql_root_password
+        target: /run/secrets/mysql_root_password
+        mode: 0444
+      - source: dev_db_app_password
+        target: /run/secrets/db_app_password
+        mode: 0444
+      - source: dev_db_migrator_password
+        target: /run/secrets/db_migrator_password
+        mode: 0444
+      - source: dev_db_backup_password
+        target: /run/secrets/db_backup_password
+        mode: 0444
+    ports:
+      - '127.0.0.1:3306:3306'
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '--silent']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Exercises the `s3` StorageDriver locally with S3_ENDPOINT=http://127.0.0.1:8333.
+  # SEAWEEDFS_TAG is a numeric pin, never `latest`; SeaweedFS is Apache-2.0.
+  seaweedfs:
+    profiles: [s3]
+    image: chrislusf/seaweedfs:${SEAWEEDFS_TAG:-4.46}
+    command: ['server', '-s3', '-dir=/data']
+    volumes:
+      - seaweedfs-data:/data
+    ports:
+      - '127.0.0.1:8333:8333'
+
+  # "Does the container behave like the dev process" parity, not the daily loop. Compose Watch
+  # syncs the tsdown output of `pnpm turbo run build --filter=@iridium/server` into the running
+  # container and restarts it, so the image does not have to be rebuilt for every change.
+  server:
+    profiles: [full]
+    build:
+      context: ..
+      dockerfile: infra/docker/server.Dockerfile
+      target: runtime
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      BIND_ADDRESS: 0.0.0.0
+      PORT: '4000'
+      PUBLIC_ORIGIN: http://localhost:4000
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      DATABASE_URL: mysql://iridium_app@mysql:3306/iridium
+      DATABASE_PASSWORD_FILE: /run/secrets/db_app_password
+      DATABASE_MIGRATE_URL: mysql://iridium_migrator@mysql:3306/iridium
+      DATABASE_MIGRATE_PASSWORD_FILE: /run/secrets/db_migrator_password
+      AUTH_PASSWORD_PEPPER_V1_FILE: /run/secrets/auth_password_pepper_v1
+      AUDIT_HMAC_KEY_V1_FILE: /run/secrets/audit_hmac_key_v1
+      MCP_CURSOR_KEY_V1_FILE: /run/secrets/mcp_cursor_key_v1
+    configs:
+      - source: dev_db_app_password
+        target: /run/secrets/db_app_password
+        mode: 0444
+      - source: dev_db_migrator_password
+        target: /run/secrets/db_migrator_password
+        mode: 0444
+      - source: dev_auth_password_pepper_v1
+        target: /run/secrets/auth_password_pepper_v1
+        mode: 0444
+      - source: dev_audit_hmac_key_v1
+        target: /run/secrets/audit_hmac_key_v1
+        mode: 0444
+      - source: dev_mcp_cursor_key_v1
+        target: /run/secrets/mcp_cursor_key_v1
+        mode: 0444
+    volumes:
+      - attachments-data:/data/attachments
+      - staging-data:/data/staging
+      - exports-data:/data/exports
+      - updates-data:/data/desktop-updates
+    ports:
+      - '127.0.0.1:4000:4000'
+    develop:
+      watch:
+        - action: sync+restart
+          path: ../apps/server/dist
+          target: /app/dist

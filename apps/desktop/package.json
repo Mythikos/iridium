@@ -13,7 +13,8 @@
     "build:main": "tsdown -c tsdown.main.config.ts",
     "build:preload": "tsdown -c tsdown.preload.config.ts",
     "build:renderer": "vite build -c vite.renderer.config.ts",
-    "dev": "vite -c vite.renderer.config.ts",
+    "package": "electron-builder --config electron-builder.yml",
+    "dev": "pnpm run build:main && pnpm run build:preload && node scripts/dev.mjs",
     "check-types": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint -c ../../oxlint.config.ts .",
     "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit apps/desktop",
@@ -30,11 +31,12 @@
   },
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "electron": "catalog:",
     "electron-builder": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-electron": "catalog:"
+    "vitest": "catalog:"
   }
 }
