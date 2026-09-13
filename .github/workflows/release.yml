@@ -35,7 +35,9 @@ env:
 jobs:
   # Re-run `static`, `unit`, `integration` and the license scan against the tagged tree.
   verify:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -101,7 +103,9 @@ jobs:
   # `docker/setup-buildx-action` → `docker/build-push-action@v7.3.0` with SBOM and
   # provenance attestation → syft SBOM + grype scan → push by digest.
   server-image:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -197,7 +201,9 @@ jobs:
   # then the final artefacts, then `bundles.json` and `SHA256SUMS`, then
   # `release.bundle-integrity` and a launch-and-exit sanity check over them.
   desktop:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     needs: verify
     timeout-minutes: 120
     strategy:
@@ -262,7 +268,9 @@ jobs:
   # and `<PUBLIC_ORIGIN>/api/v1/desktop/update-policy` and assert the published digests equal
   # the built ones. There is no end-to-end updater test at 1.0 — there is no updater.
   release-feed:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     needs: [desktop, server-image]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -289,7 +297,9 @@ jobs:
   # Build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`, then run
   # `bridge.parity.contract` against the release image.
   bridge:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     needs: server-image
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -318,7 +328,9 @@ jobs:
   # The backup/restore drill against the release image, so "restorable" is a property of the
   # artefact and not of `main`.
   drill:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
+    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
     needs: server-image
     runs-on: ubuntu-latest
     timeout-minutes: 90

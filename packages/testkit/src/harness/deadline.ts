@@ -69,7 +69,7 @@ export async function waitFor<T>(
     options.signal?.throwIfAborted();
     try {
       // Polling is sequential by definition: the next probe is only interesting once this one failed.
-      // eslint-disable-next-line no-await-in-loop
+      // eslint-disable-next-line no-await-in-loop -- polling is sequential by definition; see above
       const value = await probe();
       if (value !== undefined && value !== false) {
         return value;
@@ -81,7 +81,7 @@ export async function waitFor<T>(
     if (Date.now() >= deadline) {
       throw new WaitTimeoutError(description, timeoutMs, lastError);
     }
-    // eslint-disable-next-line no-await-in-loop
+    // eslint-disable-next-line no-await-in-loop -- the pause between probes is the loop's pacing
     await delay(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
   }
 }

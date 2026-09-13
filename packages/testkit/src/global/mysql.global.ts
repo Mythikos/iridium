@@ -37,7 +37,7 @@ export default async function setup(project: TestProject): Promise<() => Promise
       for (const row of schemas) {
         if (row[0] !== undefined) {
           // DROP DATABASE in sequence: concurrent DDL on one server buys nothing at teardown.
-          // eslint-disable-next-line no-await-in-loop
+          // eslint-disable-next-line no-await-in-loop -- sequential DDL at teardown; see above
           await dropSchema(env.admin, row[0]);
         }
       }

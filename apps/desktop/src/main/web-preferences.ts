@@ -3,7 +3,7 @@
  *
  * This module imports nothing at runtime on purpose: the object is the security boundary between
  * untrusted note content and the operating system, so it is a pure value that
- * `desktop.webPreferences.guard` can snapshot without stubbing Electron, and `window.ts` is the only
+ * `desktop.web-preferences.guard` can snapshot without stubbing Electron, and `window.ts` is the only
  * caller. Every row below is mandatory; none of it is optional configuration.
  */
 import type { WebPreferences } from 'electron';

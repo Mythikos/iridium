@@ -4,5 +4,158 @@
   "tags": ["server"],
   "boundaries": {
     "implicitDependencies": ["k6"]
+  },
+  "tasks": {
+    // `dev` is the only task in this workspace whose command starts a process that calls
+    // `loadConfig()` (`node --watch src/main.ts serve`). `build`, `lint`, `check-types` and `clean`
+    // run tools over source; `test` runs the `unit` project, which never reads `process.env`
+    // (02-system-architecture.md, invariant 3 and principle 4 — tests build an environment *record*);
+    // and `test:integration` synthesises the whole product environment in
+    // `packages/testkit/src/server/env.ts`, so the ambient one supplies it nothing. A key declared on
+    // a task that never reads it is exactly the drift the check below exists to catch.
+    //
+    // The field is `passThroughEnv` because `dev` is `cache: false`. `env` is a *cache-key*
+    // declaration — its values enter the task hash — and no cacheable task here reads `process.env`,
+    // so nothing in this list can change a cached artefact, and no database password has to enter a
+    // hash for nothing. Make `dev` cacheable and the check says to move the list to `env`.
+    //
+    // The list is a rendering of `apps/server/src/config/env.ts`, in that module's order, and
+    // `scripts/check-env-lists.ts` fails when the two differ in either direction
+    // (02-system-architecture.md, "Runtime configuration model" principle 7 and invariant 4;
+    // 11-operations-and-deployment.md, "Configuration and secrets"). Beyond `ENV_SCHEMA_KEYS` it
+    // carries four families the schema itself acts on, each of which stops working if `envMode:
+    // strict` filters it out:
+    //
+    //   <SECRET>_FILE    the twin every secret accepts (`SINGLE_SECRET_KEYS`); a mounted secret
+    //                    arrives under this name and no other
+    //   <KEYRING>_V*     keyring members and their `_FILE` twins (`KEYRING_NAMES`) — a member is not
+    //                    a schema key, because a keyring is collected rather than parsed — plus the
+    //                    reserved `ATTACHMENT_KEY_V*`, which must be visible for its refusal to fire
+    //   the alias names  the 02-system-architecture.md spellings `KEY_ALIASES` accepts; an alias that
+    //                    strict mode hides is the silent misconfiguration the alias exists to prevent
+    //   IRIDIUM_*        ARCH-25 typo protection, the reserved harness namespaces the `child` mode
+    //                    inherits, and the two names refused by name. An unknown `IRIDIUM_*` variable
+    //                    has to reach the process to be fatal; filtered, `turbo run dev` ignores a
+    //                    typo that exits 2 every other way the same binary is started
+    //
+    // Not hand-maintained: `node scripts/check-env-lists.ts` prints the block to paste.
+    "dev": {
+      "passThroughEnv": [
+        "NODE_ENV",
+        "BIND_ADDRESS",
+        "PORT",
+        "PUBLIC_ORIGIN",
+        "PUBLIC_HOST",
+        "TRUST_PROXY",
+        "TLS_CERT_FILE",
+        "TLS_KEY_FILE",
+        "DEV_ORIGINS",
+        "SHUTDOWN_DRAIN_MS",
+        "PRESSURE_MAX_HEAP_BYTES",
+        "PRESSURE_MAX_EVENT_LOOP_DELAY_MS",
+        "DATABASE_URL",
+        "DATABASE_PASSWORD",
+        "DATABASE_MIGRATE_URL",
+        "DATABASE_MIGRATE_PASSWORD",
+        "DATABASE_BACKUP_URL",
+        "DATABASE_BACKUP_PASSWORD",
+        "DB_POOL_APP",
+        "DB_POOL_PERSIST",
+        "DB_CONNECT_TIMEOUT_MS",
+        "IRIDIUM_MIGRATE_ON_BOOT",
+        "IRIDIUM_ALLOW_NEWER_SCHEMA",
+        "IRIDIUM_ALLOW_UNTESTED_MYSQL",
+        "READYZ_STRICT_DURABILITY",
+        "METRICS_TOKEN",
+        "METRICS_ALLOW_CIDR",
+        "ATTACHMENTS_ENCRYPTION",
+        "ARGON2_MEMORY_KIB",
+        "ARGON2_TIME_COST",
+        "SESSION_WEB_IDLE_HOURS",
+        "SESSION_WEB_ABSOLUTE_DAYS",
+        "SESSION_DESKTOP_IDLE_DAYS",
+        "SESSION_DESKTOP_ABSOLUTE_DAYS",
+        "STEP_UP_WINDOW_MIN",
+        "PASSWORD_MIN_LENGTH",
+        "LOGIN_THROTTLE_MAX_FAILURES",
+        "LOGIN_THROTTLE_BLOCK_MIN",
+        "LOGIN_THROTTLE_IP_PER_DAY",
+        "PAT_DEFAULT_LIFETIME_DAYS",
+        "PAT_MAX_LIFETIME_DAYS",
+        "PAT_ALLOW_NO_EXPIRY",
+        "PAT_ROTATION_OVERLAP_MAX_HOURS",
+        "MCP_ENABLED",
+        "MCP_OAUTH_ENABLED",
+        "MCP_RATE_LIMIT_PER_HOUR",
+        "MCP_RATE_LIMIT_BURST_PER_MIN",
+        "MCP_PROCESS_CEILING_PER_MIN",
+        "MCP_REQUEST_TIMEOUT_MS",
+        "OAUTH_ACCESS_TOKEN_TTL_MINUTES",
+        "OAUTH_REFRESH_IDLE_DAYS",
+        "OAUTH_REFRESH_ABSOLUTE_DAYS",
+        "OAUTH_DEFAULT_RATE_LIMIT_PER_HOUR",
+        "OAUTH_ALLOW_DYNAMIC_CLIENT_REGISTRATION",
+        "OAUTH_ALLOW_CLIENT_ID_METADATA_DOCUMENTS",
+        "OAUTH_ALLOW_CONSENT_WITHOUT_STEP_UP",
+        "COLLAB_DEBOUNCE_MS",
+        "COLLAB_MAX_DEBOUNCE_MS",
+        "COLLAB_MAX_LOADED_DOCS",
+        "COLLAB_MAX_STATE_BYTES_TOTAL",
+        "COLLAB_MAX_CONNECTIONS_PER_USER",
+        "COLLAB_MAX_CONNECTIONS_PER_IP",
+        "COLLAB_MAX_CONNECTIONS_PER_PROCESS",
+        "COLLAB_TICKET_TTL_S",
+        "WS_MAX_PAYLOAD_BYTES",
+        "UPDATE_LOG_RETENTION_DAYS",
+        "PROJECTION_WORKERS",
+        "PROJECTION_TIMEOUT_MS",
+        "TRANSFER_WORKERS",
+        "ATTACHMENTS_DRIVER",
+        "ATTACHMENTS_DIR",
+        "S3_ENDPOINT",
+        "S3_REGION",
+        "S3_BUCKET",
+        "S3_FORCE_PATH_STYLE",
+        "S3_ACCESS_KEY_ID",
+        "S3_SECRET_ACCESS_KEY",
+        "STAGING_DIR",
+        "EXPORTS_DIR",
+        "DESKTOP_UPDATES_DIR",
+        "EXPORT_TTL_HOURS",
+        "IMPORT_STAGING_TTL_HOURS",
+        "MAX_UPLOAD_BYTES",
+        "MAX_IMPORT_BYTES",
+        "IRIDIUM_WEB_DIR",
+        "TRASH_RETENTION_DAYS",
+        "AUDIT_RETENTION_DAYS",
+        "AUDIT_ARCHIVE_EXPORT_DIR",
+        "ACCESS_LOG_RETENTION_DAYS",
+        "ACCESS_LOG_PARTITION_LEAD_MONTHS",
+        "JOBS_ENABLED",
+        "BACKUP_AGE_RECIPIENTS",
+        "BACKUP_ZSTD_LEVEL",
+        "BACKUP_ZSTD_THREADS",
+        "MYSQL_BINLOG_DIR",
+        "LOG_LEVEL",
+        "LOG_FORMAT",
+        "METRICS_ENABLED",
+        "IRIDIUM_FAULT",
+        "DATABASE_PASSWORD_FILE",
+        "DATABASE_MIGRATE_PASSWORD_FILE",
+        "DATABASE_BACKUP_PASSWORD_FILE",
+        "METRICS_TOKEN_FILE",
+        "S3_ACCESS_KEY_ID_FILE",
+        "S3_SECRET_ACCESS_KEY_FILE",
+        "AUTH_PASSWORD_PEPPER_V*",
+        "AUDIT_HMAC_KEY_V*",
+        "MCP_CURSOR_KEY_V*",
+        "ATTACHMENT_KEY_V*",
+        "STEP_UP_WINDOW_MINUTES",
+        "METRICS_ALLOW_CIDRS",
+        "TRASH_RETENTION_DAYS_DEFAULT",
+        "COLLAB_MAX_CONNECTIONS",
+        "IRIDIUM_*"
+      ]
+    }
   }
 }

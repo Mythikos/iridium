@@ -1,0 +1,55 @@
+{
+  "description": "Numbers that limits.single-source.guard finds bound to a limit-worded name and that are legitimately not members of the single limits policy (02-system-architecture.md invariant 6 and 'The single limits policy'; ARCH-16). One entry per declaration, matched on file and name so a moved line does not rot the register, with a reason that says why the value is not a product cap. The guard fails on an entry that matches nothing, so a number that goes away takes its exemption with it. Adding an entry is a review decision, never a way past a red guard: a cap the client pre-validates, the tests drive to its boundary, or GET /meta.limits publishes belongs in packages/contracts/src/limits.ts.",
+  "allowed": [
+    {
+      "file": "apps/server/src/config/env.ts",
+      "name": "PORT_MAX",
+      "reason": "65 535 is the top of the TCP port range, and this is the upper bound EnvSchema validates PORT against. It is the width of the field, not a ceiling Iridium chooses, so there is nothing for a client to pre-validate or for GET /meta.limits to publish."
+    },
+    {
+      "file": "apps/server/src/config/env.ts",
+      "name": "ZSTD_LEVEL_MAX",
+      "reason": "19 is the top of zstd's own compression-level range, and this is the bound EnvSchema validates BACKUP_ZSTD_LEVEL against. Like PORT_MAX it describes an external tool's input domain rather than a limit the product enforces on its own data."
+    },
+    {
+      "file": "apps/server/src/config/env.ts",
+      "name": "PRESSURE_MAX_EVENT_LOOP_DELAY_MS",
+      "reason": "The default for an environment key, and rule 2 of the single limits policy keeps environment names out of LIMITS: EnvSchema owns every default inline, where the key is declared. The load-shedding threshold is a per-deployment operational knob (11-operations-and-deployment.md, 'Metrics'), published to no client and driven by no client-side pre-flight."
+    },
+    {
+      "file": "apps/server/src/config/env.ts",
+      "name": "PAT_MAX_LIFETIME_DAYS",
+      "reason": "The default for an environment key, per rule 2 of the single limits policy, beside PAT_DEFAULT_LIFETIME_DAYS and PAT_ALLOW_NO_EXPIRY. Token lifetime policy is chosen per deployment and enforced server-side at issuance; it is not one of the caps a client validates a request against before sending it."
+    },
+    {
+      "file": "apps/server/src/config/env.ts",
+      "name": "PAT_ROTATION_OVERLAP_MAX_HOURS",
+      "reason": "The default for an environment key, per rule 2 of the single limits policy. The rotation overlap window is deployment policy for how long a superseded token keeps working, enforced only server-side, and no client reads or pre-validates it."
+    },
+    {
+      "file": "apps/server/src/ops/plugin.ts",
+      "name": "HEALTHZ_MAX_EVENT_LOOP_LAG_MS",
+      "reason": "A liveness-probe threshold, declared beside READINESS_RECHECK_MS and NOT_READY_RETRY_AFTER_SECONDS, which ARCH-02 fixes in the same place. It decides what /healthz says about this process rather than what the server accepts, so it is neither a request cap nor a content cap and no client sees it."
+    },
+    {
+      "file": "apps/server/src/security/client-header.ts",
+      "name": "CLIENT_VERSION_MAX_LENGTH",
+      "reason": "The length an inbound X-Iridium-Client-Version header is truncated to before it is recorded. It bounds what the server writes to its own logs from an untrusted header, refusing nothing and rejecting no request, so there is no boundary for a test to drive or for a client to respect."
+    },
+    {
+      "file": "apps/server/src/security/csp.ts",
+      "name": "HSTS_MAX_AGE_SECONDS",
+      "reason": "The Strict-Transport-Security max-age helmet emits: one year, as the security-headers table fixes it. It is the value of an HTTP response header, read by browsers and not by Iridium, and changing it changes a header rather than what any request or document may contain."
+    },
+    {
+      "file": "apps/server/src/security/ip-range.ts",
+      "name": "HEX_GROUP_MAX",
+      "reason": "0xffff is the largest value one group of an IPv6 address can hold, declared beside IPV6_GROUPS and BITS_PER_BYTE. It is part of the address syntax the parser accepts, so it is a property of the format rather than a limit Iridium imposes on anything."
+    },
+    {
+      "file": "apps/server/src/security/plugin.ts",
+      "name": "maxRssBytes",
+      "reason": "Zero is @fastify/under-pressure's 'disabled' sentinel, not a byte budget: the plugin sheds on event-loop delay and heap usage, both of which come from config.ops, and the RSS check is deliberately off. Recording a limit for it would invent a cap that is not enforced."
+    }
+  ]
+}

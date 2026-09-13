@@ -134,7 +134,7 @@ function mediaType(headers: Headers): string | null {
  * exactly as unchecked; the honest statement is "the caller declares the shape the route documents,
  * and `toMatchOpenApi` is what verifies it."
  */
-// eslint-disable-next-line typescript/explicit-function-return-type
+// eslint-disable-next-line typescript/explicit-function-return-type -- the shape is the route's, declared by the caller; see above
 async function readBody(response: Response, type: string | null) {
   if (response.status === 204 || response.status === 304) {
     return undefined;

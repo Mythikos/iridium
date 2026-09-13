@@ -1,9 +1,24 @@
 // Root Vitest configuration (10-testing-and-quality.md, "Vitest 5.0.0 root configuration").
 // Every project is declared inline; per-package scripts pass `--config ../../vitest.config.ts`.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
 const seed = Number(process.env.IRIDIUM_TEST_SEED ?? Date.now());
+
+// The coverage thresholds of 12-milestones.md section 3 are one gate, evaluated once over the merged
+// reports by the `merge-reports` CI job, which sets IRIDIUM_COVERAGE_GATE=1; every other coverage run
+// only collects. They are enforced from the M1 exit onward: M0 lands the empty stubs of every later
+// boot step by design, so the M0 exit record reports the merged numbers without enforcing them.
+// `docs/milestones/CURRENT` names the last exited milestone.
+const exitedMilestone = readFileSync(
+  join(import.meta.dirname, 'docs/milestones/CURRENT'),
+  'utf8',
+).trim();
+const enforceCoverageThresholds =
+  process.env.IRIDIUM_COVERAGE_GATE === '1' && exitedMilestone !== 'M0';
 console.info(`[vitest] sequence seed ${seed}`); // printed so order-coupling failures replay
 
 export default defineConfig({
@@ -14,12 +29,18 @@ export default defineConfig({
     retry: 0,
     clearMocks: true, // Vitest 5 default, stated explicitly
     sequence: { shuffle: true, seed },
-    reporters: process.env.CI ? ['default', 'blob'] : ['default'],
+    // The blob reporter is a property of the lane command, not of the config: every ci.yml lane that
+    // feeds `merge-reports` passes `--reporter=default --reporter=blob --outputFile.blob=…`, and the
+    // merge itself refuses to run against a config that lists `blob`.
+    reporters: ['default'],
     coverage: {
       provider: 'v8',
       include: [
         'packages/*/src/**/*.{ts,tsx}',
         'apps/server/src/**/*.ts',
+        // The preload itself is `index.cts`, Electron-only code that only the Playwright `electron`
+        // project can execute; it is deliberately outside Vitest coverage, and `desktop.launch.e2e`
+        // plus the preload-surface snapshot prove it. The per-file rule below covers `shared/**`.
         'apps/desktop/src/{preload,shared}/**/*.ts',
         'apps/web/src/**/*.{ts,tsx}',
       ],
@@ -33,21 +54,25 @@ export default defineConfig({
       ],
       reporter: ['text', 'json-summary', 'lcov'],
       reportOnFailure: true,
-      thresholds: {
-        statements: 85,
-        lines: 85,
-        branches: 80,
-        functions: 85,
-        'apps/desktop/src/{preload,shared}/**': { 100: true, perFile: true },
-        'apps/server/src/auth/**': { 100: true, perFile: true },
-        'apps/server/src/authz/**': { 100: true, perFile: true },
-        'apps/server/src/oauth/**': { 100: true, perFile: true },
-        'packages/contracts/src/{tokens,paths,authz}.ts': { 100: true, perFile: true },
-        'packages/markdown/src/sanitize/**': { 100: true, perFile: true },
-        'apps/server/src/collab/persistence/**': { lines: 95, branches: 90, perFile: true },
-        'apps/server/src/audit/**': { lines: 95, branches: 90, perFile: true },
-        'packages/crdt/src/**': { lines: 95, branches: 90, perFile: true },
-      },
+      ...(enforceCoverageThresholds
+        ? {
+            thresholds: {
+              statements: 85,
+              lines: 85,
+              branches: 80,
+              functions: 85,
+              'apps/desktop/src/{preload,shared}/**': { 100: true, perFile: true },
+              'apps/server/src/auth/**': { 100: true, perFile: true },
+              'apps/server/src/authz/**': { 100: true, perFile: true },
+              'apps/server/src/oauth/**': { 100: true, perFile: true },
+              'packages/contracts/src/{tokens,paths,authz}.ts': { 100: true, perFile: true },
+              'packages/markdown/src/sanitize/**': { 100: true, perFile: true },
+              'apps/server/src/collab/persistence/**': { lines: 95, branches: 90, perFile: true },
+              'apps/server/src/audit/**': { lines: 95, branches: 90, perFile: true },
+              'packages/crdt/src/**': { lines: 95, branches: 90, perFile: true },
+            },
+          }
+        : {}),
     },
     projects: [
       {

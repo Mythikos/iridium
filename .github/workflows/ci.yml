@@ -112,6 +112,13 @@ jobs:
           node scripts/check-stryker-disables.ts
           node scripts/check-exclusion-owners.ts
 
+      # Invariant 4 of 02-system-architecture.md: under `envMode: strict` a key the Turbo lists do
+      # not carry never reaches the server, so the diff runs in both directions. It reads the
+      # resolved task definitions from `turbo --dry=json` and `EnvSchema` from the built
+      # `@iridium/contracts`, both of which the `Build` step above has already produced.
+      - name: Env lists
+        run: node scripts/check-env-lists.ts
+
       - name: Acceptance map and test-name references
         run: |
           node scripts/build-acceptance-map.ts --check
@@ -150,14 +157,15 @@ jobs:
       - name: Build, check types, lint
         run: pnpm turbo run build check-types lint
 
-      # `vitest.config.ts` selects `['default', 'blob']` whenever CI is set, so the blob
-      # report is produced without narrowing the reporters; `--outputFile.blob` only gives
-      # it a name that cannot collide with another lane's blob in `merge-reports`.
+      # The blob reporter is named on the command line rather than in `vitest.config.ts`: the
+      # `merge-reports` job refuses a config that lists `blob`. `--outputFile.blob` gives the
+      # blob a name that cannot collide with another lane's blob when the reports are merged.
       - name: Unit and component projects
         if: runner.os == 'Linux'
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project unit --project component
+          --reporter=default --reporter=blob
           --coverage --outputFile.blob=.vitest-reports/unit-${{ matrix.os }}.json
 
       - name: Unit project
@@ -165,6 +173,7 @@ jobs:
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project unit
+          --reporter=default --reporter=blob
           --coverage --outputFile.blob=.vitest-reports/unit-${{ matrix.os }}.json
 
       - name: Upload blob report
@@ -238,6 +247,7 @@ jobs:
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project integration --project contract --project mcp --project property
+          --reporter=default --reporter=blob
           --coverage
           --outputFile.blob=.vitest-reports/integration-${{ steps.image.outputs.slug }}.json
 
@@ -291,6 +301,8 @@ jobs:
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project chaos
+          --reporter=default --reporter=blob
+          --coverage
           --outputFile.blob=.vitest-reports/chaos-${{ steps.image.outputs.slug }}.json
 
       - name: Upload blob report
@@ -467,7 +479,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The regex mirrors the `mutate` array of tooling/mutation/stryker.config.jsonc,
+      # The regex mirrors the `mutate` array of tooling/mutation/stryker.config.mjs,
       # which is the source of truth; `guards.mutation-lane.guard` should assert the two
       # agree so this copy cannot drift.
       - name: Detect changes inside the mutate scope
@@ -568,7 +580,11 @@ jobs:
           path: reports
 
       - name: Merge the Vitest reports and evaluate the coverage thresholds
-        run: pnpm exec vitest --merge-reports --coverage --config vitest.config.ts
+        # The blobs are downloaded into .vitest-reports (Vitest's default is .vitest/blob).
+        run: pnpm exec vitest --merge-reports=.vitest-reports --coverage --config vitest.config.ts
+        env:
+          # The one place the section 3 thresholds are enforced (root vitest.config.ts).
+          IRIDIUM_COVERAGE_GATE: '1'
 
       - name: Merge the Playwright reports
         run: pnpm exec playwright merge-reports --reporter=html,github blob-report

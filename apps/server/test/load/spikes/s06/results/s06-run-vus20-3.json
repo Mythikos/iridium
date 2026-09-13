@@ -3,7 +3,7 @@
   "generatedAt": "2026-09-13T13:19:24.832Z",
   "node": "24.11.0",
   "k6": {
-    "binary": "C:/Users/Vincent/AppData/Local/Temp/claude/D--Repository-Other-iridium/b6d20f0c-f75b-4d68-9394-a22aa8942a89/scratchpad/m0/tools/k6-v2.2.0-windows-amd64/k6.exe",
+    "binary": "k6 v2.2.0 (windows-amd64), from a scratch directory outside the repository",
     "exitCode": 99,
     "vusPerScenario": 20,
     "markers": 50

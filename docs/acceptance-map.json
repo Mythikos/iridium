@@ -777,6 +777,11 @@
       "how": "imports the preload module in a Node context with a stubbed contextBridge, snapshots the tree"
     },
     {
+      "name": "desktop.web-preferences.guard",
+      "asserts": "the webPreferences object passed to new BrowserWindow matches a committed file snapshot",
+      "how": "imports the window factory with a stubbed electron module"
+    },
+    {
       "name": "desktop.fuses.guard",
       "asserts": "electron-builder's fuse configuration matches the table of skeleton A53, and the E2E fuse variant (previously named the test-signed variant; nothing is signed at 1.0) differs only by enableNodeCliInspectArguments",
       "how": "parses electron-builder.yml + the @electron/fuses call site; the produced binaries are re-read with npx @electron/fuses read by release.bundle-integrity"
@@ -3736,6 +3741,17 @@
         "the Location convention"
       ],
       "smoke": true
+    },
+    "desktop.web-preferences.guard": {
+      "layer": "L1",
+      "sinceMilestone": "M0",
+      "project": "guard",
+      "file": null,
+      "tag": null,
+      "asserts": "the webPreferences object passed to new BrowserWindow matches a committed file snapshot",
+      "inventories": [
+        "Guard tests"
+      ]
     },
     "disconnect-pause.e2e": {
       "layer": "L6",

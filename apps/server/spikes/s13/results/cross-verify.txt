@@ -1,6 +1,5 @@
 Cross-verification of PHC strings between @node-rs/argon2 2.2.1 (installed for apps/server)
-and the argon2 npm package 0.45.1 (installed into a scratch project, not the repository:
-C:\Users\Vincent\AppData\Local\Temp\claude\D--Repository-Other-iridium\<session>\scratchpad\m0\s13-cross-verify-win).
+and the argon2 npm package 0.45.1 (installed into a scratch project outside the repository).
 argon2@0.45.1 resolved prebuilt binaries (node_modules/argon2/prebuilds/**, prebuild-install
 style) for win32-x64 with no node-gyp compile step — the Windows-toolchain concern in the
 brief did not materialize.

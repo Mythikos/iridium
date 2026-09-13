@@ -392,7 +392,7 @@ export async function replicateSchemaGrants(
   for (const role of DB_ROLES) {
     // One `mysql` invocation per role, in order: they share a container and concurrency would only
     // add processes, not speed.
-    // eslint-disable-next-line no-await-in-loop
+    // eslint-disable-next-line no-await-in-loop -- one mysql client per role, in order; see above
     const rows = await admin.rows(`SHOW GRANTS FOR '${role}'@'%'`);
     for (const row of rows) {
       const grant = row[0];

@@ -168,7 +168,7 @@ export class Readiness {
           // Sequential on purpose: a later check reads what an earlier one recorded (`grants` reads
           // the migration status `migrations` just took), and fifteen probes racing for the same pool
           // would make each one's measured duration a measure of the others.
-          // eslint-disable-next-line no-await-in-loop
+          // eslint-disable-next-line no-await-in-loop -- checks are sequential by design; see above
           outcome = await check();
         } catch (error) {
           outcome = {

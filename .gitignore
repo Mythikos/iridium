@@ -24,3 +24,6 @@ stryker-setup-*.js
 
 # Reports the CI scripts write (licence scan, coverage merges, load budgets): uploaded as artifacts, never committed
 /reports/
+
+# Vitest blob reports the CI lanes hand to merge-reports (and local merge rehearsals)
+.vitest-reports/

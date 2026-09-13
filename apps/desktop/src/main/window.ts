@@ -3,7 +3,7 @@
  * (07-client-applications.md §7.2, §7.4).
  *
  * Exactly one window exists in MVP (D07-16). Every control below is mandatory: the hardened
- * `webPreferences` (snapshot-tested by `desktop.webPreferences.guard`), the navigation lock (H9),
+ * `webPreferences` (snapshot-tested by `desktop.web-preferences.guard`), the navigation lock (H9),
  * the window-open denial (H10), the external-URL validation (H11) and the deny-by-default
  * permission handlers (H12).
  */

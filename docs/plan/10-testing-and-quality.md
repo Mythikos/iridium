@@ -86,6 +86,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.{ts,tsx}', 'apps/server/src/**/*.ts',
+                // `*.ts` only: the preload body is `index.cts`, which no Vitest project can run and
+                // which the v8 provider's uncovered-file remap cannot parse (see "Coverage").
                 'apps/desktop/src/{preload,shared}/**/*.ts', 'apps/web/src/**/*.{ts,tsx}'],
       exclude: ['**/*.spec.*', '**/generated/**', '**/*.d.ts', '**/testing/**', 'apps/server/src/migrations/**',
                 'apps/desktop/src/main/**'],   // proven by the Playwright `electron` project, which emits no Vitest coverage
@@ -893,7 +895,7 @@ Guard tests are cheap, run in the `guard` project (`apps/server/test/guards/*.gu
 | `authz.no-mcp-admin-implied.guard` | `is_server_admin` never widens a token principal | type-level (`Principal` union) plus a runtime table test in `token.effective-permissions.prop` |
 | `ipc.origin.guard` | every `ipcMain.handle`/`on` registration is wrapped by the origin-checking helper and every payload is zod-parsed | AST-free ripgrep over `apps/desktop/src/main/ipc/**` asserting the wrapper is the only registration form, plus a runtime test that a handler invoked with a foreign `senderFrame.origin` throws |
 | `desktop.preload-surface.guard` | the object exposed on `window.iridium` matches a committed file snapshot, keys and arity | imports the preload module in a Node context with a stubbed `contextBridge`, snapshots the tree |
-| `desktop.webPreferences.guard` | the `webPreferences` object passed to `new BrowserWindow` matches a committed file snapshot | imports the window factory with a stubbed `electron` module |
+| `desktop.web-preferences.guard` | the `webPreferences` object passed to `new BrowserWindow` matches a committed file snapshot | imports the window factory with a stubbed `electron` module |
 | `desktop.fuses.guard` | `electron-builder`'s fuse configuration matches the table of skeleton A53, and the **E2E fuse variant** (previously named the test-signed variant; nothing is signed at 1.0) differs only by `enableNodeCliInspectArguments` | parses `electron-builder.yml` + the `@electron/fuses` call site; the produced binaries are re-read with `npx @electron/fuses read` by `release.bundle-integrity` |
 | `desktop.artifact-names.guard` | `apps/desktop/electron-builder.yml` configures exactly the 1.0 target set: `{win: [zip], mac: [zip], linux: [tar.gz]}` over `[x64, arm64]`; no installer target (`nsis`, `msi`, `msix`, `dmg`, `appimage`, `deb`, `rpm`, `snap`) is present; `win.azureSignOptions` is absent, `mac.notarize` is `false`, `mac.identity` is `"-"`; and the three `artifactName` templates render to exactly `Iridium-<v>-win32-x64.zip`, `-win32-arm64.zip`, `-darwin-x64.zip`, `-darwin-arm64.zip`, `-linux-x64.tar.gz` and `-linux-arm64.tar.gz` for a sample version | parses the YAML and renders the templates; no build required, so it runs in `static` |
 | `db.dialect-floor.guard` | no statement Iridium executes uses a construct outside the MySQL 8.4.11 floor, and none uses a construct 8.4 merely deprecates | ripgrep over `apps/server/src/**/*.ts`, `apps/server/migrations/**/*.ts`, `infra/docker/mysql/**`, `docs/ops/*.sql` and `apps/server/src/ops/**` for every token in the committed denylist, which the spec imports as `@iridium/sql-policy/forbidden-constructs.json`: `tooling/sql` is the workspace package `@iridium/sql-policy` and a devDependency of `@iridium/server`, so the guard and `migrations.parity.integration` reach its two JSON files through a declared dependency rather than by a relative path out of the package. Each entry is `{token, since, reason}` and the failure message prints all three, so the guard is a remedy rather than a rejection. The seed list: `VECTOR`, `VECTOR_DIM`, `STRING_TO_VECTOR`, `VECTOR_TO_STRING`, `DISTANCE(` (MySQL 9.0+); `JSON DUALITY`, `CREATE JSON DUALITY VIEW` (9.7); `hypergraph_optimizer` (9.7); `CREATE LIBRARY`, `LANGUAGE JAVASCRIPT` (9.x); `mysql_native_password` (removed 9.0); `default_authentication_plugin` (removed 8.4.0); `ft_min_word_len` (MyISAM only); `--master-data` (removed 8.4, use `--source-data`); `VALUES(` inside an `ON DUPLICATE KEY UPDATE` clause (deprecated on both lines — use the row alias). The list is data in the repository, so adding a construct is a one-line change and never a code change |
@@ -2160,7 +2162,9 @@ on: { schedule: [{ cron: '0 3 * * *' }], workflow_dispatch: {} }
 
 A nightly failure opens (or updates) one issue per job with the artifacts attached; it does not block merges, but a nightly job that is red for three consecutive nights blocks the next milestone exit (see 12-milestones.md).
 
-### `release.yml` — tags produced by `changeset git-tag`
+### `release.yml` — milestone tags
+
+The workflow triggers on a `v<major>.<minor>.<patch>` tag. **Amended 2026-09-13:** such a tag is cut by hand at a milestone exit and never by `changeset git-tag`, which emits one `<pkg>@<version>` tag per package and no product tag at all; `version-pr` is the only job that runs off `main` instead, and it is where Changesets does its versioning. Every other job below carries a version floor that skips the M0 tag `v0.0.0`, so the first tag they build artefacts for is `v0.1.0` at the M1 exit (12-milestones.md §3, "Version and tag", and D12-1/D12-2).
 
 | Job | Steps |
 |---|---|
@@ -2182,7 +2186,7 @@ A pull request cannot merge unless **all** of the following are true. Nothing in
 4. `chaos-core` green from M1 onward on **both** matrix entries — 20 kill-after-ack iterations and the ack-ordering cases per entry. A durability test is never skipped to unblock a release.
 5. `e2e-electron` green on all three OSes from M0 (`desktop.launch.e2e` exists from the first milestone, so the lane is never empty); from M5 that lane also carries the gating proofs of four spec §9 rows — concurrent editing, viewer enforcement, live revocation and the hostile-content half of portability and safety — so it is merge-blocking for a reason beyond smoke coverage: it is where those rows are retired for 1.0.
 6. `e2e-web` green on all four shards from M4, the milestone that writes the first `apps/e2e/web/` spec — it is how the shared UI is tested, and it stays required even though the web host carries no support commitment at 1.0.
-7. `merge-reports` green — merged coverage thresholds met, OpenAPI operation coverage complete, every `hostContractCases()` case passed in every due harness (rule 5 of the acceptance map), Playwright report produced.
+7. `merge-reports` green — merged coverage thresholds met from the M1 exit onward (the job always merges and reports; it enforces the thresholds only with `IRIDIUM_COVERAGE_GATE=1` and `docs/milestones/CURRENT` past M0, for the reason given under "Coverage"), OpenAPI operation coverage complete, every `hostContractCases()` case passed in every due harness (rule 5 of the acceptance map), Playwright report produced.
 8. `mutation-scoped` green whenever it runs (a file inside Stryker's `mutate` globs changed); it is a required check from M1, the milestone at which the mutation thresholds first apply.
 9. Every test file touched by the PR carries a requirement tag that `guards.acceptance-map.guard` accepts, and any new acceptance-map entry is committed in the same PR.
 10. No new entry in `apps/e2e/QUARANTINE.md`, `schemathesis-exclusions.toml`, `license-exceptions.json` or the CommonMark deviation allowlist without a linked issue and an owner (a CI step parses each file and fails on an entry missing either field). The MCP conformance baseline is not on this list because it admits no entries at all.
@@ -2207,60 +2211,92 @@ Provider `v8` (AST-aware remapping), `coverage.include` explicit (a missing `inc
 | `packages/crdt/src/**` | — | 95 | 90 | — | per file |
 | `apps/server/src/audit/**` | — | 95 | 90 | — | per file |
 | `packages/markdown/src/sanitize/**` | 100 | 100 | 100 | 100 | per file |
-| `apps/desktop/src/{preload,shared}/**` | 100 | 100 | 100 | 100 | per file |
+| `apps/desktop/src/{preload,shared}/**` — the `.ts` files only; the preload body is `index.cts` and is outside the include | 100 | 100 | 100 | 100 | per file |
 
 Excluded from coverage: `**/*.spec.*`, `**/generated/**`, `**/*.d.ts`, `**/testing/**`, `apps/server/src/migrations/**` (migrations are covered by `migrations.integration` behaviourally; line coverage of DDL is noise) and `apps/desktop/src/main/**`.
 
-The desktop main process is deliberately outside the aggregate. Thresholds are evaluated once on the merged blob report, and almost everything in `main/` — the window factory, `protocol.handle`, the updater, server profiles, native menus, transfers and the attachment scheme — is proven only by the Playwright `electron` project, which contributes no v8 coverage to that report; leaving it in the include would make the global gate fail structurally from M5 onward, and the only available responses would be lowering a threshold (forbidden by the ratchet rule) or writing tests that assert nothing. Its gate is therefore behavioural instead: the `desktop.*.e2e` suite on three operating systems, plus `desktop.preload-surface.guard`, `desktop.webPreferences.guard`, `desktop.fuses.guard`, `desktop.artifact-names.guard` and `ipc.origin.guard`, every one of them merge-blocking. `apps/desktop/src/preload/**` and `apps/desktop/src/shared/**` stay in the include at 100 % per file, because the preload surface is the security boundary between note content and the operating system and is small enough that 100 % is honest. `apps/web/src/**` is in the include rather than absent-without-explanation: it is thin (the entry point, router wiring, the store bindings and `BrowserHost`), its co-located `*.unit.spec.ts` files run in the `unit` project, and `BrowserHost` is driven by its own co-located component tests (the `component` project's include glob therefore extends to `apps/web/src/**/*.component.spec.tsx`), while `hostContractCases()` proves the same contract against `MemoryHost` and `BrowserHost` in the `component` project (which does contribute coverage) and again against `BrowserHost`/`ElectronHost` in Playwright, which contributes none and is not counted on. Per-glob thresholds repeat `perFile: true` explicitly because Vitest 5 glob thresholds do not inherit it.
+The desktop main process is deliberately outside the aggregate. Thresholds are evaluated once on the merged blob report, and almost everything in `main/` — the window factory, `protocol.handle`, the updater, server profiles, native menus, transfers and the attachment scheme — is proven only by the Playwright `electron` project, which contributes no v8 coverage to that report; leaving it in the include would make the global gate fail structurally from M5 onward, and the only available responses would be lowering a threshold (forbidden by the ratchet rule) or writing tests that assert nothing. Its gate is therefore behavioural instead: the `desktop.*.e2e` suite on three operating systems, plus `desktop.preload-surface.guard`, `desktop.web-preferences.guard`, `desktop.fuses.guard`, `desktop.artifact-names.guard` and `ipc.origin.guard`, every one of them merge-blocking. `apps/desktop/src/preload/**` and `apps/desktop/src/shared/**` stay in the include at 100 % per file, because the preload surface is the security boundary between note content and the operating system and is small enough that 100 % is honest. **Amended 2026-09-13:** the include glob for that path is `**/*.ts` rather than `**/*.{ts,cts}`, so the per-file rule reaches `shared/**` and any `.ts` file beside the preload, but not the preload body. `apps/desktop/src/preload/index.cts` is Electron-only CommonJS that only the Playwright `electron` project executes, and listing `.cts` in the v8 `include` makes the provider's uncovered-file remap fail to parse it — a file no Vitest project can run would take the whole coverage report down with it rather than merely score zero. The preload body is therefore proven the way `main/**` is, behaviourally: by `desktop.launch.e2e` and the `desktop.preload-surface.guard` snapshot, both merge-blocking. `apps/web/src/**` is in the include rather than absent-without-explanation: it is thin (the entry point, router wiring, the store bindings and `BrowserHost`), its co-located `*.unit.spec.ts` files run in the `unit` project, and `BrowserHost` is driven by its own co-located component tests (the `component` project's include glob therefore extends to `apps/web/src/**/*.component.spec.tsx`), while `hostContractCases()` proves the same contract against `MemoryHost` and `BrowserHost` in the `component` project (which does contribute coverage) and again against `BrowserHost`/`ElectronHost` in Playwright, which contributes none and is not counted on. Per-glob thresholds repeat `perFile: true` explicitly because Vitest 5 glob thresholds do not inherit it.
 
 `apps/server/src/oauth/**` joins `auth/**` and `authz/**` at 100 % per file and enters Stryker's mutate scope for the same reason those two are there: every branch in the authorization server is a branch that decides whether somebody else's notes are handed to an application, and a single wrong comparison — a redirect URI matched by prefix, a PKCE verifier compared with `===`, a consumed code accepted twice — is an account takeover rather than a defect. The module is small and new, so 100 % is honest rather than aspirational, and it is cheaper to hold the line from M3 than to recover it later.
 
 Ratcheting is a human act: `thresholds.autoUpdate` may be used locally behind `IRIDIUM_COVERAGE_RATCHET=1`, and the resulting number is committed with the PR that earned it. CI never auto-updates a threshold, and a threshold is never lowered — a PR that cannot meet a gate either adds tests or moves the untestable code behind an interface it can test.
 
+**When the gate starts biting (amended 2026-09-13).** Every number in the table above is enforced by `merge-reports` **from the M1 exit onward**, not at M0. The mechanism is in the root `vitest.config.ts`, which applies `coverage.thresholds` only when the job sets `IRIDIUM_COVERAGE_GATE=1` and `docs/milestones/CURRENT` names a milestone past M0. The reason is the shape of M0 rather than a concession on quality: the milestone deliberately ships the later plugins of the boot order and the later steps of the bootstrap as empty stubs, plus the placeholder packages that exist only so boundaries, `knip` and the single-instance check exercise the real dependency graph (12-milestones.md §4.2 and §4.3). An aggregate over a tree that is partly stubs measures the stubs, and the 100 %-per-file rule on `apps/server/src/authz/**` is unmet at M0 for the same reason — `route-policy.ts` is reached only by `authz.route-policy.boot.guard`, which proves the assertion runs rather than every branch of it. The M0 exit record therefore reports the merged numbers as a measurement and gates on nothing; the first exit that enforces them is M1's, and from there "a threshold is never lowered" applies to every one of them.
+
 ### Mutation
 
-Stryker 10.0.0 lives in `tooling/mutation`, a package whose own `package.json` aliases `typescript` to `@typescript/typescript6@6.0.2` so the `typescript-checker` keeps working while the rest of the repo builds with TypeScript 7.0.2 (which ships no compiler API until 7.1). Keeping the alias in one leaf package is what makes it possible to have both a fast native `tsc` and a working mutation checker; the alias is asserted by `guards.mutation-lane.guard.spec.ts`, which fails if `@typescript/typescript6` appears anywhere else. Since 2026-09-13 the same pattern has a second, equally isolated leaf: `tooling/api-codegen` declares `openapi-typescript` 7.13.0 for `pnpm gen` step 3, because its type printer drives `ts.factory` (M0 finding, A2 amendment), so the guard's allow-list is exactly those two manifests.
+Stryker 10.0.0 lives in `tooling/mutation`, a package whose own `package.json` aliases `typescript` to `@typescript/typescript6@6.0.2` so the `typescript-checker` keeps working while the rest of the repo builds with TypeScript 7.0.2 (which ships no compiler API until 7.1). Keeping the alias in one leaf package is what makes it possible to have both a fast native `tsc` and a working mutation checker; the alias is asserted by `guards.mutation-lane.guard.spec.ts`, whose rule is that `@typescript/typescript6` may appear in exactly two workspace manifests and in no other. Since 2026-09-13 the same pattern has a second, equally isolated leaf: `tooling/api-codegen` declares `openapi-typescript` 7.13.0 for `pnpm gen` step 3, because its type printer drives `ts.factory` (M0 finding, A2 amendment), and those two manifests are the guard's whole allow-list.
 
-```jsonc
-// tooling/mutation/stryker.config.jsonc
-{
-  "testRunner": "vitest",
-  "vitest": { "configFile": "vitest.stryker.config.ts", "related": true },
-  "checkers": ["typescript"],
-  "tsconfigFile": "tooling/mutation/tsconfig.stryker.json",
-  "typescriptChecker": { "prioritizePerformanceOverAccuracy": true },
-  "mutate": [
-    "apps/server/src/auth/**/*.ts",
-    "apps/server/src/authz/**/*.ts",
-    "apps/server/src/oauth/**/*.ts",
-    "apps/server/src/audit/chain.ts",
-    "apps/server/src/collab/persistence/**/*.ts",
-    "apps/server/src/collab/limits.ts",
-    "apps/server/src/mcp/{cursor,verifier,rate-limit}.ts",
-    "apps/server/src/tree/{names,moves,paths,rename-impact}.ts",
-    "apps/server/src/collab/owner-lease.ts",
-    "packages/contracts/src/{tokens,paths,authz,ids,limits}.ts",
-    "packages/crdt/src/**/*.ts",
-    "packages/markdown/src/sanitize/**/*.ts",
-    "packages/markdown/src/{normalize,restore,links}.ts",
-    "packages/collab-client/src/save-state.ts",
-    "!**/*.spec.ts"
+The lane is three files, not one, and spike S5 (`docs/spikes/S05-stryker-vitest5.md`) measured why each is needed. `stryker.config.mjs` is the committed configuration: it is `.mjs` rather than `.jsonc` because Stryker 10.0.0 accepts only `json`, `js`, `mjs` and `cjs` and `import()`s anything that is not `.json`, so a `.jsonc` file dies with `ERR_UNKNOWN_FILE_EXTENSION` before one option is read, and `.mjs` keeps the comments a `.json` file would lose. `run.mjs` is the only entry point (`pnpm --filter @iridium/mutation mutation`): Stryker's project file set is a walk of `process.cwd()` and it has no working-directory option, so the lane can run from the repository root only, and pnpm runs a package script in that package's own directory — the change of directory therefore belongs in a script rather than in a shell line that has to work on Windows and on the Linux runner alike. `vitest-resolution.mjs` is loaded into the runner's workers through `testRunnerNodeArgs`, because Stryker's `vitest-wrapper` resolves `vitest/node` from the working directory and so reaches the repository's 5.0.0 rather than this package's 4.1.11; it throws on any resolved major other than 4, so the pin cannot lapse silently into a run where every mutant survives.
+
+```js
+// tooling/mutation/stryker.config.mjs — always reached through `run.mjs`, from the repository root.
+// `@fast-check/vitest` writes the seed it drew into the registered test name, and Stryker filters
+// mutant runs by the names its dry run recorded, so a seed drawn afresh per run matches nothing and
+// every property-covered mutant is reported as survived. Fixing it here fixes it for the children.
+process.env['IRIDIUM_PROP_SEED'] ??= '42';
+
+export default {
+  // Stryker's default `['@stryker-mutator/*']` glob resolves against core's own install directory,
+  // which under pnpm's isolated layout contains no plugin at all: both entry points are named by path.
+  plugins: [
+    './tooling/mutation/node_modules/@stryker-mutator/vitest-runner/dist/src/index.js',
+    './tooling/mutation/node_modules/@stryker-mutator/typescript-checker/dist/src/index.js',
   ],
-  "ignoreStatic": true,
-  "incremental": true,
-  "incrementalFile": "reports/stryker-incremental.json",
-  "concurrency": 4,
-  "timeoutMS": 10000,
-  "thresholds": { "high": 90, "low": 75, "break": 70 },
-  "reporters": ["progress", "clear-text", "html", "json"]
-}
+  testRunner: 'vitest',
+  vitest: { configFile: 'tooling/mutation/vitest.stryker.config.ts', related: true },
+  testRunnerNodeArgs: [`--import=${new URL('./vitest-resolution.mjs', import.meta.url).href}`],
+  checkers: ['typescript'],
+  tsconfigFile: 'tooling/mutation/tsconfig.stryker.json',
+  typescriptChecker: { prioritizePerformanceOverAccuracy: true },
+  disableTypeChecks: false,
+  mutate: [
+    'apps/server/src/auth/**/*.ts',
+    'apps/server/src/authz/**/*.ts',
+    'apps/server/src/oauth/**/*.ts',
+    'apps/server/src/audit/chain.ts',
+    'apps/server/src/collab/persistence/**/*.ts',
+    'apps/server/src/collab/limits.ts',
+    'apps/server/src/mcp/{cursor,verifier,rate-limit}.ts',
+    'apps/server/src/tree/{names,moves,paths,rename-impact}.ts',
+    'apps/server/src/collab/owner-lease.ts',
+    'packages/contracts/src/{tokens,paths,authz,ids,limits}.ts',
+    'packages/crdt/src/**/*.ts',
+    'packages/markdown/src/sanitize/**/*.ts',
+    'packages/markdown/src/{normalize,restore,links}.ts',
+    'packages/collab-client/src/save-state.ts',
+    '!**/*.spec.ts',
+  ],
+  // The checker's tsconfig must not reach the sandbox: Stryker would rewrite it through a
+  // `typescript` resolved at core's own location — the repository-wide 7.0.2, which exports no JS
+  // compiler API. The rest are generated trees the project walk would otherwise copy per sandbox.
+  ignorePatterns: [
+    'tooling/mutation/tsconfig.stryker.json',
+    'dist',
+    '.turbo',
+    '.vitest',
+    'coverage',
+    'test-results',
+    'playwright-report',
+  ],
+  tempDirName: '.stryker-tmp',
+  ignoreStatic: true,
+  incremental: true,
+  incrementalFile: 'tooling/mutation/reports/stryker-incremental.json',
+  concurrency: 4,
+  timeoutMS: 10000,
+  thresholds: { high: 90, low: 75, break: 70 },
+  reporters: ['progress', 'clear-text', 'html', 'json'],
+  htmlReporter: { fileName: 'tooling/mutation/reports/mutation/mutation.html' },
+  jsonReporter: { fileName: 'tooling/mutation/reports/mutation/mutation.json' },
+};
 ```
 
 - `vitest.stryker.config.ts` declares **only** the `unit` project: Stryker does not support Browser Mode, and DB-backed projects would make every mutant a timeout. This is why the security-critical logic is factored into dependency-light pure modules in the first place (see the package layout in 02-system-architecture.md) — mutation testing is a design constraint, not an afterthought.
 - `break` starts at 70 and rises to **80 by M8** (skeleton A2). The number is raised in a commit that also shows the score; it is never lowered.
 - `incrementalFile` is cached with `actions/cache@v6.1.0` keyed on the lockfile hash plus the `main` sha, so the nightly run is incremental and the PR-scoped run is fast.
 - A surviving mutant in `auth`, `authz`, `sanitize` or `persistence` is treated as a missing test, not as an acceptable survivor. `// Stryker disable` comments are allowed only with a reason on the same line and are counted by `scripts/check-stryker-disables.ts`, which fails if the count grows.
-- Spike **S5** (`docs/spikes/S05-stryker-vitest5.md`, 12-milestones.md §4.4) validates Stryker 10 against Vitest 5.0.0 at M0 (Stryker 10 predates it); the recorded fallback is pinning `vitest@4.1.11` **inside `tooling/mutation` only**, which is possible precisely because the lane is an isolated package.
+- Spike **S5** (`docs/spikes/S05-stryker-vitest5.md`, 12-milestones.md §4.4) asked whether Stryker 10 can drive Vitest 5.0.0 at M0 (Stryker 10 predates it). **Result `fail`, 2026-09-13**, and the recorded fallback was executed inside the same milestone: `vitest` 4.1.11 is pinned **inside `tooling/mutation` only**, through the `mutation` named catalog of `pnpm-workspace.yaml`, which is possible precisely because the lane is an isolated package. The main test projects stay on Vitest 5. The pin, the catalog entry and `vitest-resolution.mjs` are retired together when a `@stryker-mutator/vitest-runner` release supports Vitest 5; none of the three is removable on its own.
 
 ---
 ## Test data and fixtures policy

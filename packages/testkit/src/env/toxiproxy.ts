@@ -204,7 +204,7 @@ export class ToxiproxyApi {
         for (const toxicName of await this.listToxicNames(name)) {
           // Toxiproxy applies toxic changes per request; removing them in order keeps the proxy's
           // observable state monotonic, which is what a chaos step asserts against.
-          // eslint-disable-next-line no-await-in-loop
+          // eslint-disable-next-line no-await-in-loop -- toxics are removed in order; see above
           await this.removeToxic(name, toxicName);
         }
       },

@@ -1,5 +1,5 @@
 /**
- * `desktop.webPreferences.guard` (10-testing-and-quality.md, "Guard tests"; 12-milestones.md §4.6).
+ * `desktop.web-preferences.guard` (10-testing-and-quality.md, "Guard tests"; 12-milestones.md §4.6).
  *
  * The `webPreferences` object is the security boundary between untrusted note content and the
  * operating system, and rows H1–H6 of 07-client-applications.md §7.4 are mandatory. A snapshot is the
@@ -21,7 +21,7 @@ import { hardenedWebPreferences, IRIDIUM_PARTITION } from './web-preferences.ts'
 /** A fixed preload path keeps the snapshot machine-independent; `window.ts` computes the real one. */
 const PACKAGED_OPTIONS = { preload: '<preload>/index.cjs', devTools: false } as const;
 
-describe('desktop.webPreferences.guard [area:clients]', () => {
+describe('desktop.web-preferences.guard [area:clients]', () => {
   it('matches the committed snapshot of the hardened webPreferences', async () => {
     const preferences = hardenedWebPreferences(PACKAGED_OPTIONS);
     await expect(`${JSON.stringify(preferences, null, 2)}\n`).toMatchFileSnapshot(
