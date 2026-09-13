@@ -1,0 +1,69 @@
+{
+  "name": "iridium",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "lint": "turbo run lint",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "boundaries": "turbo boundaries",
+    "knip": "knip --production",
+    "test": "vitest --run --passWithNoTests --project unit --project guard --project component",
+    "test:unit": "vitest --run --passWithNoTests --project unit",
+    "test:guard": "vitest --run --passWithNoTests --project guard",
+    "test:component": "vitest --run --passWithNoTests --project component",
+    "test:integration": "vitest --run --passWithNoTests --project integration",
+    "test:property": "vitest --run --passWithNoTests --project property",
+    "test:chaos": "vitest --run --passWithNoTests --project chaos",
+    "test:contract": "vitest --run --passWithNoTests --project contract",
+    "test:mcp": "vitest --run --passWithNoTests --project mcp",
+    "test:docker": "vitest --run --passWithNoTests --project integration --project property --project chaos --project contract --project mcp",
+    "test:watch": "vitest --project unit",
+    "e2e": "playwright test --project=chromium",
+    "e2e:electron": "playwright test --project=electron",
+    "e2e:ui": "playwright test --ui",
+    "mutation": "pnpm --filter @iridium/mutation run mutation",
+    "changeset": "changeset",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@changesets/cli": "catalog:",
+    "@commitlint/cli": "catalog:",
+    "@commitlint/config-conventional": "catalog:",
+    "@fast-check/vitest": "catalog:",
+    "@iridium/oxlint-config": "workspace:*",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "fast-check": "catalog:",
+    "knip": "catalog:",
+    "lefthook": "catalog:",
+    "oxfmt": "catalog:",
+    "oxlint": "catalog:",
+    "oxlint-tsgolint": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "vitest-browser-react": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.4.1",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
+  "packageManager": "pnpm@12.4.1"
+}

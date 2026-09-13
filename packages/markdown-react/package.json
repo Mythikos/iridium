@@ -1,0 +1,29 @@
+{
+  "name": "@iridium/markdown-react",
+  "version": "0.0.0",
+  "private": true,
+  "description": "hast → React 19 via hast-util-to-jsx-runtime with Iridium component overrides; preview worker client (comlink)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit packages/markdown-react",
+    "test:component": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project component packages/markdown-react"
+  },
+  "dependencies": {
+    "@iridium/contracts": "workspace:*",
+    "@iridium/markdown": "workspace:*",
+    "comlink": "catalog:",
+    "dompurify": "catalog:",
+    "hast-util-to-jsx-runtime": "catalog:",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@iridium/tsconfig": "workspace:*"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@iridium/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Vite 8 entry mounting @iridium/ui with BrowserHost; static bundle served by the server at /app/*",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit apps/web",
+    "test:component": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project component apps/web",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@iridium/contracts": "workspace:*",
+    "@iridium/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@iridium/tsconfig": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "vite": "catalog:"
+  }
+}

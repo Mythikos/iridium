@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "singleQuote": true,
+  "semi": true,
+  "trailingComma": "all",
+  "sortImports": {},
+  "ignorePatterns": [
+    // Markdown/vault fixtures are pipeline test data and are never reformatted; apps/e2e/fixtures/*.ts is code.
+    "packages/testkit/src/fixtures/**",
+    "apps/server/test/fixtures/**",
+    "pnpm-lock.yaml",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/generated/**",
+    "packages/contracts/openapi/**",
+    "packages/contracts/mcp/**",
+    "docs/**",
+    ".changeset/*.md",
+    "tooling/mutation/reports/**",
+  ],
+}

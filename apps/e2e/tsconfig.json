@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@iridium/tsconfig/node.json",
+  "include": ["setup", "web", "electron", "perf", "fixtures"],
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["es2024", "dom", "dom.iterable"]
+  },
+  "references": [
+    {
+      "path": "../../packages/contracts/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/api-client/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/testkit/tsconfig.build.json"
+    }
+  ]
+}

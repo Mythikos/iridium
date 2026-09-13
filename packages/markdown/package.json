@@ -1,0 +1,57 @@
+{
+  "name": "@iridium/markdown",
+  "version": "0.0.0",
+  "private": true,
+  "description": "the isomorphic unified pipeline (normalizeSource, restoreSource, parseNote, toPreviewTree, project, detectObsidianSyntax, resolveLink, sanitize schema)",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit packages/markdown",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@iridium/contracts": "workspace:*",
+    "@types/hast": "catalog:",
+    "@types/mdast": "catalog:",
+    "github-slugger": "catalog:",
+    "hast-util-sanitize": "catalog:",
+    "highlight.js": "catalog:",
+    "lowlight": "catalog:",
+    "mdast-util-from-markdown": "catalog:",
+    "mdast-util-gfm-footnote": "catalog:",
+    "mdast-util-gfm-strikethrough": "catalog:",
+    "mdast-util-gfm-table": "catalog:",
+    "mdast-util-gfm-task-list-item": "catalog:",
+    "mdast-util-to-hast": "catalog:",
+    "mdast-util-to-string": "catalog:",
+    "micromark": "catalog:",
+    "micromark-extension-gfm-footnote": "catalog:",
+    "micromark-extension-gfm-strikethrough": "catalog:",
+    "micromark-extension-gfm-table": "catalog:",
+    "micromark-extension-gfm-task-list-item": "catalog:",
+    "rehype-highlight": "catalog:",
+    "rehype-sanitize": "catalog:",
+    "remark-breaks": "catalog:",
+    "remark-frontmatter": "catalog:",
+    "remark-parse": "catalog:",
+    "remark-rehype": "catalog:",
+    "unified": "catalog:",
+    "unist-util-visit": "catalog:",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
+    "@iridium/tsconfig": "workspace:*"
+  }
+}

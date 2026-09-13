@@ -1,0 +1,21 @@
+# Git hooks (lefthook 2). Installed by lefthook's own postinstall (allowBuilds in pnpm-workspace.yaml).
+pre-commit:
+  jobs:
+    - name: format
+      glob: '*.{ts,tsx,cts,mts,js,mjs,cjs,json,jsonc,yaml,yml,css}'
+      run: pnpm exec oxfmt {staged_files}
+      stage_fixed: true
+    - name: lint
+      glob: '*.{ts,tsx,cts,mts,js,mjs,cjs}'
+      run: pnpm exec oxlint --fix {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: pnpm exec commitlint --edit {1}
+
+pre-push:
+  jobs:
+    - name: check-types
+      run: pnpm exec turbo run check-types --affected

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "oxlint.config.ts",
+        "commitlint.config.ts"
+      ],
+      "project": ["*.ts"]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"]
+    },
+    "apps/server": {
+      "entry": ["src/index.ts!", "src/**/*.spec.ts", "test/**/*.ts", "tsdown.config.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/index.ts!", "index.html", "src/**/*.spec.{ts,tsx}", "vite.config.ts"],
+      "project": ["src/**/*.{ts,tsx}!"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main/index.ts!",
+        "src/preload/index.cts!",
+        "src/renderer/index.ts!",
+        "src/**/*.spec.{ts,tsx}",
+        "tsdown.main.config.ts",
+        "tsdown.preload.config.ts",
+        "vite.renderer.config.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx,cts}!"]
+    },
+    "apps/e2e": {
+      "entry": ["**/*.{e2e.spec,setup}.ts", "fixtures/**/*.ts"],
+      "project": ["**/*.ts"]
+    },
+    "tooling/tsconfig": {
+      "entry": [],
+      "project": []
+    },
+    "tooling/oxlint-config": {
+      "entry": ["*.ts"],
+      "project": ["*.ts"]
+    },
+    "tooling/mutation": {
+      "entry": ["vitest.stryker.config.ts"],
+      "project": ["*.ts"]
+    }
+  }
+}

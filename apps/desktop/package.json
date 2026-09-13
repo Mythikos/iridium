@@ -1,0 +1,40 @@
+{
+  "name": "@iridium/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electron 44.3.0 shell: src/main (tsdown ESM), src/preload (tsdown single-file CJS), src/renderer (Vite + ElectronHost)",
+  "type": "module",
+  "main": "./dist/main/main.mjs",
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "pnpm run build:main && pnpm run build:preload && pnpm run build:renderer",
+    "build:main": "tsdown -c tsdown.main.config.ts",
+    "build:preload": "tsdown -c tsdown.preload.config.ts",
+    "build:renderer": "vite build -c vite.renderer.config.ts",
+    "dev": "vite -c vite.renderer.config.ts",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit apps/desktop",
+    "test:guard": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project guard apps/desktop",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@iridium/api-client": "workspace:*",
+    "@iridium/collab-client": "workspace:*",
+    "@iridium/contracts": "workspace:*",
+    "@iridium/mcp-bridge": "workspace:*",
+    "@iridium/ui": "workspace:*",
+    "electron-log": "catalog:"
+  },
+  "devDependencies": {
+    "@iridium/tsconfig": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "electron": "catalog:",
+    "electron-builder": "catalog:",
+    "tsdown": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-electron": "catalog:"
+  }
+}

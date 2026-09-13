@@ -1,5 +1,16 @@
 * text=auto eol=lf
-*.png binary
-*.jpg binary
-*.ico binary
-*.zip binary
+
+# Binary assets: never normalised, never diffed as text
+*.png -text
+*.jpg -text
+*.webp -text
+*.ico -text
+*.icns -text
+*.zip -text
+*.bin -text
+*.woff2 -text
+
+# Generated artefacts (pnpm gen): collapsed in review, drift-checked in CI
+packages/contracts/openapi/openapi.json linguist-generated
+packages/contracts/mcp/tools.schema.json linguist-generated
+packages/api-client/src/generated/** linguist-generated

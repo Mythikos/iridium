@@ -1,0 +1,79 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":pinAllExceptPeerDependencies",
+    "group:allNonMajor",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "description": "Electron: its own pull request, one extra week of soak, never automerged",
+      "groupName": "electron",
+      "matchPackageNames": [
+        "electron",
+        "electron-builder",
+        "electron-log",
+        "vite-plugin-electron",
+        "electron-playwright-helpers"
+      ],
+      "minimumReleaseAge": "7 days",
+      "automerge": false
+    },
+    {
+      "description": "oxc toolchain moves together so oxlint, tsgolint and oxfmt stay compatible",
+      "groupName": "oxc",
+      "matchPackageNames": ["oxlint", "oxlint-tsgolint", "oxfmt"]
+    },
+    {
+      "description": "Vite, Vitest and tsdown share the Rolldown line",
+      "groupName": "vite",
+      "matchPackageNames": [
+        "vite",
+        "vitest",
+        "tsdown",
+        "@vitejs/plugin-react",
+        "@vitest/browser-playwright",
+        "@vitest/coverage-v8",
+        "vitest-browser-react"
+      ]
+    },
+    {
+      "description": "Yjs single-instance set (A14): one pull request that must pass deps.single-instance.guard",
+      "groupName": "yjs",
+      "matchPackageNames": [
+        "yjs",
+        "lib0",
+        "y-protocols",
+        "@hocuspocus/server",
+        "@hocuspocus/provider",
+        "@hocuspocus/common",
+        "y-codemirror.next",
+        "@codemirror/state",
+        "@codemirror/view"
+      ]
+    },
+    {
+      "description": "The two required MySQL lines: minor plus digest within each line, one pull request, never automerged",
+      "groupName": "mysql images",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mysql"],
+      "automerge": false
+    },
+    {
+      "description": "Never move a MySQL pin across an LTS line (R-T25): the 8.4 line stays 8.4",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mysql"],
+      "matchCurrentValue": "/^8\\.4\\./",
+      "allowedVersions": "/^8\\.4\\./"
+    },
+    {
+      "description": "Never move a MySQL pin across an LTS line (R-T25): the 9.7 line stays 9.7",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["mysql"],
+      "matchCurrentValue": "/^9\\.7\\./",
+      "allowedVersions": "/^9\\.7\\./"
+    }
+  ]
+}

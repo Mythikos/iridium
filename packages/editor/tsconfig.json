@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@iridium/tsconfig/browser.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "test", "*.config.ts"],
+  "references": [
+    {
+      "path": "../contracts/tsconfig.build.json"
+    },
+    {
+      "path": "../crdt/tsconfig.build.json"
+    },
+    {
+      "path": "../collab-client/tsconfig.build.json"
+    }
+  ]
+}

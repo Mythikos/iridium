@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@iridium/tsconfig/react.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src", "test", "*.config.ts"],
+  "references": [
+    {
+      "path": "../../packages/contracts/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/api-client/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/collab-client/tsconfig.build.json"
+    }
+  ]
+}

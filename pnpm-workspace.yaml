@@ -1,0 +1,199 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'tooling/*'
+
+# Every external version the plan pins (02-system-architecture.md dependency table,
+# 13-decision-log.md ADRs, 12-milestones.md section 4.2 step 3). Exact versions only.
+catalog:
+  # Toolchain
+  turbo: 2.10.12
+  typescript: 7.0.2
+  oxlint: 1.82.0
+  oxlint-tsgolint: 7.0.2001
+  oxfmt: 0.67.0
+  tsdown: 0.23.0
+  vite: 8.3.0
+  '@vitejs/plugin-react': 6.1.1
+  vite-plugin-electron: 1.1.2
+  knip: 6.35.1
+  lefthook: 2.1.12
+  '@commitlint/cli': 21.2.2
+  '@commitlint/config-conventional': 21.2.2
+  '@changesets/cli': 3.0.2
+  '@types/node': 24.13.4
+  # Test runners and harness
+  vitest: 5.0.0
+  '@vitest/browser-playwright': 5.0.0
+  '@vitest/coverage-v8': 5.0.0
+  vitest-browser-react: 2.3.0
+  '@fast-check/vitest': 0.5.0
+  fast-check: 4.10.0
+  '@playwright/test': 1.63.0
+  electron-playwright-helpers: 3.1.2
+  testcontainers: 12.1.0
+  '@testcontainers/mysql': 12.1.0
+  '@testcontainers/toxiproxy': 12.1.0
+  ws: 8.21.3
+  msw: 2.15.0
+  ajv: 8.20.0
+  '@apidevtools/swagger-parser': 13.0.0
+  '@stryker-mutator/core': 10.0.0
+  '@stryker-mutator/vitest-runner': 10.0.0
+  '@stryker-mutator/typescript-checker': 10.0.0
+  # Codegen pipeline
+  '@redocly/cli': 2.52.1
+  openapi-typescript: 7.13.0
+  kysely-codegen: 0.20.0
+  kysely-ctl: 0.21.0
+  # Contracts
+  zod: 4.6.2
+  # CRDT (one module instance each; see overrides)
+  yjs: 13.6.32
+  lib0: 0.2.117
+  y-protocols: 1.0.7
+  # Collaboration
+  '@hocuspocus/server': 4.7.0
+  '@hocuspocus/provider': 4.7.0
+  '@hocuspocus/common': 4.7.0
+  # Server
+  fastify: 5.12.4
+  '@fastify/cookie': 11.1.2
+  '@fastify/csrf-protection': 8.0.1
+  '@fastify/helmet': 13.1.1
+  '@fastify/multipart': 10.1.1
+  '@fastify/rate-limit': 11.2.0
+  '@fastify/swagger': 9.8.1
+  '@fastify/swagger-ui': 6.1.1
+  '@fastify/under-pressure': 9.1.0
+  '@fastify/websocket': 11.3.0
+  fastify-type-provider-zod: 7.0.0
+  kysely: 0.29.5
+  mysql2: 3.24.4
+  pino: 10.3.1
+  piscina: 5.3.2
+  '@node-rs/argon2': 2.2.1
+  rate-limiter-flexible: 11.2.0
+  '@aws-sdk/client-s3': 3.1131.0
+  # MCP
+  '@modelcontextprotocol/server': 2.0.0
+  '@modelcontextprotocol/client': 2.0.0
+  '@modelcontextprotocol/node': 2.0.0
+  '@modelcontextprotocol/fastify': 2.0.0
+  '@modelcontextprotocol/core': 2.0.0
+  '@modelcontextprotocol/conformance': 0.1.16
+  '@modelcontextprotocol/inspector': 2.6.0
+  # Markdown pipeline
+  unified: 11.0.5
+  remark-parse: 11.0.0
+  mdast-util-from-markdown: 2.0.3
+  micromark: 4.0.2
+  micromark-extension-gfm-table: 2.1.2
+  micromark-extension-gfm-strikethrough: 2.1.0
+  micromark-extension-gfm-footnote: 2.1.0
+  micromark-extension-gfm-task-list-item: 2.1.0
+  mdast-util-gfm-table: 2.0.0
+  mdast-util-gfm-strikethrough: 2.0.0
+  mdast-util-gfm-footnote: 2.1.0
+  mdast-util-gfm-task-list-item: 2.0.0
+  remark-frontmatter: 5.0.0
+  remark-breaks: 4.0.0
+  remark-rehype: 11.1.2
+  mdast-util-to-hast: 13.2.1
+  rehype-highlight: 7.0.2
+  lowlight: 3.3.0
+  highlight.js: 11.12.0
+  rehype-sanitize: 6.0.0
+  hast-util-sanitize: 5.0.2
+  github-slugger: 2.0.0
+  yaml: 2.9.1
+  mdast-util-to-string: 4.0.0
+  unist-util-visit: 5.1.0
+  '@types/hast': 3.0.5
+  '@types/mdast': 4.0.4
+  # API client
+  openapi-fetch: 0.17.0
+  # Editor (one module instance for @codemirror/state and @codemirror/view; see overrides)
+  '@codemirror/state': 6.7.4
+  '@codemirror/view': 6.43.11
+  '@codemirror/language': 6.12.4
+  '@codemirror/commands': 6.11.0
+  '@codemirror/search': 6.7.2
+  '@codemirror/autocomplete': 6.20.3
+  '@codemirror/lang-markdown': 6.5.2
+  '@lezer/markdown': 1.7.2
+  '@lezer/common': 1.5.2
+  '@lezer/highlight': 1.2.3
+  y-codemirror.next: 0.3.6
+  # Markdown to React
+  hast-util-to-jsx-runtime: 2.3.6
+  comlink: 4.4.2
+  dompurify: 3.4.15
+  # UI
+  react: 19.3.0
+  react-dom: 19.3.0
+  '@tanstack/react-router': 1.170.35
+  '@tanstack/react-query': 5.102.8
+  zustand: 5.0.15
+  '@base-ui/react': 1.8.0
+  tailwindcss: 4.3.3
+  lucide-react: 1.45.0
+  '@headless-tree/core': 1.7.0
+  '@headless-tree/react': 1.7.0
+  '@tanstack/react-virtual': 3.14.12
+  '@atlaskit/pragmatic-drag-and-drop': 3.1.0
+  react-resizable-panels: 4.12.4
+  '@tanstack/react-form': 1.33.5
+  # Desktop
+  electron: 44.3.0
+  electron-log: 5.4.4
+  electron-builder: 26.16.1
+
+# Dependency policy (13-decision-log.md A1; 12-milestones.md section 4.2 step 3)
+catalogMode: strict
+saveExact: true
+engineStrict: true
+minimumReleaseAge: 4320
+# The plan pins releases younger than three days at bootstrap time (2026-09-13). Each entry is an exact
+# version, matures out of the window by 2026-09-14T21:00Z, and is removed then; a range is never listed.
+minimumReleaseAgeExclude:
+  - '@aws-sdk/client-s3@3.1131.0'
+  - '@fast-check/vitest@0.5.0'
+  - '@tanstack/react-router@1.170.35'
+  - '@tanstack/react-virtual@3.14.12'
+  - '@tanstack/virtual-core@3.17.10'
+  - 'fast-check@4.10.0'
+  - 'fastify@5.12.4'
+  - 'lucide-react@1.45.0'
+  - 'micromark-extension-gfm-table@2.1.2'
+  - 'vite@8.3.0'
+  - 'yaml@2.9.1'
+  - 'zod@4.6.2'
+trustPolicy: no-downgrade
+# Exact old versions that no-downgrade flags because a later version gained provenance and these predate it.
+# Every entry is a pin, never a range, and is reviewed when its dependent moves (13-decision-log.md A1).
+trustPolicyExclude:
+  - 'semver@5.7.2'
+  - 'semver@6.3.1'
+allowBuilds:
+  electron: true
+  lefthook: true
+  '@node-rs/argon2': true
+  # Transitive packages that ship install scripts the product does not need: denied explicitly so
+  # pnpm 12 never prompts and a new script-bearing dependency fails the install until it is reviewed.
+  cpu-features: false
+  electron-winstaller: false
+  msw: false
+  protobufjs: false
+  ssh2: false
+strictPeerDependencies: true
+dedupePeerDependents: true
+publicHoistPattern: []
+
+# One module instance each (A14): the whole closure resolves to the catalog version
+overrides:
+  yjs: 'catalog:'
+  lib0: 'catalog:'
+  y-protocols: 'catalog:'
+  '@codemirror/state': 'catalog:'
+  '@codemirror/view': 'catalog:'

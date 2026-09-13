@@ -1,0 +1,67 @@
+{
+  "name": "@iridium/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Node 24 app: REST + /collab (Hocuspocus) + /mcp + jobs + CLI; tsdown → dist/main.mjs; Docker image",
+  "bin": {
+    "iridium": "./dist/main.mjs"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit apps/server",
+    "test:guard": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project guard apps/server",
+    "test:integration": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project integration apps/server",
+    "test:property": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project property apps/server",
+    "test:chaos": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project chaos apps/server",
+    "test:contract": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project contract apps/server",
+    "test:mcp": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project mcp apps/server",
+    "dev": "node --watch --env-file-if-exists=.env src/index.ts",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "catalog:",
+    "@fastify/cookie": "catalog:",
+    "@fastify/csrf-protection": "catalog:",
+    "@fastify/helmet": "catalog:",
+    "@fastify/multipart": "catalog:",
+    "@fastify/rate-limit": "catalog:",
+    "@fastify/swagger": "catalog:",
+    "@fastify/swagger-ui": "catalog:",
+    "@fastify/under-pressure": "catalog:",
+    "@fastify/websocket": "catalog:",
+    "@hocuspocus/server": "catalog:",
+    "@iridium/contracts": "workspace:*",
+    "@iridium/crdt": "workspace:*",
+    "@iridium/markdown": "workspace:*",
+    "@modelcontextprotocol/core": "catalog:",
+    "@modelcontextprotocol/fastify": "catalog:",
+    "@modelcontextprotocol/node": "catalog:",
+    "@modelcontextprotocol/server": "catalog:",
+    "@node-rs/argon2": "catalog:",
+    "fastify": "catalog:",
+    "fastify-type-provider-zod": "catalog:",
+    "kysely": "catalog:",
+    "mysql2": "catalog:",
+    "pino": "catalog:",
+    "piscina": "catalog:",
+    "rate-limiter-flexible": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@iridium/testkit": "workspace:*",
+    "@iridium/tsconfig": "workspace:*",
+    "kysely-codegen": "catalog:",
+    "kysely-ctl": "catalog:",
+    "tsdown": "catalog:"
+  }
+}

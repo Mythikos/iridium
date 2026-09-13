@@ -1,0 +1,87 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "tui",
+  "envMode": "strict",
+  "globalDependencies": [
+    "tooling/tsconfig/*.json",
+    ".oxfmtrc.jsonc",
+    "oxlint.config.ts",
+    "pnpm-workspace.yaml"
+  ],
+  "globalPassThroughEnv": ["CI", "GITHUB_ACTIONS", "NODE_OPTIONS"],
+  "boundaries": {
+    "tags": {
+      "core": { "dependencies": { "allow": ["tooling"] } },
+      "iso": { "dependencies": { "allow": ["core", "iso", "tooling"] } },
+      "browser": {
+        "dependencies": {
+          "allow": ["core", "iso", "browser", "tooling"],
+          "deny": ["node", "server", "app"]
+        }
+      },
+      "node": {
+        "dependencies": {
+          "allow": ["core", "iso", "tooling"],
+          "deny": ["browser", "server", "app"]
+        }
+      },
+      "server": {
+        "dependencies": { "allow": ["core", "iso", "node", "tooling"], "deny": ["browser", "app"] },
+        "dependents": { "allow": [] }
+      },
+      "app": {
+        "dependencies": {
+          "allow": ["core", "iso", "browser", "node", "tooling"],
+          "deny": ["server"]
+        },
+        "dependents": { "allow": [] }
+      },
+      "tooling": { "dependencies": { "allow": ["tooling", "core", "iso", "node"] } }
+    }
+  },
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "check-types": {
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "format:check": {},
+    "test": {
+      "dependsOn": ["^build"],
+      "env": ["IRIDIUM_TEST_SEED", "IRIDIUM_PROP_RUNS", "IRIDIUM_PROP_SIZE"],
+      "outputs": ["coverage/**"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build", "build"],
+      "cache": false,
+      "env": [
+        "IRIDIUM_TEST_SEED",
+        "IRIDIUM_MYSQL_IMAGE",
+        "IRIDIUM_PROP_DB_RUNS",
+        "IRIDIUM_PROP_DB_COMMANDS"
+      ]
+    },
+    "gen": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "gen:check": {
+      "dependsOn": ["gen"],
+      "cache": false
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "persistent": true,
+      "interruptible": true,
+      "cache": false
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

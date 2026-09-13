@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    { "path": "packages/contracts/tsconfig.build.json" },
+    { "path": "packages/crdt/tsconfig.build.json" },
+    { "path": "packages/markdown/tsconfig.build.json" },
+    { "path": "packages/api-client/tsconfig.build.json" },
+    { "path": "packages/collab-client/tsconfig.build.json" },
+    { "path": "packages/testkit/tsconfig.build.json" },
+    { "path": "packages/editor" },
+    { "path": "packages/markdown-react" },
+    { "path": "packages/ui" },
+    { "path": "packages/mcp-bridge" },
+    { "path": "apps/server" },
+    { "path": "apps/web" },
+    { "path": "apps/desktop" },
+    { "path": "apps/e2e" },
+    { "path": "tooling/oxlint-config" },
+    { "path": "tooling/mutation" }
+  ]
+}

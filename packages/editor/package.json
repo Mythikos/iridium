@@ -1,0 +1,37 @@
+{
+  "name": "@iridium/editor",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CodeMirror 6 + y-codemirror.next binding, markdown language, iridiumFrontmatter block parser, formatting commands, read-only compartment, theme, disposable-view helpers",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "test": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project unit packages/editor",
+    "test:component": "vitest --run --passWithNoTests --config ../../vitest.config.ts --project component packages/editor"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "catalog:",
+    "@codemirror/commands": "catalog:",
+    "@codemirror/lang-markdown": "catalog:",
+    "@codemirror/language": "catalog:",
+    "@codemirror/search": "catalog:",
+    "@codemirror/state": "catalog:",
+    "@codemirror/view": "catalog:",
+    "@iridium/collab-client": "workspace:*",
+    "@iridium/contracts": "workspace:*",
+    "@iridium/crdt": "workspace:*",
+    "@lezer/common": "catalog:",
+    "@lezer/highlight": "catalog:",
+    "@lezer/markdown": "catalog:",
+    "y-codemirror.next": "catalog:"
+  },
+  "devDependencies": {
+    "@iridium/tsconfig": "workspace:*"
+  }
+}
