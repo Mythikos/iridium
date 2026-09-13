@@ -1,12 +1,20 @@
 # Data model
 
-This section is the definitive description of Iridium's MySQL schema: every table, column, key, index, generated column, foreign key and deletion rule; the three database roles and their grants; the tree model; the optimistic-concurrency contract; the Yjs storage model with its sequence/CAS invariants; revisions and their retention; the rebuildable projections; attachments, jobs, audit and access logs; settings and metadata; the initial migration set and the migration policy; the entity-relationship diagram; the invariants and the tool that verifies each; and the growth formulas. Behaviour that lives above the schema (services, protocols, endpoints) is referenced by section, not repeated: the collaboration write path is in `05-collaboration-and-durability.md`, authorization in `04-auth-and-access-control.md`, the read model and MCP in `06-mcp-and-agent-access.md`, projections and import/export in `08-markdown-pipeline-import-export.md`, operations in `11-operations-and-deployment.md`.
+This section is the definitive description of Iridium's MySQL schema: every table, column, key, index, generated column, foreign key and deletion rule; the three database roles and their grants; the tree model; the optimistic-concurrency contract; the Yjs storage model with its sequence/CAS invariants; revisions and their retention; the rebuildable projections; attachments, jobs, audit and access logs; the credential tables of the OAuth 2.1 authorization server; settings and metadata; the initial migration set and the migration policy; the entity-relationship diagram; the invariants and the tool that verifies each; and the growth formulas. Behaviour that lives above the schema (services, protocols, endpoints) is referenced by section, not repeated: the collaboration write path is in `05-collaboration-and-durability.md`, authorization in `04-auth-and-access-control.md`, the read model and MCP in `06-mcp-and-agent-access.md`, projections and import/export in `08-markdown-pipeline-import-export.md`, operations in `11-operations-and-deployment.md`.
 
 ## 1. Scope, engine and conventions
 
 ### 1.1 Engine and server configuration the schema depends on
 
-MySQL 9.7 LTS (`mysql:9.7.2-oraclelinux9` in compose, Testcontainers and CI service containers; nightly lane `mysql:8.4.11`), InnoDB only, `utf8mb4`. Every DDL statement in this section is MySQL 8.0.13+ compatible (functional key parts 8.0.13, multi-valued indexes 8.0.17, `RANGE COLUMNS` partitioning, virtual generated columns, `WITH RECURSIVE`, `utf8mb4_0900_*` collations), so the 8.4 lane runs the same migrations unchanged.
+Iridium supports **two** MySQL server lines, and both are required deployment targets: **MySQL 8.4 LTS** (`mysql:8.4.11`, premier support to 2029-04-30, extended to 2032-04-30) and **MySQL 9.7 LTS** (`mysql:9.7.2-oraclelinux9`, GA 2026-04-21, support to ~2034-04-21). InnoDB only, `utf8mb4`. 8.4.11 is the **compatibility floor** and the image that every unset selector resolves to — `IRIDIUM_MYSQL_IMAGE` in the test harness, `MYSQL_TAG` in `infra/.env` — because a portability defect must surface in the ordinary development loop rather than in a lane somebody has to go and read. 9.7.2 is the reference production image that `infra/compose.prod.yaml` and `docs/ops/deployment.md` ship. Neither line is primary; both are merge-blocking in `ci.yml` (`10-testing-and-quality.md`, CI lanes).
+
+MySQL **8.0** is not a target: it reached end of life on 2026-04-30 (last release 8.0.46) and the server refuses to start against it. Neither are the 9.0–9.6 innovation releases (roughly three months of support each) nor the 26.x innovation line that the Docker `latest` tag points at.
+
+**Assumption.** The project owner's requirement was stated as "MySQL 8". This plan reads that as **8.4 LTS**, because 8.0 is end of life and 8.4 is the only supported 8.x line. If 8.0 was meant literally that is a larger constraint — an end-of-life engine, a floor below `CREATE TRIGGER IF NOT EXISTS` (8.0.29+), and a `my.cnf` that would need a per-line variant because `default_authentication_plugin` exists on 8.0 and is removed on 8.4 — and it returns to the owner as a question rather than being assumed here.
+
+**The MySQL dialect rule.** Every SQL statement Iridium executes must have identical semantics on **MySQL 8.4.11 and MySQL 9.7.2**. "Every statement" means: the DDL in `apps/server/migrations/**`, every query Kysely builds, every raw `sql` tagged template, `infra/docker/mysql/init/**`, the generated `docs/ops/db-grants.sql` and `docs/ops/access-log-partitions.sql`, and every client command line exported from `apps/server/src/ops/**`. The floor is **8.4.11**, not 8.0.13: a construct that requires 9.x is forbidden, and a construct that 8.4 merely deprecates is forbidden too, because a deprecation is a removal with a date on it. Nothing in Iridium is written against MySQL 8.0; 8.0 is end of life and the server refuses to start against it.
+
+The rule is enforced by four mechanisms rather than by this paragraph: `db.dialect-floor.guard` (a committed denylist, `ci.yml › static`), the `db.version-floor.boot` refusal in the `db` plugin, the two-entry `ci.yml › integration` and `ci.yml › chaos-core` matrices, and `migrations.parity.integration`, which asserts that the schema the migrations produce on the two engines is **identical**, not merely legal on each.
 
 The following `infra/docker/mysql/my.cnf` settings are prerequisites of the schema, not tuning: they must be in effect before migration `0001` runs because some are baked into index structures at creation time.
 
@@ -22,8 +30,9 @@ The following `infra/docker/mysql/my.cnf` settings are prerequisites of the sche
 | `sql_require_primary_key` | `ON` | Every table below declares a primary key; the setting makes a forgotten one a migration failure |
 | `cte_max_recursion_depth` | `200` | Tree CTEs recurse to tree depth (≤ `TREE_MAX_DEPTH`, 64 — §6.5), never to node count; 200 leaves headroom for diagnostics |
 | `max_connections` | `200` | `dbApp` 20 + `dbPersist` 4 + `dbMaint` 1, the CLI-only `dbBackup`, and operator sessions (§1.3) |
+| *(version floor, not a `my.cnf` line)* | server is `8.4.x` (≥ 8.4.11) or `9.7.x` (≥ 9.7.2) | Checked at boot by the `db` plugin from `SELECT VERSION()`; anything else exits `2` with `config.mysql_unsupported` (`11-operations-and-deployment.md` OPS-62). Every DDL below is written to the 8.4.11 floor |
 
-Authentication plugin is `caching_sha2_password` for all three roles (`mysql_native_password` no longer exists in 9.x; mysql2 3.24.4 speaks `caching_sha2_password`).
+Authentication plugin is `caching_sha2_password` for all three roles on **both** lines. `mysql_native_password` was deprecated in 8.0.34, is disabled by default in 8.4 and is removed in 9.0 and later — so on 9.x it cannot be used at all, while on 8.4 a site could load the component back and create a role Iridium did not intend. The rule is therefore asserted rather than assumed: `infra/docker/mysql/init/01_roles.sh` creates each role `IDENTIFIED WITH caching_sha2_password` and then fails the container's initialisation if `SELECT COUNT(*) FROM mysql.user WHERE user IN ('iridium_app','iridium_migrator','iridium_backup') AND plugin <> 'caching_sha2_password'` is non-zero, and `db.auth-plugin.integration` re-asserts it on both images. mysql2 3.24.4 speaks `caching_sha2_password` on both.
 
 ### 1.2 Column and naming conventions
 
@@ -58,10 +67,10 @@ All foreign keys are `ON DELETE RESTRICT`. Nothing in Iridium is deleted implici
 |---|---|---|
 | Note purge | trash expiry (`trash_purge` job) or `DELETE /nodes/:id?purge=true` | `note_links` (`from_note_id`) → `note_search` → `note_projections` → `note_revisions` → `note_updates` → `note_docs` → `notes` → `trash_entries` → `nodes`; then `UPDATE note_links SET resolved_node_id = NULL, status = 'broken' WHERE vault_id = ? AND resolved_node_id = ?` for links from other notes |
 | Category purge | same | descendants ordered by depth descending (deepest first), each note as above, each category `trash_entries` → `nodes` |
-| Aborted-import vault | `POST /imports/:jobId/abort` (the import's requester, `09-api-reference.md` §2.12) on a vault still in `status='importing'`, or `transfer_cleanup` when `import_jobs.expires_at` passes | vault status → `deleting`; every node as above; `attachments` rows of the vault; `vault_members`; `access_token_vaults`; `vaults` |
-| Session / setup-link housekeeping | `session_ticket_sweep` job | `sessions` rows past `absolute_expires_at` or `revoked_at` by more than `SESSION_ROW_RETENTION_DAYS` (30); `password_setup_tokens` consumed or expired by more than 30 days |
+| Aborted-import vault | `POST /imports/:jobId/abort` (the import's requester, `09-api-reference.md` §2.12) on a vault still in `status='importing'`, or `transfer_cleanup` when `import_jobs.expires_at` passes | vault status → `deleting`; every node as above; `attachments` rows of the vault; `vault_members`; `access_token_vaults`; `oauth_consent_vaults`; `vaults` |
+| Short-lived credential housekeeping | `session_ticket_sweep` job | `sessions` rows past `absolute_expires_at` or `revoked_at` by more than `SESSION_ROW_RETENTION_DAYS` (30); `password_setup_tokens` consumed or expired by more than 30 days; the three OAuth rows of §4A's retention table — `oauth_authorization_codes` 24 h past `expires_at`, `oauth_refresh_tokens` 30 days past the later of `absolute_expires_at` and `revoked_at`, and never-used dynamically registered `oauth_clients` after `OAUTH_UNUSED_CLIENT_TTL_DAYS` (7) |
 
-Users are never hard-deleted (`admin.user.deleted` anonymises: `status='deleted'`, `email` replaced by `deleted+<id>@invalid`, `display_name` replaced, credentials and sessions removed, tokens revoked; audit rows keep the id). Vaults that reached `active` are never hard-deleted in the MVP (archive is soft). `access_tokens` rows are never deleted (`A31`). Attachment blobs are deleted only by explicit attachment deletion or the confirmed unreferenced-attachment purge (`A44`). `desktop_releases` rows are never deleted either: unpublishing a release stamps `withdrawn_at`/`withdrawn_by` and regenerates the update feed without it (§13.3).
+Users are never hard-deleted (`admin.user.deleted` anonymises: `status='deleted'`, `email` replaced by `deleted+<id>@invalid`, `display_name` replaced, credentials and sessions removed, tokens revoked; audit rows keep the id). Vaults that reached `active` are never hard-deleted in the MVP (archive is soft). `access_tokens` rows are never deleted (`A31`), and neither are `oauth_consents` or `oauth_consent_vaults` rows: a revoked consent is the record of what a user once granted a connector (§4A). Attachment blobs are deleted only by explicit attachment deletion or the confirmed unreferenced-attachment purge (`A44`). `desktop_releases` rows are never deleted either: unpublishing a release stamps `withdrawn_at`/`withdrawn_by` and regenerates the update feed without it (§13.3).
 
 Tables that deliberately carry **no** foreign key, and why:
 
@@ -72,14 +81,14 @@ Tables that deliberately carry **no** foreign key, and why:
 | `note_links.resolved_node_id`, `resolved_attachment_id` | Targets may be trashed (row kept, link still displayed as "in trash") or purged (reference nulled and `status='broken'` in the purge transaction) |
 | `jobs.vault_id`, `jobs.requested_by`, `import_jobs.target_vault_id`, `export_jobs.vault_id` | A job record outlives an aborted-import vault and is itself part of the operational record |
 | `vaults.root_node_id` | Circular with `nodes.vault_id`; enforced as an application invariant (`iridium doctor` check I-05) |
-| `password_setup_tokens.issued_by`, `access_tokens.revoked_by`, `nodes.created_by/updated_by`, `vault_members.granted_by`, `attachments.uploaded_by`, `vaults.created_by`, `server_settings.updated_by`, `desktop_releases.published_by`, `trash_entries.deleted_by`, `note_updates.actor_id/session_id`, `note_revisions.actor_id`, `access_tokens.created_from_session_id`, `access_tokens.rotated_from_id` | Attribution columns: sessions are swept, users are anonymised in place; a constraint here would either block housekeeping or require nulling attribution, which is worse for the audit trail |
+| `password_setup_tokens.issued_by`, `access_tokens.revoked_by`, `nodes.created_by/updated_by`, `vault_members.granted_by`, `attachments.uploaded_by`, `vaults.created_by`, `server_settings.updated_by`, `desktop_releases.published_by`, `trash_entries.deleted_by`, `note_updates.actor_id/session_id`, `note_revisions.actor_id`, `access_tokens.created_from_session_id`, `access_tokens.rotated_from_id`, `access_tokens.refresh_id`, `oauth_clients.created_by_user_id/disabled_by`, `oauth_consents.granted_session_id/revoked_by`, `oauth_authorization_codes.session_id`, `oauth_refresh_tokens.rotated_from_id` | Attribution columns: sessions are swept, users are anonymised in place; a constraint here would either block housekeeping or require nulling attribution, which is worse for the audit trail. `oauth_authorization_codes.session_id` is the same shape for a different reason — it is re-checked live at code exchange, and a swept session must make the exchange fail rather than make the sweep fail (§4A) |
 
 ## 2. Database roles and grants
 
-Three MySQL accounts are created by `infra/docker/mysql/init/01_roles.sql` (executed once by the image entrypoint from `/docker-entrypoint-initdb.d`, passwords injected from `*_FILE` secrets) and documented verbatim in `docs/ops/deployment.md` for DBAs who provision MySQL themselves. The application never holds a credential that can alter schema or audit history.
+Three MySQL accounts are created by `infra/docker/mysql/init/01_roles.sh` (executed once by the image entrypoint from `/docker-entrypoint-initdb.d`, passwords read from the `*_FILE` secrets) and documented verbatim in `docs/ops/deployment.md` for DBAs who provision MySQL themselves. The file is a shell script rather than a plain `.sql` for two reasons that are both load-bearing: only a script can read a secret out of a `*_FILE` path instead of embedding it, and only a script can fail the container's initialisation on the authentication-plugin assertion of §1.1. The application never holds a credential that can alter schema or audit history.
 
 ```sql
--- infra/docker/mysql/init/01_roles.sql  (passwords substituted by the entrypoint wrapper from *_FILE secrets)
+-- the statements infra/docker/mysql/init/01_roles.sh pipes into mysql (passwords read from the *_FILE secrets)
 CREATE DATABASE IF NOT EXISTS iridium CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 CREATE USER IF NOT EXISTS 'iridium_app'@'%'      IDENTIFIED WITH caching_sha2_password BY '${IRIDIUM_DB_APP_PASSWORD}';
@@ -99,7 +108,7 @@ GRANT RELOAD, PROCESS, REPLICATION CLIENT, REPLICATION SLAVE, BACKUP_ADMIN, SHOW
 -- iridium_app receives table-level grants from migration 0034_grants (tables must exist first)
 ```
 
-The backup role holds three privileges beyond `A8`'s list (`SELECT, LOCK TABLES, RELOAD, PROCESS, REPLICATION CLIENT, SHOW VIEW, TRIGGER, EVENT`), each demanded by one flag of the dump command `iridium backup` actually runs (`11-operations-and-deployment.md` OPS-26): `REPLICATION SLAVE` is what lets `mysqlbinlog --read-from-remote-server` stream the closed binary logs of the point-in-time-recovery set (`RELOAD` only covers the `FLUSH BINARY LOGS` that closes them); `BACKUP_ADMIN` is required because `--single-transaction` combined with `--source-data` takes an instance backup lock (`LOCK INSTANCE FOR BACKUP`) on MySQL 8.0.21 and later, which is both the 9.7 primary and the 8.4 nightly lane; and `SHOW_ROUTINE` is what `--routines` needs from a role that deliberately has no global `SELECT`. The shipped command is therefore the specification of this grant set, which is why verification (e) below executes that exact command string rather than a shorter hand-written one (decision D03-21).
+The backup role holds three privileges beyond `A8`'s list (`SELECT, LOCK TABLES, RELOAD, PROCESS, REPLICATION CLIENT, SHOW VIEW, TRIGGER, EVENT`), each demanded by one flag of the dump command `iridium backup` actually runs (`11-operations-and-deployment.md` OPS-26): `REPLICATION SLAVE` is what lets `mysqlbinlog --read-from-remote-server` stream the closed binary logs of the point-in-time-recovery set (`RELOAD` only covers the `FLUSH BINARY LOGS` that closes them); `BACKUP_ADMIN` is required because `--single-transaction` combined with `--source-data` takes an instance backup lock (`LOCK INSTANCE FOR BACKUP`) on MySQL 8.0.21 and later, which is true on both required lines, 8.4.11 and 9.7.2; and `SHOW_ROUTINE` is what `--routines` needs from a role that deliberately has no global `SELECT`. The shipped command is therefore the specification of this grant set, which is why verification (e) below executes that exact command string rather than a shorter hand-written one (decision D03-21).
 
 Table-level grants for `iridium_app` are applied by migration `0034_grants` (and by a companion `NNNN_<table>_grants` migration for every table created later), because MySQL cannot restrict a database-level grant per table and grants on non-existent tables require `CREATE`. The migration is skipped with a logged warning when the migrating account lacks `GRANT OPTION`; in that case the DBA applies `docs/ops/db-grants.sql`.
 
@@ -107,7 +116,7 @@ Table-level grants for `iridium_app` are applied by migration `0034_grants` (and
 
 | Table(s) | `iridium_app` | `iridium_migrator` | `iridium_backup` |
 |---|---|---|---|
-| `users`, `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle`, `access_tokens`, `access_token_vaults`, `vaults`, `vault_members`, `nodes`, `trash_entries`, `notes`, `note_docs`, `note_projections`, `note_search`, `note_links`, `attachments`, `jobs`, `import_jobs`, `export_jobs`, `server_settings`, `schema_meta`, `desktop_releases` | `SELECT, INSERT, UPDATE, DELETE` | all (schema owner) | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
+| `users`, `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle`, `access_tokens`, `access_token_vaults`, `oauth_clients`, `oauth_consents`, `oauth_consent_vaults`, `oauth_authorization_codes`, `oauth_refresh_tokens`, `vaults`, `vault_members`, `nodes`, `trash_entries`, `notes`, `note_docs`, `note_projections`, `note_search`, `note_links`, `attachments`, `jobs`, `import_jobs`, `export_jobs`, `server_settings`, `schema_meta`, `desktop_releases` | `SELECT, INSERT, UPDATE, DELETE` | all (schema owner) | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `note_updates` | `SELECT, INSERT, DELETE` — no `UPDATE`: the log is append-only and rows leave only through `update_log_prune` (§8.4) | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `note_revisions` | `SELECT, INSERT, DELETE, UPDATE (id)` — a column-scoped grant (`GRANT SELECT, INSERT, DELETE, UPDATE (id) ON iridium.note_revisions TO 'iridium_app'@'%'`). `DELETE` is the thinning job; `UPDATE (id)` is exactly what keeps the idempotent checkpoint insert (`INSERT … ON DUPLICATE KEY UPDATE id = id`, §8.7) working while leaving `markdown`, `snapshot`, `content_hash`, `size_chars`, `kind`, `seq`, `label` and `actor_id` physically unwritable by the application role | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `audit_chain_heads` | `SELECT, INSERT, UPDATE` — no `DELETE`: deleting a head and re-inserting a genesis row would restart a chain that `verify-chain` would then accept (§12.2) | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
@@ -228,9 +237,9 @@ CREATE TABLE access_tokens (
   token_id                CHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,   -- public lookup id inside irid_pat_…
   secret_hash             BINARY(32)  NOT NULL,               -- SHA-256(secret)
   user_id                 BINARY(16)  NOT NULL,
-  kind                    ENUM('pat','oauth','scim') NOT NULL DEFAULT 'pat',        -- only 'pat' issued in MVP
+  kind                    ENUM('pat','oauth','scim') NOT NULL DEFAULT 'pat',        -- 'pat' and 'oauth' are issued; 'scim' is reserved
   name                    VARCHAR(120) NOT NULL,
-  display_prefix          CHAR(26)    NOT NULL,               -- 'irid_pat_<token_id>_' shown in lists
+  display_prefix          CHAR(26)    NOT NULL,               -- 'irid_pat_<token_id>_' or 'irid_oat_<token_id>_' shown in lists
   scopes                  JSON        NOT NULL,               -- ["vault:read","note:read","search:read","history:read","attachment:read","export:read"]
   all_vaults              TINYINT(1)  NOT NULL DEFAULT 0,     -- 1 = every vault the owner is an explicit member of at call time; never for server admins
   admin_owned             TINYINT(1)  NOT NULL DEFAULT 0,     -- owner was a server admin at creation (audited)
@@ -245,6 +254,10 @@ CREATE TABLE access_tokens (
   created_user_agent      VARCHAR(255) NULL,
   rotated_from_id         BINARY(16)  NULL,
   rotation_overlap_until  DATETIME(6) NULL,                   -- old token accepted until this instant after rotation
+  client_id               BINARY(16)  NULL,                   -- oauth_clients.id;  NULL for kind='pat'
+  consent_id              BINARY(16)  NULL,                   -- oauth_consents.id; NULL for kind='pat'
+  refresh_id              BINARY(16)  NULL,                   -- the oauth_refresh_tokens row that minted this token; no FK, see below
+  resource                VARCHAR(255) NULL,                  -- RFC 8707 audience; NULL for kind='pat'
   revoked_at              DATETIME(6) NULL,
   revoked_by              BINARY(16)  NULL,
   revoke_reason           VARCHAR(120) NULL,
@@ -252,7 +265,11 @@ CREATE TABLE access_tokens (
   UNIQUE KEY uq_tokens_token_id (token_id),
   KEY ix_tokens_user (user_id, revoked_at, expires_at),
   KEY ix_tokens_expires (expires_at),
-  CONSTRAINT fk_tokens_user FOREIGN KEY (user_id) REFERENCES users(id)
+  KEY ix_tokens_consent (consent_id, revoked_at),
+  KEY ix_tokens_client (client_id, revoked_at),
+  CONSTRAINT fk_tokens_user           FOREIGN KEY (user_id)    REFERENCES users(id),
+  CONSTRAINT fk_tokens_oauth_client   FOREIGN KEY (client_id)  REFERENCES oauth_clients(id),
+  CONSTRAINT fk_tokens_oauth_consent  FOREIGN KEY (consent_id) REFERENCES oauth_consents(id)
 );
 
 CREATE TABLE access_token_vaults (                            -- explicit allowlist when all_vaults = 0
@@ -265,14 +282,166 @@ CREATE TABLE access_token_vaults (                            -- explicit allowl
 );
 ```
 
+The block above is the **resulting** shape of the table. `access_tokens` is created by migration `0008`, long before the OAuth tables exist; the four OAuth columns and their two foreign keys arrive by `0046_access_tokens_oauth_columns` and the two indexes by `0047_access_tokens_oauth_indexes` (§14.1), because a foreign key cannot be declared against a table that has not been created yet.
+
+`refresh_id` deliberately carries **no** foreign key, and the reason is a real conflict rather than an oversight: token rows are never deleted (`A31`) while `oauth_refresh_tokens` rows are swept 30 days after the family expires (§4A), so a `RESTRICT` constraint here would make that sweep a dead letter — every refresh row would be pinned forever by the access tokens it minted. It is a provenance column of exactly the same kind as `rotated_from_id`, which has carried no foreign key since `0008` for the same reason, and it is listed with the other attribution columns in §1.4. A swept refresh row leaves `refresh_id` pointing at nothing, which is harmless: by then the family is long expired and the only reader — the reuse-detection sweep — works forward from a live refresh row, never backward from an access token.
+
 Semantics that the schema encodes (the verifier and lifecycle live in `04-auth-and-access-control.md`):
 
-- **Lookup path**: `irid_pat_<token_id>_<secret43><crc6>` → CRC check offline → `SELECT … FROM access_tokens WHERE token_id = ?` (unique index, O(1)) → `timingSafeEqual(secret_hash, SHA-256(secret))` → `revoked_at IS NULL` (or `rotation_overlap_until > now` for a rotated-out token) → `expires_at > now` → owner `status='active'` → memberships. Every MCP call performs this fresh; there is no principal cache in the MVP (`A23`).
+- **Lookup path**: `irid_pat_<token_id>_<secret43><crc6>` (or `irid_oat_…` for an OAuth access token) → CRC check offline → `SELECT … FROM access_tokens WHERE token_id = ?` (unique index, O(1)) → `timingSafeEqual(secret_hash, SHA-256(secret))` → `revoked_at IS NULL` (or `rotation_overlap_until > now` for a rotated-out token) → `expires_at > now` → owner `status='active'` → memberships. Every MCP call performs this fresh; there is no principal cache in the MVP (`A23`). One verification path serves both kinds: the OAuth additions are two primary-key `LEFT JOIN`s on the same statement, not a second round trip.
+- **`kind`** is live in two of its three values. `pat` is an integration token a user created in Settings › Integrations; `oauth` is an access token the authorization server of §4A minted for a connector. `scim` is reserved and never issued. The token format is the same family — `irid_pat_…` and `irid_oat_…` — so `tokens.format.unit` and the published leak-scanner regex cover both.
+- **`resource`** is `NULL` for a PAT and the RFC 8707 canonical URI of the mount the token was issued for (`<PUBLIC_ORIGIN>/mcp/connect`) for an OAuth token. It is compared against the route's own canonical URI at verification: a token presented at a mount it was not issued for is `401 invalid_token`, which is the audience check the MCP specification requires of a resource server and the reason the column is a plain `VARCHAR` comparison rather than a parsed claim.
+- **`consent_id` and `client_id`** are what a consent revocation and a client disable sweep on: revoking `oauth_consents.id = X` revokes every `access_tokens` row with `consent_id = X` in the same transaction, and disabling or deleting an `oauth_clients` row does the same through `client_id`. **`refresh_id`** is what a refresh-family revocation sweeps on when reuse of a rotated refresh token is detected (§4A). `ix_tokens_consent (consent_id, revoked_at)` and `ix_tokens_client (client_id, revoked_at)` exist for exactly those three sweeps and for nothing else; without them each is a full scan of a table whose rows are never deleted.
+- **`name` uniqueness among the owner's live tokens applies to `kind='pat'` rows only.** An OAuth row's `name` is the client's `client_name`, is not unique, and never produces the `409 name_conflict` that a duplicate PAT name produces — two connectors from the same vendor are two legitimate rows. `display_prefix` for an OAuth access token is `irid_oat_<token_id>_`, the same `CHAR(26)`.
+- **`expires_at` stays `NOT NULL`** for an OAuth row and is `now + oauth_policy.accessTokenTtlMinutes` (§13.1, default 60 minutes); the "never expires" sentinel is never used for an OAuth token. `rate_limit_per_hour` is `NULL`, resolving to `oauth_policy.defaultRateLimitPerHour`, and the existing `PATCH /admin/tokens/:tokenId` route changes it for a single OAuth token exactly as for a PAT. `admin_owned` and `all_vaults` obey the PAT rules, except that `all_vaults` is refused for a server administrator at the consent step rather than at token creation, with `all_vaults_admin_forbidden`.
 - **`scopes`** is a JSON array of permission strings validated against `@iridium/contracts/authz.ts`; the MVP issues exactly the six read permissions. Reserved write scopes are schema-valid but never granted or listed.
 - **Vault scope** is either the explicit `access_token_vaults` allowlist (each id must be a vault the owner is an explicit member of at creation and is re-checked at use) or `all_vaults=1`, which resolves to "every vault the owner is an explicit member of at call time". `all_vaults` is refused for server admins; `admin_owned=1` records that the owner was an admin when the token was created (audited as `token.created {admin_owned:true}`); token principals never inherit admin-implied access.
 - **Rotation**: `POST /me/tokens/:id/rotate` inserts a new row with `rotated_from_id` = the old id and sets the old row's `revoked_at` (immediately) or `rotation_overlap_until` (when an overlap ≤ `pat_policy.rotationOverlapMaxHours` was requested — the grouped form of the skeleton's `pat_rotation_overlap_max_hours`, §13.1); the old row is never deleted, so the chain of rotations is queryable.
 - **`last_used_*`** are written by the `last_used_flush` job from an in-memory map at most every 10 minutes per token; they are informational and never part of authorization.
-- **Rows are never deleted**; `ix_tokens_user (user_id, revoked_at, expires_at)` serves the settings list ("active" = `revoked_at IS NULL AND expires_at > now`), `ix_tokens_expires` the expiry sweep that audits `token.revoked {reason:'expired'}` without touching the row's `revoked_at` (expiry is derived, not written).
+- **Rows are never deleted**, for OAuth access tokens exactly as for PATs; `ix_tokens_user (user_id, revoked_at, expires_at)` serves the settings list ("active" = `revoked_at IS NULL AND expires_at > now`), `ix_tokens_expires` the expiry sweep that audits `token.revoked {reason:'expired'}` without touching the row's `revoked_at` (expiry is derived, not written). Keeping the OAuth rows is what keeps every `access_log` row resolvable to the credential that made the call, even after an hour-long access token has expired and the connector has refreshed twice.
+
+## 4A. The OAuth 2.1 authorization server
+
+Iridium ships its own OAuth 2.1 authorization server so that claude.ai and Claude Desktop custom connectors work natively, alongside integration tokens rather than instead of them (`06-mcp-and-agent-access.md` carries the protocol, the endpoints, the consent flow and the two MCP mounts; this section carries only the tables). It is placed here, immediately after §4, because it is the same credential family: an OAuth access token **is** an `access_tokens` row with `kind='oauth'`, verified by the same statement and resolved to the same principal, and the four tables and one join table below exist to record who authorized what, for which client, with which vaults, and how the grant is refreshed and revoked.
+
+```sql
+CREATE TABLE oauth_clients (
+  id                         BINARY(16)  NOT NULL PRIMARY KEY,
+  client_id                  VARCHAR(512) NOT NULL,               -- the CIMD https URL, or a 32-char base62 id for DCR/manual
+  registration_kind          ENUM('cimd','dynamic','manual') NOT NULL,
+  client_name                VARCHAR(120) NOT NULL,
+  client_uri                 VARCHAR(512) NULL,
+  logo_uri                   VARCHAR(512) NULL,                   -- stored, never rendered
+  application_type           ENUM('native','web') NOT NULL,
+  token_endpoint_auth_method ENUM('none','client_secret_basic') NOT NULL DEFAULT 'none',
+  client_secret_hash         BINARY(32)  NULL,                    -- SHA-256; manual confidential clients only
+  client_secret_prefix       CHAR(26)    NULL,
+  redirect_uris              JSON        NOT NULL,                -- ≤ OAUTH_MAX_REDIRECT_URIS entries
+  grant_types                JSON        NOT NULL,                -- ["authorization_code","refresh_token"]
+  scopes                     JSON        NULL,                    -- NULL = every READ_BUNDLE scope
+  cimd_document              JSON        NULL,
+  cimd_fetched_at            DATETIME(6) NULL,
+  cimd_etag                  VARCHAR(120) NULL,
+  status                     ENUM('active','disabled') NOT NULL DEFAULT 'active',
+  created_at                 DATETIME(6) NOT NULL,
+  created_by_user_id         BINARY(16)  NULL,                    -- NULL for cimd and dynamic
+  last_authorized_at         DATETIME(6) NULL,                    -- NULL = never used; drives the unused-client sweep
+  disabled_at                DATETIME(6) NULL,
+  disabled_by                BINARY(16)  NULL,
+  version                    INT UNSIGNED NOT NULL DEFAULT 1,
+  UNIQUE KEY uq_oauth_clients_client_id (client_id(191)),
+  KEY ix_oauth_clients_status (status, created_at),
+  KEY ix_oauth_clients_unused (last_authorized_at, created_at)
+);
+
+CREATE TABLE oauth_consents (
+  id                 BINARY(16)  NOT NULL PRIMARY KEY,
+  user_id            BINARY(16)  NOT NULL,
+  client_id          BINARY(16)  NOT NULL,
+  scopes             JSON        NOT NULL,
+  all_vaults         TINYINT(1)  NOT NULL DEFAULT 0,
+  admin_owned        TINYINT(1)  NOT NULL DEFAULT 0,
+  granted_at         DATETIME(6) NOT NULL,
+  granted_session_id BINARY(16)  NULL,
+  updated_at         DATETIME(6) NOT NULL,
+  last_authorized_at DATETIME(6) NULL,
+  revoked_at         DATETIME(6) NULL,
+  revoked_by         BINARY(16)  NULL,
+  revoke_reason      VARCHAR(120) NULL,
+  version            INT UNSIGNED NOT NULL DEFAULT 1,
+  live_consent_key   VARBINARY(32) GENERATED ALWAYS AS
+        (IF(revoked_at IS NULL, CONCAT(user_id, client_id), NULL)) VIRTUAL,
+  KEY ix_oauth_consents_user (user_id, revoked_at),
+  KEY ix_oauth_consents_client (client_id, revoked_at),
+  CONSTRAINT fk_oauth_consents_user   FOREIGN KEY (user_id)   REFERENCES users(id),
+  CONSTRAINT fk_oauth_consents_client FOREIGN KEY (client_id) REFERENCES oauth_clients(id)
+);
+-- own migration, per the 0011 precedent:
+ALTER TABLE oauth_consents ADD UNIQUE KEY uq_oauth_consents_live (live_consent_key);
+
+CREATE TABLE oauth_consent_vaults (
+  consent_id BINARY(16) NOT NULL,
+  vault_id   BINARY(16) NOT NULL,
+  PRIMARY KEY (consent_id, vault_id),
+  KEY ix_ocv_vault (vault_id),
+  CONSTRAINT fk_ocv_consent FOREIGN KEY (consent_id) REFERENCES oauth_consents(id),
+  CONSTRAINT fk_ocv_vault   FOREIGN KEY (vault_id)   REFERENCES vaults(id)
+);
+
+CREATE TABLE oauth_authorization_codes (
+  id                    BINARY(16)  NOT NULL PRIMARY KEY,
+  code_id               CHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  secret_hash           BINARY(32)  NOT NULL,
+  client_id             BINARY(16)  NOT NULL,
+  user_id               BINARY(16)  NOT NULL,
+  consent_id            BINARY(16)  NOT NULL,
+  session_id            BINARY(16)  NOT NULL,          -- the session that authorized; re-checked live at exchange
+  redirect_uri          VARCHAR(512) NOT NULL,
+  code_challenge        CHAR(43)    NOT NULL,
+  code_challenge_method ENUM('S256') NOT NULL,
+  resource              VARCHAR(255) NOT NULL,
+  scopes                JSON        NOT NULL,
+  issued_at             DATETIME(6) NOT NULL,
+  expires_at            DATETIME(6) NOT NULL,
+  consumed_at           DATETIME(6) NULL,
+  UNIQUE KEY uq_oauth_codes_code_id (code_id),
+  KEY ix_oauth_codes_expires (expires_at),
+  CONSTRAINT fk_oauth_codes_client  FOREIGN KEY (client_id)  REFERENCES oauth_clients(id),
+  CONSTRAINT fk_oauth_codes_user    FOREIGN KEY (user_id)    REFERENCES users(id),
+  CONSTRAINT fk_oauth_codes_consent FOREIGN KEY (consent_id) REFERENCES oauth_consents(id)
+);
+
+CREATE TABLE oauth_refresh_tokens (
+  id                  BINARY(16)  NOT NULL PRIMARY KEY,
+  token_id            CHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  secret_hash         BINARY(32)  NOT NULL,
+  family_id           BINARY(16)  NOT NULL,
+  rotated_from_id     BINARY(16)  NULL,
+  client_id           BINARY(16)  NOT NULL,
+  user_id             BINARY(16)  NOT NULL,
+  consent_id          BINARY(16)  NOT NULL,
+  resource            VARCHAR(255) NOT NULL,
+  scopes              JSON        NOT NULL,
+  issued_at           DATETIME(6) NOT NULL,
+  expires_at          DATETIME(6) NOT NULL,           -- sliding
+  absolute_expires_at DATETIME(6) NOT NULL,           -- family cap
+  last_used_at        DATETIME(6) NULL,
+  rotated_at          DATETIME(6) NULL,
+  revoked_at          DATETIME(6) NULL,
+  revoke_reason       VARCHAR(120) NULL,
+  UNIQUE KEY uq_oauth_refresh_token_id (token_id),
+  KEY ix_oauth_refresh_family (family_id, revoked_at),
+  KEY ix_oauth_refresh_consent (consent_id, revoked_at),
+  KEY ix_oauth_refresh_expires (absolute_expires_at),
+  CONSTRAINT fk_oauth_refresh_client  FOREIGN KEY (client_id)  REFERENCES oauth_clients(id),
+  CONSTRAINT fk_oauth_refresh_user    FOREIGN KEY (user_id)    REFERENCES users(id),
+  CONSTRAINT fk_oauth_refresh_consent FOREIGN KEY (consent_id) REFERENCES oauth_consents(id)
+);
+```
+
+**One live consent per `(user, client)`, expressed as an index.** `oauth_consents` keeps every grant a user ever made — a revoked consent is the record of what was granted and is never deleted — so `(user_id, client_id)` cannot simply be unique. `live_consent_key` is a `VIRTUAL` generated column that is `CONCAT(user_id, client_id)` while `revoked_at IS NULL` and `NULL` once the consent is revoked, and `uq_oauth_consents_live` over it constrains only live rows, because MySQL treats `NULL`s in a unique index as distinct. This is exactly the `nodes.live` / `uq_sibling` pattern of §1.2, and like that pattern the unique key is its own migration (`0038`) after the table's own (`0037`), for the reason migration `0011` is separate from `0010`: a unique key over a generated column is a distinct schema object with its own failure mode — a pre-existing duplicate — and must be individually re-runnable. The consent service then upserts under `revoked_at IS NULL` and never has to read-then-write to decide whether a grant already exists.
+
+**Lookup paths.** Every OAuth credential is the same `irid_<kind>_<id16>_<secret43><crc6>` string the rest of the plan uses, with three new kinds — `oac` (authorization code), `oat` (access token) and `ort` (refresh token) — so one format, one CRC check and one comparison rule cover them all. An authorization code is found by `uq_oauth_codes_code_id` and a refresh token by `uq_oauth_refresh_token_id`, in both cases a single unique-index lookup followed by `timingSafeEqual(secret_hash, SHA-256(secret))`; nothing is ever found by scanning a secret. Access tokens are **not** here: they are `access_tokens` rows with `kind='oauth'` (§4), which is what makes revocation a next-call property for a connector exactly as it is for a PAT, with no second mechanism and no signing key to distribute or rotate.
+
+**The refresh chain, and what reuse detection revokes.** Every refresh token belongs to a `family_id` — the first token of a grant starts a family and every rotation stays in it. Using a refresh token rotates it: the presented row gets `rotated_at = now`, a new row is inserted with the same `family_id` and `rotated_from_id` pointing at the presented row, and the new secret is returned. Presenting a row that already has `rotated_at` or `revoked_at` set is the theft signal, and the response is one transaction: every row of that `family_id` is revoked, every `access_tokens` row whose `refresh_id` belongs to the family is revoked, and `400 invalid_grant` is returned. `ix_oauth_refresh_family (family_id, revoked_at)` is what makes the refresh half of that a single indexed sweep; the access-token half is driven from `ix_tokens_consent (consent_id, revoked_at)` — the family's rows all share one `consent_id`, so the candidate set is the consent's live tokens and the `refresh_id IN (…family…)` filter is applied to a handful of rows. That is why `access_tokens.refresh_id` needs no index of its own. `expires_at` slides forward to `now + oauth_policy.refreshIdleDays` on each rotation but never past `absolute_expires_at`, which is fixed when the family starts at `now + oauth_policy.refreshAbsoluteDays`; `ix_oauth_refresh_expires` drives the sweep over that column.
+
+**`oauth_consent_vaults` mirrors `access_token_vaults` deliberately.** It is the same two-column shape — `PRIMARY KEY (consent_id, vault_id)` against `access_token_vaults`'s `(token_id, vault_id)`, `ix_ocv_vault` against `ix_atv_vault` — and the consent's selection is copied into `access_token_vaults` at every issuance rather than joined at read time. That is the point: `authorize()` reads one table shape for every token principal and contains no branch on where the vault list came from, so an OAuth principal and a PAT principal with the same user, scopes and vaults produce the identical decision. A consent with `all_vaults = 1` carries **no** `oauth_consent_vaults` rows at all (invariant I-26), exactly as an `all_vaults` PAT carries no `access_token_vaults` rows.
+
+**Attribution and foreign keys.** `oauth_authorization_codes.session_id`, `oauth_consents.granted_session_id`, `oauth_consents.revoked_by`, `oauth_clients.created_by_user_id` and `oauth_clients.disabled_by` deliberately carry no foreign key, for the reason §1.4 gives for every other attribution column: sessions are swept on their own schedule and users are anonymised rather than deleted, so a constraint here would either block housekeeping or force attribution to be nulled. `session_id` in particular is a live re-check, not a reference: at code exchange the server looks the session up and refuses the exchange if it is gone, which is a stronger property than a constraint would give.
+
+**Both engines.** Every statement above runs unchanged on MySQL 8.4.11 and 9.7.2 under the dialect rule of §1.1. The only features used are `ENUM`, `JSON`, a `VIRTUAL` generated column with a unique key over it, and `ALGORITHM=INSTANT` `ADD COLUMN` at the end of a partitioned table (§12.5) — all inside the 8.4.11 floor, and all asserted by `migrations.parity.integration` on both images rather than by this paragraph.
+
+**Retention and cleanup** are added to the existing `session_ticket_sweep` job (§11.1) rather than to a new one, because it already sweeps the two other short-lived credential tables:
+
+| Row | Deleted when |
+|---|---|
+| `oauth_authorization_codes` | 24 hours after `expires_at`, consumed or not |
+| `oauth_refresh_tokens` | 30 days after `absolute_expires_at` or after `revoked_at`, whichever is later |
+| `oauth_clients` with `registration_kind='dynamic'` and `last_authorized_at IS NULL` | `OAUTH_UNUSED_CLIENT_TTL_DAYS` (7) after `created_at`; audited `oauth.client.expired` |
+| `access_tokens` with `kind='oauth'` | **never** — the existing rule that token rows are never deleted holds (`A31`), so `access_log` rows stay resolvable |
+| `oauth_consents`, `oauth_consent_vaults` | never; a revoked consent is the record of what was granted |
+
+The client sweep is the only one of the three that deletes a row other rows may point at, and the two windows are sized so that it cannot: a code row lives 60 seconds and is swept 24 hours after it expires, a client is swept 7 days after registration, and a client that ever reached the consent screen has `last_authorized_at` set and is therefore never a candidate. The `RESTRICT` constraints on `oauth_authorization_codes.client_id`, `oauth_refresh_tokens.client_id` and `oauth_consents.client_id` are what make that reasoning checkable rather than assumed: if the windows are ever changed so they overlap, the sweep fails loudly instead of leaving an orphan, and `oauth.sweep.integration` covers the ordering.
 
 ## 5. Vaults and membership
 
@@ -492,6 +661,8 @@ Iridium uses exactly four concurrency mechanisms, and every table belongs to exa
 | `nodes` | rename, move, trash, restore | `ETag: "<version>"` on `GET /nodes/:nodeId`; weak `W/"<version>:<revision>"` on `GET /notes/:noteId`, whose body carries the `version` clients send as `If-Match` |
 | `attachments` | metadata change (`path_hint`, `original_name`), soft delete | `ETag: "<version>"` on `GET /vaults/:vaultId/attachments/:attachmentId/meta` |
 | `access_tokens` | revocation and rotation; `rate_limit_per_hour` through `PATCH /admin/tokens/:tokenId` (`06-mcp-and-agent-access.md` D06-02). `name` is fixed at creation — no route changes it | `version` in the `Token` body of `GET /me/tokens/:tokenId` and `GET /admin/tokens/:tokenId`; token rows carry no `ETag` |
+| `oauth_clients` | registration metadata change (a re-fetched CIMD document, an administrator's edit), `status` flipped to `disabled` | `version` in the client body of `GET /admin/oauth-clients/:clientId`, and the `If-Match` validator for `PATCH`/`DELETE /admin/oauth-clients/:clientId` |
+| `oauth_consents` | a widened or narrowed scope set, a changed vault selection, revocation | `version` in the grant body of `GET /me/oauth-consents`; consent rows carry no `ETag` |
 | `server_settings` | any policy change to that group's row (§13.1) | `GET /admin/settings` publishes the grouped document with `ETag: "<version>"` = the maximum of the underlying row versions, and `PUT /admin/settings` applies per-row CAS (09 D09-10). There is no per-key route |
 
 Deliberately **without** a `version` column:
@@ -501,7 +672,8 @@ Deliberately **without** a `version` column:
 | `notes`, `note_docs`, `note_updates`, `note_revisions` | content is a CRDT; `head_seq` is the only ordering authority and the log/revision tables are append-only (`A13`: the note body is exempt from `If-Match`) |
 | `note_projections`, `note_search`, `note_links` | rebuildable; concurrency is the `revision` monotonic guard, and a rebuild must never be blocked by a stale version |
 | `trash_entries` | immutable between trash and restore/purge; the lifecycle is carried by `nodes.version` |
-| `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle` | single-writer credential rows mutated only by the authentication service under its own predicates (`consumed_at IS NULL`, `revoked_at IS NULL`) |
+| `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle`, `oauth_authorization_codes`, `oauth_refresh_tokens` | single-writer credential rows mutated only by the authentication or authorization service under its own predicates (`consumed_at IS NULL`, `revoked_at IS NULL`, `rotated_at IS NULL`); the code exchange additionally locks its row `FOR UPDATE`, which is a stronger guarantee than a version column would give and is what makes single use provable |
+| `oauth_consent_vaults` | a pure join table with no mutable column: the consent's selection is replaced wholesale inside the transaction that bumps `oauth_consents.version` |
 | `audit_events`, `audit_events_archive`, `access_log` | append-only; `UPDATE` is refused by grant and, for `audit_events`, by trigger |
 | `jobs`, `import_jobs`, `export_jobs` | claimed with `UPDATE jobs SET status='running', locked_by=?, locked_at=? WHERE id=? AND status='queued'` — the status predicate *is* the CAS (§11.2) |
 | `schema_meta`, `desktop_releases` | `schema_meta` is operator/migration state written under the migration lock; a release row's published fields are immutable (`(version, channel)` is the primary key), and the single mutation it admits — withdrawal — carries its own CAS predicate (`UPDATE desktop_releases SET withdrawn_at = ?, withdrawn_by = ? WHERE version = ? AND channel = ? AND withdrawn_at IS NULL`, §13.3) |
@@ -889,12 +1061,12 @@ All three tables are written by one function, `projection/write.ts`, in one tran
 
 ```sql
 BEGIN;
--- 1. the text projection, guarded
+-- 1. the text projection, guarded (row-alias form: `VALUES(col)` is deprecated and is banned by the dialect rule)
 INSERT INTO note_projections (note_id, revision, markdown, …)
-VALUES (…)
+VALUES (…) AS new
 ON DUPLICATE KEY UPDATE
-  revision = IF(VALUES(revision) >= revision, VALUES(revision), revision),
-  markdown = IF(VALUES(revision) >= revision, VALUES(markdown), markdown), …;
+  revision = IF(new.revision >= note_projections.revision, new.revision, note_projections.revision),
+  markdown = IF(new.revision >= note_projections.revision, new.markdown, note_projections.markdown), …;
 -- 2. replace the narrow search row (same guard)
 -- 3. DELETE FROM note_links WHERE from_note_id = ? ; then INSERT the new ordinals
 -- 4. UPDATE note_docs SET projected_seq = :revision WHERE note_id = ? AND projected_seq < :revision;
@@ -903,12 +1075,15 @@ COMMIT;
 
 | Rule | Reason |
 |---|---|
+| The upsert uses `… VALUES (…) AS new ON DUPLICATE KEY UPDATE col = IF(new.col …, note_projections.col)`, never `VALUES(col)` | `VALUES(col)` is a deprecated function on both supported lines; the row alias is the supported spelling from MySQL 8.0.19 onward. `db.dialect-floor.guard` bans the token and `projection.monotonic.integration` proves the guard's behaviour is unchanged on both images |
 | The guard is `revision < :new` for a live compaction and `revision <= :new` for an idempotent re-run (`reindex`, a retried job) | A live projection must never move backwards; a rebuild at the same revision must be allowed to rewrite the row after a pipeline change |
 | `note_search` and `note_links` are replaced in the **same transaction** as `note_projections` | A search hit whose text does not match the returned Markdown, or a backlink that points at a revision that was never published, is observable inconsistency |
 | `note_docs.projected_seq` is written **last** | A crash between statements leaves `projected_seq` behind the projection, which `iridium doctor --stale-projections` and `reindex --stale` repair idempotently. The reverse would make a stale projection look fresh |
 | `note_links` rows are deleted and re-inserted rather than diffed | The `ordinal` is positional; a diff would have to renumber anyway, and the row count per note is small (a note with 10 000 links is a `too_complex` projection) |
 | A failed `A22` content scan writes **only** `status = 'invalid_content'` and `projected_at` on the existing `note_projections` row, touches neither `note_search` nor `note_links`, and skips statement 4 | No projection is ever produced from invalid content (§8.6.1), so the last valid `revision`/`markdown` keeps serving reads and `projected_seq` stays behind `head_seq` — which is what marks the note stale for `doctor` and for the "index updating" hint |
 | The pipeline itself runs in a worker (piscina, 10 s timeout), never inside the transaction | A pathological document must not hold a transaction open; a timeout produces `status='timeout'` with the raw `markdown` still stored |
+
+The idempotent checkpoint insert of §8.7 and §2 (`INSERT … ON DUPLICATE KEY UPDATE id = id`) uses no `VALUES()` and is **unchanged**; the column-scoped `UPDATE (id)` grant continues to cover it, because the row alias changes only how the *new* row's values are named.
 
 `status` values and what each means for readers:
 
@@ -953,7 +1128,7 @@ The two multi-valued indexes exist from day one even though `tag:` search is res
 | `title` duplicated here | Ranking weights title matches, and `MATCH()` requires the exact column list of the index, so title must live in the same index as the body |
 | Index name `ft_note_search` over `(title, body_text)` | One name for one object; `A39` refers to the same index as the title+body FULLTEXT index (decision D03-11) |
 
-FULLTEXT facts this design depends on, all verified against MySQL 9.7 and reproduced in `search.*` tests:
+FULLTEXT facts this design depends on, all verified against **both** required server lines — MySQL 8.4.11 and MySQL 9.7.2 — and reproduced in `search.*` tests, which run on both entries of the `ci.yml › integration` matrix (§1.1). A fact established on one line only would not be established for the floor, and the floor is what the migrations are written to:
 
 - `MATCH()`'s column list must exactly equal the index definition, and `AGAINST()` takes a constant — the boolean-mode expression is therefore built server-side by `@iridium/markdown/search/parseQuery.ts` and bound as one parameter.
 - DML on FULLTEXT-indexed columns is applied at COMMIT, so a search only ever sees committed projections. This is the mechanism behind the "index updating" hint for notes whose `projected_seq < head_seq` (`A38`).
@@ -961,7 +1136,7 @@ FULLTEXT facts this design depends on, all verified against MySQL 9.7 and reprod
 - FULLTEXT indexes are not supported on partitioned tables, which is one reason `note_search` is not partitioned and `access_log` carries no text index.
 - `OPTIMIZE TABLE note_search` with `innodb_optimize_fulltext_only = ON` compacts the FTS auxiliary tables; it is an operator command in the maintenance runbook, not a job.
 - One-character tokens cannot be indexed by the default parser; the query builder answers them with a `title LIKE ?` union, which is why `title` is a plain `VARCHAR(255)` column and not only index content.
-- CJK support (a second `WITH PARSER ngram` index and query routing) is `G5`; the table needs no change to gain it, but the **parser choice is not free later**. `ngram_token_size` is read at index-build time exactly like `innodb_ft_min_token_size`, and both the `my.cnf` bake and migration `0020` are M0 deliverables (`12-milestones.md` §4.2), so the MVP default (default parser, `innodb_ft_min_token_size = 2`) is frozen at M0 whether or not anyone has answered `G5`. Answering it "yes" after that costs an expand migration adding a second `FULLTEXT … WITH PARSER ngram` index, an `infra/docker/mysql/my.cnf` change with a server restart, and a full `iridium reindex` over existing rows under the expand-only rule of `A7` — which is why the parser and `ngram_token_size` values are an M0-entry question even though the second index and the query routing land in M2.
+- CJK support (a second `WITH PARSER ngram` index and query routing) is **out of the MVP by decision**: `G5` was answered *no* on 2026-09-12 (`14-risks-and-open-questions.md` §G), so the shipped configuration is the default InnoDB parser with `innodb_ft_min_token_size = 2`, one FULLTEXT index (`ft_note_search`), no `ngram_token_size` line in `infra/docker/mysql/my.cnf` and one code path in the query builder. The table needs no change to gain CJK later, but the **parser choice is not free later**, and the answer makes that warning more load-bearing rather than less: `ngram_token_size` is read at index-build time exactly like `innodb_ft_min_token_size`, and both the `my.cnf` bake and migration `0020` are M0 deliverables (`12-milestones.md` §4.2), so the decided default is frozen at M0 and every vault indexed after it carries that parser. Reversing the decision later costs an expand migration adding a second `FULLTEXT … WITH PARSER ngram` index, an `infra/docker/mysql/my.cnf` change with a server restart on both supported lines, and a full `iridium reindex` over existing rows under the expand-only rule of `A7` — an operator procedure in `docs/ops/upgrade.md`, never an online migration. The `SearchIndex {index, remove, query, rebuild}` seam is the other exit, and it stays.
 
 `title` maintenance is the one place a structural change touches a projection: when a note is renamed and its `note_projections.heading_title IS NULL`, the rename transaction also runs `UPDATE note_search SET title = ?, updated_at = ? WHERE note_id = ?` (§6.4 step 6). This does not move `revision`, because the body did not change. `projection.title-after-rename` is the regression test.
 
@@ -1020,7 +1195,7 @@ CREATE TABLE attachments (
   original_name  VARCHAR(255) NOT NULL,
   path_hint      VARCHAR(760) COLLATE utf8mb4_0900_as_ci NULL,  -- vault-relative path used in Markdown (e.g. 'attachments/diagram.png'); width bounded by the index key limit, see §10.1
   storage_key    VARCHAR(512) NOT NULL,                        -- '<vault_id>/<aa>/<sha256hex>' for fs and s3
-  encryption     ENUM('none','aes256gcm') NOT NULL DEFAULT 'none',   -- reserved (G4)
+  encryption     ENUM('none','aes256gcm') NOT NULL DEFAULT 'none',   -- reserved seam; always 'none' in the product (§10.2)
   key_version    TINYINT UNSIGNED NULL,
   iv             VARBINARY(12) NULL,
   auth_tag       VARBINARY(16) NULL,
@@ -1057,7 +1232,7 @@ The pair means one set of bytes can be reachable under only one live path. When 
 
 Because the key is content-derived, stored objects are immutable: a backup taken after the database dump is always a superset of what the dump references, which is what makes the documented backup order (dump first, then attachment snapshot) consistent without locking (`A47`).
 
-`encryption`, `key_version`, `iv` and `auth_tag` are reserved for the envelope-encryption option in `G4`. They stay in the schema from migration `0022` so that enabling application-level encryption later is a `StorageDriver` wrapper plus a backfill job, not a table rewrite. With the default (`none`) they are `NULL`; `iridium doctor` asserts that `encryption = 'none'` implies all three are `NULL` and that `encryption = 'aes256gcm'` implies all three are set (invariant I-16).
+`encryption`, `key_version`, `iv` and `auth_tag` are a **reserved seam, not a feature**. `G4` was answered on 2026-09-12 (`14-risks-and-open-questions.md` §G): attachment bytes are protected by volume encryption or MySQL transparent data encryption — both configured outside Iridium and documented in `11-operations-and-deployment.md` — and application-level envelope encryption is not built. No code path in the MVP writes any value but `'none'`, no route or setting selects `'aes256gcm'`, and `schema_meta['attachment_key_version']` (§13.2) is seeded but unused. The four columns stay in the schema from migration `0022` so that adding envelope encryption later is a `StorageDriver` wrapper plus a backfill job rather than a table rewrite on a populated store. With the default (`none`) the other three are `NULL`; `iridium doctor` asserts that `encryption = 'none'` implies all three are `NULL` and that `encryption = 'aes256gcm'` implies all three are set (invariant I-16), which is what keeps a half-built future feature from committing an unreadable row.
 
 ### 10.3 Column semantics
 
@@ -1163,7 +1338,7 @@ Every job — user-requested or scheduled, in-process or triggered by `iridium j
 | `access_log_partitions` | schedule / CLI | `{leadMonths, retentionDays}` | — | runs under the migrator role (§12.5) |
 | `audit_archive` | CLI | `{beforeDate}` | — | copies rows into `audit_events_archive` and deletes the originals under the migrator role (§12.4) |
 | `transfer_cleanup` | schedule | `{}` | — | expired import staging, expired export artifacts, job-row retention (§11.5) |
-| `session_ticket_sweep` | schedule | `{}` | — | deletes `sessions` and `password_setup_tokens` rows past their retention (§1.4) |
+| `session_ticket_sweep` | schedule | `{}` | — | deletes `sessions`, `password_setup_tokens`, `oauth_authorization_codes`, `oauth_refresh_tokens` and never-used dynamically registered `oauth_clients` rows past their retention (§1.4, §4A) |
 | `last_used_flush` | schedule | `{}` | — | writes the in-memory `access_tokens.last_used_*` map, at most every 10 minutes per token |
 | `attachment_unreferenced_report` | admin | `{vaultId}` | the vault | writes the report into `result` (§10.5) |
 
@@ -1251,7 +1426,7 @@ Two separate logs with deliberately different properties:
 
 | | `audit_events` | `access_log` |
 |---|---|---|
-| Records | administrative and structural actions, authentication events, every mutation of metadata or membership | every token-authenticated read (MCP, PAT-authenticated REST, export) |
+| Records | administrative and structural actions, authentication events, every mutation of metadata or membership | every token-authenticated read (MCP, token-authenticated REST, export) and the four OAuth grant steps (§12.6) |
 | Volume | low (bounded by human and admin activity) | high (bounded by agent activity) |
 | Integrity | HMAC-chained per `chain_id`, `UPDATE`/`DELETE` refused by grant and trigger | append-only by grant; rows leave only by partition drop |
 | Retention | `AUDIT_RETENTION_DAYS` (400) with export-then-archive | `ACCESS_LOG_RETENTION_DAYS` (90) by dropping monthly partitions |
@@ -1270,7 +1445,7 @@ CREATE TABLE audit_events (                                   -- append-only, HM
   actor_id        BINARY(16)   NULL,
   actor_display   VARCHAR(160) NULL,
   on_behalf_of_user_id BINARY(16) NULL,
-  credential_type ENUM('session','pat','ticket','setpw','cli','system','none') NOT NULL,
+  credential_type ENUM('session','pat','oauth','ticket','setpw','cli','system','none') NOT NULL,
   credential_id   BINARY(16)   NULL,
   vault_id        BINARY(16)   NULL,
   target_type     VARCHAR(32)  NULL,
@@ -1353,13 +1528,13 @@ The archive table is never queried by the application; the admin audit viewer re
 ### 12.5 `access_log`
 
 ```sql
-CREATE TABLE access_log (                                     -- every token-authenticated read (MCP + REST); high volume
+CREATE TABLE access_log (                                     -- every token-authenticated read (MCP + REST) and the OAuth grant steps; high volume
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   occurred_at  DATETIME(6)  NOT NULL,
-  token_id     BINARY(16)   NOT NULL,
+  token_id     BINARY(16)   NULL,                              -- NULL only for action IN ('oauth.authorize','oauth.consent'), which happen before a token exists
   user_id      BINARY(16)   NOT NULL,
-  surface      ENUM('mcp','rest','export') NOT NULL,
-  action       VARCHAR(64)  NOT NULL,                          -- mcp.get_note | mcp.resources.read | rest.notes.markdown | …
+  surface      ENUM('mcp','rest','export','oauth') NOT NULL,
+  action       VARCHAR(64)  NOT NULL,                          -- mcp.get_note | mcp.resources.read | rest.notes.markdown | oauth.token.issue | …
   vault_id     BINARY(16)   NULL,
   note_ids     JSON         NULL,                              -- JSON array of every note id returned by a list/search/read, de-duplicated
   note_ids_truncated TINYINT(1) NOT NULL DEFAULT 0,            -- 1 = the call returned more than LIMITS.ACCESS_LOG_MAX_NOTE_IDS ids
@@ -1369,6 +1544,7 @@ CREATE TABLE access_log (                                     -- every token-aut
   bytes_out    INT UNSIGNED NULL,
   client_name  VARCHAR(64)  NULL,                              -- MCP clientInfo.name or User-Agent (untrusted)
   client_version VARCHAR(32) NULL,
+  oauth_client_id BINARY(16) NULL,                             -- oauth_clients.id for an OAuth-authenticated call; the verified identity
   ip           VARBINARY(16) NULL,
   request_id   BINARY(16)   NULL,
   PRIMARY KEY (id, occurred_at),
@@ -1387,12 +1563,14 @@ PARTITION BY RANGE COLUMNS (occurred_at) (
 |---|---|
 | `PRIMARY KEY (id, occurred_at)` | InnoDB requires every unique key of a partitioned table to contain every partitioning column. `id` stays first so it is still the `AUTO_INCREMENT` column and still gives a total insertion order |
 | No foreign keys | Partitioned InnoDB tables do not support them, and the log must outlive everything it references anyway (§1.4) |
+| `token_id` nullable, `surface` includes `oauth` | The OAuth grant steps of §4A are per-call traffic with a client, a latency and a status, and they belong in the same log as the calls they lead to — an operator reading one connector's story wants authorize → consent → token issue → reads → refresh in one indexed place. Two of the four have no token yet, so `token_id` is `NULL` exactly for `oauth.authorize` and `oauth.consent` and non-`NULL` for everything else, including `oauth.token.issue` and `oauth.token.refresh`, which log the token they just minted. `user_id` is always present: both pre-token actions run behind a live session and are not logged at all if there is no user to attribute them to. The `NULL`s cost nothing in `ix_access_token_time (token_id, occurred_at)`, which is only ever probed with a concrete token id |
 | `p_overflow` | A `MAXVALUE` catch-all so an insert can never fail with "table has no partition for value" if maintenance has not run. It is normally empty |
 | Partition maintenance | The `access_log_partitions` job keeps `ACCESS_LOG_PARTITION_LEAD_MONTHS` (3) months of future partitions by `ALTER TABLE access_log REORGANIZE PARTITION p_overflow INTO (PARTITION pYYYY_MM VALUES LESS THAN (…), PARTITION p_overflow VALUES LESS THAN (MAXVALUE))` — cheap because `p_overflow` is empty — and drops partitions entirely older than `ACCESS_LOG_RETENTION_DAYS` (90) with `ALTER TABLE access_log DROP PARTITION pYYYY_MM`. A partition drop reclaims space instantly and writes no row-level undo, which is exactly why the table is partitioned |
 | Who runs it | Both statements are DDL, and `iridium_app` deliberately holds no DDL privilege (§2). The job runs them on `dbMaint` (the migrator role, §1.3), which exists only when `DATABASE_MIGRATE_URL` is configured. When it is not, the job records `skipped_no_ddl_credential`, emits `iridium_jobs_total{type="access_log_partitions",status="skipped"}`, and the `access_log_partitions` readiness check of `/readyz` reports `warn` once the newest partition boundary is less than 30 days ahead (never `fail` — the `p_overflow` catch-all keeps inserts working); the operator then runs `iridium jobs run access_log_partitions` or applies the rendered `docs/ops/access-log-partitions.sql` (decision D03-03) |
 | Writes | `AccessLogWriter` batches rows in memory on the `onResponse` hook and inserts them with a multi-row `INSERT` every 500 ms or every 500 rows, outside the read's own transaction, so an agent's read latency does not include a log commit. The queue is bounded at 10 000 rows and drops oldest on overflow; a batch that fails is retried once and then dropped. Either drop increments `iridium_access_log_dropped_total` with a throttled `WARN`, and the queue is flushed during the shutdown drain. Silently blocking reads on an operational log would be worse, and the security-relevant subset (denials) is additionally in the tamper-evident audit chain, which is never dropped. These are the same parameters as `06-mcp-and-agent-access.md` D06-11 |
 | `note_ids` | Every note id a list, search, read or export returned — de-duplicated, and the column that answers "what did this agent actually see", which is the question the brief's MCP-first posture makes unavoidable. Capped at `LIMITS.ACCESS_LOG_MAX_NOTE_IDS` (2 000) ids per row: a call that would exceed it stores the first 2 000 and sets `note_ids_truncated = 1`. The marker is its own `TINYINT(1)` column rather than a wrapper object so `note_ids` stays a plain JSON array and the operator query `WHERE :noteId MEMBER OF (note_ids)` keeps working. The cap is reachable only through `list_attachments`, whose 200 attachments × 50 `referenced_by` ids can exceed it; every other tool is bounded by its own `limit` cap (`06-mcp-and-agent-access.md`) |
 | `client_name`, `client_version` | Copied from MCP `clientInfo` or the `User-Agent`; untrusted, informational, never used for authorization |
+| `oauth_client_id` | The **verified** client identity — the first column in this plan that has one. It is set only for a call authenticated by an OAuth access token, and its value is `access_tokens.client_id`, which the authorization server wrote when it minted the token; nothing a caller sends can influence it. `client_name`/`client_version` stay the untrusted self-report, and the admin activity view labels the two differently ("Claude · verified connector" versus "self-reported"), because presenting a self-declared name beside a verified one with no distinction is how a log stops being evidence. The column carries **no** foreign key for the same reason the rest of the table does not (partitioned table, and the row must outlive the client), and it arrives by migration `0048` as `ALTER TABLE access_log ADD COLUMN oauth_client_id BINARY(16) NULL, ALGORITHM=INSTANT, LOCK=NONE` — an `ADD COLUMN` at the end of the row is `INSTANT` on both 8.4.11 and 9.7.2, so a populated partitioned log is not rewritten |
 | `request_id` | Correlates with `audit_events.context.request_id` and the structured logs |
 
 Reads: the per-token activity view uses `ix_access_token_time`, the per-vault agent-activity view uses `ix_access_vault_time`, and both always bound `occurred_at` so the optimiser prunes partitions.
@@ -1405,6 +1583,7 @@ Reads: the per-token activity view uses `ix_access_token_time`, the per-vault ag
 |---|---|
 | Authentication | `user.login.succeeded`, `user.login.failed`, `user.logout`, `user.reauth.succeeded`, `user.password.set`, `user.password.changed`, `session.revoked`, `session.revoked_all` |
 | Tokens | `token.created`, `token.rotated`, `token.revoked`, `token.revoked_all`, `token.denied` |
+| OAuth | `oauth.client.registered`, `oauth.client.disabled`, `oauth.client.deleted`, `oauth.client.expired`, `oauth.consent.granted`, `oauth.consent.updated`, `oauth.consent.revoked`, `oauth.refresh.reuse_detected`, `oauth.code.replayed`, `oauth.authorize.denied` |
 | Vaults | `vault.created`, `vault.updated`, `vault.archived`, `vault.restored`, `vault.settings.changed`, `vault.member.added`, `vault.member.role_changed`, `vault.member.removed` |
 | Structure | `node.created`, `node.renamed`, `node.moved`, `node.trashed`, `node.restored`, `node.purged` |
 | Content | `note.revision.named`, `note.revision.restored`, `note.content.invalid`, `note.content.repaired` |
@@ -1414,7 +1593,9 @@ Reads: the per-token activity view uses `ix_access_token_time`, the per-vault ag
 | Agents and collaboration | `mcp.access.denied`, `collab.connection.rejected`, `collab.write.rejected` |
 | System | `system.migration.applied`, `system.key.rotated`, `system.audit.archived` (written on the `server` chain by `iridium audit archive` / the `audit_archive` job with `{chain_id, from_id, to_id, rows, export_path, export_sha256}`, so the live chain itself explains where its earlier rows went — `11-operations-and-deployment.md` OPS-32; decision D03-22) |
 
-Chain assignment: every action carrying a `vault_id` goes to `vault:<hex>`; everything else goes to `server`. A vault manager may read their vault's chain, including the administrative actions that touched it (`A46`), which is why membership and settings events are vault-scoped rather than server-scoped.
+Chain assignment: every action carrying a `vault_id` goes to `vault:<hex>`; everything else goes to `server`. A vault manager may read their vault's chain, including the administrative actions that touched it (`A46`), which is why membership and settings events are vault-scoped rather than server-scoped. Every `oauth.*` action is server-scoped: a grant is made against an account and a client, not inside a vault, even when the vault selection it records names several.
+
+`access_log.action` has its own, separate vocabulary — the same closed-list discipline, a different list, because the two tables record different things (§12). Its values are `<surface>.<operation>`: `mcp.<tool or method>` for MCP calls, `rest.<resource>.<operation>` for token-authenticated REST reads, `export.<operation>` for export streaming, and four values for the authorization server itself — `oauth.authorize`, `oauth.consent`, `oauth.token.issue` and `oauth.token.refresh`. The OAuth four are logged here rather than only in `audit_events` because they are per-call operational traffic with a latency, a status and a client, which is exactly what this table is shaped for; the decisions those calls represent (a consent granted, a client registered, a code replayed) are separately and permanently in the audit chain above.
 
 ## 13. Settings, metadata, desktop releases, migration bookkeeping
 
@@ -1438,7 +1619,7 @@ CREATE TABLE desktop_releases (
   published_at  DATETIME(6) NOT NULL,
   published_by  BINARY(16)  NULL,
   notes         TEXT        NULL,
-  files         JSON        NOT NULL,                          -- [{platform, arch, name, sha512, size, blockmap}]
+  files         JSON        NOT NULL,                          -- [{platform, arch, name, sha256, sha512, size, blockmap}]
   withdrawn_at  DATETIME(6) NULL,                              -- unpublished: dropped from latest*.yml, row and artefacts kept
   withdrawn_by  BINARY(16)  NULL,
   PRIMARY KEY (version, channel)
@@ -1457,10 +1638,11 @@ This table is the single definition of the settings vocabulary: `ServerSettings`
 |---|---|---|
 | `session_policy` | `{webIdleHours, webAbsoluteDays, desktopIdleDays, desktopAbsoluteDays, stepUpMinutes}` | session issue/verify, step-up, desktop login (`A26`) |
 | `pat_policy` | `{defaultLifetimeDays, maxLifetimeDays, allowNoExpiry: false, rotationOverlapMaxHours, defaultRateLimitPerHour, allowAllVaultsForNonAdmins: boolean}` | token creation and rotation (`A31`) |
+| `oauth_policy` | `{accessTokenTtlMinutes, refreshIdleDays, refreshAbsoluteDays, defaultRateLimitPerHour, allowDynamicClientRegistration: boolean, allowClientIdMetadataDocuments: boolean, allowConsentWithoutStepUp: boolean}` | the OAuth 2.1 authorization server (`06-mcp-and-agent-access.md`) |
 | `password_policy` | `{minLength, maxLength, checkBreachedList: boolean, setupLinkHours}` | credential service (`A29`), set-password links (`A28`) |
 | `retention` | `{auditDays, accessLogDays, accessLogPartitionLeadMonths, updateLogDays, jobDays, sessionRowDays, defaultTrashDays, exportHours, revisionThinning:{keepAllHours, hourlyDays}}` | the maintenance jobs (§8.7, §11.5, §12.4, §12.5) |
 | `mcp_enabled` | `{enabled: boolean}` | the global MCP kill switch (`A33`); per-vault switch is `vaults.mcp_enabled` |
-| `desktop_update_policy` | `{mode:'disabled'\|'prompt'\|'silent', channel:'stable'\|'beta', minVersion?, requireSecureStorage: boolean}` | `GET /desktop/update-policy` (`A53`); `requireSecureStorage` is the desktop-login refusal when `safeStorage.isEncryptionAvailable()` is false (`A26`) |
+| `desktop_update_policy` | `{mode:'disabled'\|'prompt'\|'silent', channel:'stable'\|'beta', minVersion?, requireSecureStorage: boolean}` | `GET /desktop/update-policy` (`A53`); `requireSecureStorage` is the desktop-login refusal when `safeStorage.isEncryptionAvailable()` is false (`A26`). At 1.0 `mode: 'silent'` cannot be honoured — there is no in-application updater to download anything silently — so the desktop shell presents `silent` exactly as `prompt` and says so on the card (`07-client-applications.md` D07-44). `mode: 'disabled'` is the correct setting for a fleet whose software is pushed centrally, because the card would otherwise tell a user to do something the site's policy forbids |
 | `smtp` | reserved, post-MVP: `{host, port, secure, from, username, secretRef}` — never the password itself | out-of-band credential delivery (`A28`) |
 
 **Flat names in the skeleton map to these fields.** The skeleton and the sections that quote it name individual settings in flat form; every one of them is a field of a group above, and only the grouped name exists in the schema, in `@iridium/contracts/settings.ts` and on the wire:
@@ -1478,6 +1660,8 @@ Two field names in particular must not drift, because both have been written bot
 
 Resolution against the environment: `resolvePolicy(key)` merges the `EnvSchema` baseline with the stored row field by field, taking whichever value is **stricter**, with the direction declared per field in the schema (`stricter:'min'` for TTLs, lifetimes and rate limits; `stricter:'max'` for `minLength`; booleans by logical AND for permissive flags). An administrator can therefore tighten policy from the console but never loosen what the operator pinned in the deployment, and the console shows both values with the effective one highlighted. A missing row means "use the environment baseline", so a fresh install needs no seeding.
 
+`oauth_policy` follows that rule without extending it. `accessTokenTtlMinutes`, `refreshIdleDays`, `refreshAbsoluteDays` and `defaultRateLimitPerHour` merge with `stricter:'min'`. All three booleans are **permissive** flags and merge by logical AND, which is why `allowConsentWithoutStepUp` is spelled as a permission to skip step-up rather than as a requirement to perform it: with the existing AND rule, an operator who pins `false` in the deployment cannot have it turned back on from the console, and no new merge mode has to exist. There is deliberately no `allowAllVaultsForNonAdmins` member — the OAuth consent screen reuses `pat_policy.allowAllVaultsForNonAdmins`, because one policy about who may scope a credential to every vault is better than two that can disagree.
+
 ### 13.2 `schema_meta`
 
 Single-valued install state, deliberately a narrow key/value table rather than a one-row table, so a migration can add a key without an `ALTER`. Values are strings; the accessor in `db/meta.ts` parses and brands them.
@@ -1490,7 +1674,7 @@ Single-valued install state, deliberately a narrow key/value table rather than a
 | `pepper_version` | `iridium keys rotate pepper` | credential verification and transparent re-hash (`A29`) |
 | `audit_key_version` | `iridium keys rotate audit` | `AuditWriter` (new rows), `verify-chain` (per-row `key_version`) |
 | `cursor_key_version` | `iridium keys rotate cursor` | MCP/REST cursor signing (`A35`) |
-| `attachment_key_version` | `iridium keys rotate attachment` | reserved for `G4` envelope encryption |
+| `attachment_key_version` | `iridium keys rotate attachment` | nothing in the product: seeded and kept so the reserved envelope-encryption seam of §10.2 needs no migration, but `G4` was answered "volume and database encryption only" on 2026-09-12, so no reader exists |
 | `pipeline_version` | release migration | `reindex --pipeline-version`, the stale-projection check |
 | `last_backup_verified_at` | `restore --verify`, the nightly drill | `/readyz` warning, `iridium_backup_last_verified_timestamp`, the admin system page |
 
@@ -1498,11 +1682,11 @@ It also carries the boot probe target for the `FOUND_ROWS` assertion (§1.3), wh
 
 ### 13.3 `desktop_releases`
 
-The update feed the generic `electron-updater` provider reads is generated from this table by `iridium desktop-updates publish <dir>`, which validates and copies the artefacts into the updates volume and inserts the row.
+The release feed served at `/desktop/updates/<channel>/` is generated from this table by `iridium desktop-updates publish <dir>` (or the equivalent `POST /admin/releases`), which validates and copies the artefacts into the updates volume and inserts the row. At 1.0 the artefacts are unsigned bundles and the feed's consumer is a person following a download link; the generated `latest*.yml` files are written all the same, unread, so the post-1.0 in-application updater is a client change only.
 
-`files` is `[{platform:'win32'|'darwin'|'linux', arch:'x64'|'arm64', name, sha512, size, blockmap?}]` — the fields `electron-updater` needs for delta downloads and signature verification, using the same platform vocabulary as `process.platform` and as `09-api-reference.md` (`win32|darwin|linux`, never `win|mac`), so an artefact list round-trips through the column and the API unchanged.
+`files` is `[{platform:'win32'|'darwin'|'linux', arch:'x64'|'arm64', name, sha256, sha512, size, blockmap?}]`, using the same platform vocabulary as `process.platform` and as `09-api-reference.md` (`win32|darwin|linux`, never `win|mac`), so an artefact list round-trips through the column and the API unchanged. Two digests are stored deliberately and neither is redundant. `sha512` is base64 and exists because `electron-updater` requires it in `latest*.yml` for the delta path the post-1.0 epic switches on; nothing reads it at 1.0. `sha256` is 64 lowercase hexadecimal characters and is the value a human verifies by hand — it is what `GET /desktop/updates/<channel>/SHA256SUMS` and `GET /api/v1/desktop/update-policy`'s `latest.artifacts[].sha256` publish, and at 1.0 it is the only integrity anchor the product offers, because the artefacts are unsigned (`11-operations-and-deployment.md` OPS-60, `09-api-reference.md` D09-28). Both are computed and verified by the server while the artefact is streamed to `DESKTOP_UPDATES_DIR/<channel>/`; a mismatch on either writes nothing.
 
-A published row's own fields are immutable: `(version, channel)` is the primary key and a republish of the same version is refused. The one lifecycle change a release admits is **withdrawal**, which is a soft flag rather than a delete, because `desktop_releases` is part of the release record and because a client mid-download must not get a hard failure: `DELETE /admin/releases/:channel/:version` runs `UPDATE desktop_releases SET withdrawn_at = ?, withdrawn_by = ? WHERE version = ? AND channel = ? AND withdrawn_at IS NULL`, regenerates `latest.yml` / `latest-mac.yml` / `latest-linux.yml` without that version, and keeps both the row and the artefacts. `GET /admin/releases` returns withdrawn rows with the flag set; the generated feed and `GET /desktop/update-policy` ignore them. A withdrawn release is therefore invisible to updaters while staying visible to auditors, and the emergency lever is unchanged: raise `schema_meta['min_client_version']`. Publishing writes `admin.release.published` with the file digests and withdrawal writes `admin.release.withdrawn` with `{version, channel}`, so the feed's contents are auditable in both directions (decision D03-17).
+A published row's own fields are immutable: `(version, channel)` is the primary key and a republish of the same version is refused. The one lifecycle change a release admits is **withdrawal**, which is a soft flag rather than a delete, because `desktop_releases` is part of the release record and because a client mid-download must not get a hard failure: `DELETE /admin/releases/:channel/:version` runs `UPDATE desktop_releases SET withdrawn_at = ?, withdrawn_by = ? WHERE version = ? AND channel = ? AND withdrawn_at IS NULL`, regenerates `latest.yml` / `latest-mac.yml` / `latest-linux.yml` without that version and regenerates `SHA256SUMS` without that version's artefacts, and keeps both the row and the artefacts. `GET /admin/releases` returns withdrawn rows with the flag set; the generated feed and `GET /desktop/update-policy` ignore them. A withdrawn release is therefore invisible to updaters while staying visible to auditors, and the emergency lever is unchanged: raise `schema_meta['min_client_version']`. Publishing writes `admin.release.published` with the file digests and withdrawal writes `admin.release.withdrawn` with `{version, channel}`, so the feed's contents are auditable in both directions (decision D03-17).
 
 ### 13.4 Migration bookkeeping
 
@@ -1533,7 +1717,7 @@ A published row's own fields are immutable: `(version, channel)` is the primary 
 | 0015 | `note_updates` | `note_updates` | FK → `notes` |
 | 0016 | `note_revisions` | `note_revisions` | FK → `notes` |
 | 0017 | `note_projections` | `note_projections` without the multi-valued indexes | a table create and a functional index have different rollback stories |
-| 0018 | `note_projections_fm_indexes` | `ix_proj_fm_tags`, `ix_proj_fm_aliases` (multi-valued, `CAST(… ARRAY)`, raw `sql`) | MySQL 8.0.17+ feature, verified separately on both lanes |
+| 0018 | `note_projections_fm_indexes` | `ix_proj_fm_tags`, `ix_proj_fm_aliases` (multi-valued, `CAST(… ARRAY)`, raw `sql`) | multi-valued index support is 8.0.17+, so it is inside the 8.4.11 floor; verified separately on both required images by `migrations.parity.integration` |
 | 0019 | `note_search` | `note_search` | must be empty when the FULLTEXT index is added |
 | 0020 | `note_search_fulltext` | `CREATE FULLTEXT INDEX ft_note_search ON note_search (title, body_text)` (raw `sql`) | freezes `innodb_ft_min_token_size` and the stopword setting at build time (§9.4); runs on an empty table so no `FTS_DOC_ID` predefinition and no rebuild cost |
 | 0021 | `note_links` | `note_links` | FK → `notes` |
@@ -1553,13 +1737,33 @@ A published row's own fields are immutable: `(version, channel)` is the primary 
 
 Every later table gets its own `NNNN_<table>` migration plus a companion `NNNN_<table>_grants`, and `db-grants.integration.test.ts` fails if a table exists in `information_schema.TABLES` without a matching grant (§2), so the pair cannot be forgotten.
 
+Added by the OAuth 2.1 authorization server (§4A), in this order, one DDL statement per file and each new table followed by its `_grants` companion:
+
+| # | Name | Creates |
+|---|---|---|
+| 0035 | `oauth_clients` | `oauth_clients` |
+| 0036 | `oauth_clients_grants` | the `iridium_app` grants for it |
+| 0037 | `oauth_consents` | `oauth_consents` incl. the `live_consent_key` virtual generated column; FK → `users`, `oauth_clients` |
+| 0038 | `oauth_consents_uq_live` | `UNIQUE uq_oauth_consents_live (live_consent_key)` — its own file for the reason `0011` is its own file |
+| 0039 | `oauth_consents_grants` | the grants |
+| 0040 | `oauth_consent_vaults` | `oauth_consent_vaults`; FK → `oauth_consents`, `vaults` |
+| 0041 | `oauth_consent_vaults_grants` | the grants |
+| 0042 | `oauth_authorization_codes` | `oauth_authorization_codes`; FK → `oauth_clients`, `users`, `oauth_consents` |
+| 0043 | `oauth_authorization_codes_grants` | the grants |
+| 0044 | `oauth_refresh_tokens` | `oauth_refresh_tokens`; FK → `oauth_clients`, `users`, `oauth_consents` |
+| 0045 | `oauth_refresh_tokens_grants` | the grants |
+| 0046 | `access_tokens_oauth_columns` | `client_id`, `consent_id`, `refresh_id`, `resource` and the two foreign keys `fk_tokens_oauth_client` and `fk_tokens_oauth_consent` on `access_tokens` (§4; `refresh_id` carries none) — an `ALTER` rather than part of `0008`, because the referenced tables do not exist until `0044` |
+| 0047 | `access_tokens_oauth_indexes` | `ix_tokens_consent`, `ix_tokens_client` |
+| 0048 | `access_log_oauth_client` | `ALTER TABLE access_log ADD COLUMN oauth_client_id BINARY(16) NULL, ALGORITHM=INSTANT, LOCK=NONE` (§12.5) — no grants companion, because `access_log`'s grants are table-level and already in place |
+
+Every one of the fourteen statements runs unchanged on MySQL 8.4.11 and 9.7.2 under the dialect rule of §1.1: the only features they use are `ENUM`, `JSON`, a `VIRTUAL` generated column with a unique key over it, and `INSTANT` `ADD COLUMN` at the end of a partitioned table. `credential_type`'s `'oauth'` value is **not** among them — `audit_events` is created by `0026` with the value already in its `ENUM` (§12.1), because the whole authorization server ships in the same release and an `ALTER` to a table created eight migrations earlier in the same set would be ceremony, not safety.
+
 Designed but **not** created in the MVP — each has a written column sketch in `docs/adr` so the MVP schema does not paint them into a corner:
 
 | Table | Purpose | Post-MVP milestone |
 |---|---|---|
 | `auth_providers`, `identities` | OIDC SSO: provider configuration and the external-subject ↔ `users.id` binding | OIDC SSO |
 | `groups`, `group_members` | group-based vault membership (`vault_members` gains a nullable `group_id`) | SCIM / SSO |
-| `oauth_clients`, `oauth_authorization_codes`, `oauth_refresh_tokens` | the OAuth 2.1 authorization server for MCP; `access_tokens.kind='oauth'` already exists | OAuth epic (`G1`) |
 | `note_proposals` | agent write access as reviewable proposals rather than direct CRDT mutation | agent write scopes |
 
 ### 14.2 File conventions
@@ -1567,7 +1771,7 @@ Designed but **not** created in the MVP — each has a written column sketch in 
 | Rule | Detail |
 |---|---|
 | One DDL statement per file | Above. `migrations.one-ddl.test.ts` parses each file and fails on a second DDL statement |
-| Idempotent guards | `CREATE TABLE IF NOT EXISTS` where available; otherwise an `information_schema` probe (`SELECT 1 FROM information_schema.STATISTICS WHERE …`) before the statement. A re-run of an interrupted migration must be a no-op, not an error |
+| Idempotent guards | `CREATE TABLE IF NOT EXISTS` where available — and `CREATE TRIGGER IF NOT EXISTS`, which is MySQL 8.0.29+ and therefore inside the 8.4.11 floor but **outside** the 8.0.13 subset earlier drafts claimed; this is one of the reasons the floor is stated as a supported release rather than as a patch level nobody runs. Otherwise an `information_schema` probe (`SELECT 1 FROM information_schema.STATISTICS WHERE …`) before the statement. A re-run of an interrupted migration must be a no-op, not an error |
 | `up` only in production | `down` is implemented where it is genuinely reversible and is used by the test harness and local development. Production is forward-only (`A7`); a mistake is fixed by a new forward migration |
 | Raw `sql` templates | FULLTEXT indexes, functional and multi-valued indexes, generated columns, triggers, partition definitions and grants. Everything else uses the Kysely schema builder so the types stay checkable |
 | Data migrations | separate files with the same numbering, written to be resumable and throttled, and never in the same file as a DDL change |
@@ -1613,6 +1817,14 @@ erDiagram
   users ||--o{ access_tokens : owns
   access_tokens ||--o{ access_token_vaults : allowlists
   vaults ||--o{ access_token_vaults : listed_in
+  users ||--o{ oauth_consents : granted
+  oauth_clients ||--o{ oauth_consents : authorized_for
+  oauth_consents ||--o{ oauth_consent_vaults : scopes
+  vaults ||--o{ oauth_consent_vaults : listed_in
+  oauth_consents ||--o{ oauth_authorization_codes : issues
+  oauth_consents ||--o{ oauth_refresh_tokens : refreshes
+  oauth_consents ||--o{ access_tokens : mints
+  oauth_refresh_tokens ||--o{ access_tokens : rotates_into
   vaults ||--o{ vault_members : has
   users ||--o{ vault_members : is
   vaults ||--o{ nodes : contains
@@ -1642,6 +1854,13 @@ Every edge, the column that implements it, and what enforces it:
 | `users` → `access_tokens` | `user_id` | `fk_tokens_user`, RESTRICT | Rows are never deleted, only revoked |
 | `access_tokens` → `access_token_vaults` | `token_id` | `fk_atv_token`, RESTRICT | Empty when `all_vaults = 1` |
 | `vaults` → `access_token_vaults` | `vault_id` | `fk_atv_vault`, RESTRICT | A vault cannot be hard-deleted while a token lists it; the aborted-import teardown deletes these rows first (§1.4) |
+| `users` → `oauth_consents` | `user_id` | `fk_oauth_consents_user`, RESTRICT | At most one **live** row per `(user, client)`, enforced by `uq_oauth_consents_live` over the `live_consent_key` generated column; revoked rows accumulate and are never deleted |
+| `oauth_clients` → `oauth_consents` | `client_id` | `fk_oauth_consents_client`, RESTRICT | A client row cannot be hard-deleted while any consent references it; `DELETE /admin/oauth-clients/:clientId` revokes rather than deletes, and the unused-client sweep only reaches clients that never completed an authorization and therefore have no consent |
+| `oauth_consents` → `oauth_consent_vaults` | `consent_id` | `fk_ocv_consent`, RESTRICT | Empty when `all_vaults = 1` (invariant I-26) |
+| `vaults` → `oauth_consent_vaults` | `vault_id` | `fk_ocv_vault`, RESTRICT | Same rule as `access_token_vaults`: the aborted-import teardown deletes these rows before the vault (§1.4) |
+| `oauth_consents` → `oauth_authorization_codes` / `oauth_refresh_tokens` | `consent_id` | `fk_oauth_codes_consent`, `fk_oauth_refresh_consent`, RESTRICT | Short-lived rows; swept by `session_ticket_sweep` well before any consent could be considered for removal, which is never |
+| `oauth_consents` / `oauth_clients` → `access_tokens` | `consent_id`, `client_id` | `fk_tokens_oauth_consent`, `fk_tokens_oauth_client`, RESTRICT | Both `NULL` for `kind='pat'`, both set for `kind='oauth'`, together with `resource` (invariant I-24). RESTRICT costs nothing here because neither referenced row is ever hard-deleted |
+| `oauth_refresh_tokens` → `access_tokens` | `refresh_id` | **no** foreign key | Provenance only, `NULL` for a PAT and for an OAuth token issued to a client whose `grant_types` exclude `refresh_token`. A constraint would pin every refresh row forever, because token rows are never deleted (§4) |
 | `vaults` → `vault_members` | `vault_id` | `fk_members_vault`, RESTRICT | Server admins have no row (admin rights are computed, not materialised) |
 | `users` → `vault_members` | `user_id` | `fk_members_user`, RESTRICT | PK is `(vault_id, user_id)` |
 | `vaults` → `nodes` | `nodes.vault_id` | `fk_nodes_vault`, RESTRICT | Immutable per row; cross-vault moves are rejected |
@@ -1673,7 +1892,7 @@ Three enforcement layers, and every invariant is assigned to exactly one primary
 
 ### 16.1 The invariant register
 
-`iridium doctor` runs checks I-01 … I-23 in order, prints one line per check with a count, and exits non-zero on any violation. `restore --verify` runs the same register plus the blocking content and attachment comparisons of `A47`, and refuses the restore on violation.
+`iridium doctor` runs checks I-01 … I-26 in order, prints one line per check with a count, and exits non-zero on any violation. `restore --verify` runs the same register plus the blocking content and attachment comparisons of `A47`, and refuses the restore on violation.
 
 | Id | Invariant | Primary layer | Verified by | Repair |
 |---|---|---|---|---|
@@ -1692,7 +1911,7 @@ Three enforcement layers, and every invariant is assigned to exactly one primary
 | **I-13** | Live sibling uniqueness: no two rows share `(parent_id, name)` with `deleted_at IS NULL`, compared under `utf8mb4_0900_as_ci` | database (`uq_sibling` over the `live` generated column) | the index itself; `doctor` re-checks after a restore because a dump load could in principle predate the index | rename one of the duplicates, reported with both ids |
 | I-14 | `trash_entries` has a row exactly when `nodes.deleted_at IS NOT NULL`, and every row's `cascade_root_id` is itself a trashed node of the same vault | database (FK) + protocol | `doctor` | `doctor --repair-trash` reconstructs missing rows with `cascade_root_id = node_id` and the derived path |
 | I-15 | Live attachment path uniqueness, and `path_hint IS NOT NULL` for every live row | database (`uq_attachment_path`) | index + `doctor` | reported; the manager renames |
-| I-16 | `attachments.encryption='none'` implies `key_version`, `iv` and `auth_tag` are all `NULL`; `'aes256gcm'` implies all three are set | database (`ENUM`) + checker | `doctor` | none; reserved path (`G4`) |
+| I-16 | `attachments.encryption='none'` implies `key_version`, `iv` and `auth_tag` are all `NULL`; `'aes256gcm'` implies all three are set | database (`ENUM`) + checker | `doctor` | none. `G4` was answered "volume and database encryption only" (2026-09-12), so every live row is `'none'` and a non-`'none'` row is a defect to report, not a state to repair; the check guards the reserved seam of §10.2 |
 | I-17 | Every live attachment's `storage_key` exists in the store with a matching SHA-256 | checker | `restore --verify` (**blocking**), `doctor --attachments` | reported per attachment; a missing object is a restore failure |
 | **I-18** | Audit chain continuity: for every `chain_id`, walking `ix_audit_chain` in ascending `id` reproduces every `hash` from `prev_hash` + the canonical payload, each row's `prev_hash` equals the previous row's `hash`, and the last row matches `audit_chain_heads` | protocol (chain-head lock) + database (triggers, grants) | `iridium audit verify-chain [--include-archive]`, `restore --verify` (**blocking**), `audit.chain.integration` (concurrent writers) | none: a break is an incident, reported with the first divergent row |
 | I-19 | Every `audit_events.action` is in the closed vocabulary and every `chain_id` matches `^(server\|vault:[0-9a-f]{32})$` | database (`VARCHAR` + zod at write) | `doctor`, `audit.vocabulary.test` | none |
@@ -1700,6 +1919,9 @@ Three enforcement layers, and every invariant is assigned to exactly one primary
 | I-21 | Token consistency: `expires_at IS NOT NULL` for every row; `admin_owned = 1` implies `all_vaults = 0`; `rotated_from_id` chains are acyclic and reference rows of the same `user_id`; a revoked row has `revoked_at` and, when the revocation had an actor, `revoked_by` | database (`NOT NULL`) + checker | `doctor`, `token.effective-permissions.prop` | reported |
 | I-22 | Session consistency: `absolute_expires_at > created_at`, `idle_expires_at <= absolute_expires_at`, and `revoked_at IS NULL` ⟺ `revoked_reason IS NULL` | checker | `doctor` | reported; the sweep removes the rows |
 | I-23 | Schema hygiene: every table in the `iridium` schema has a primary key, has an `iridium_app` grant matching the matrix of §2, and `information_schema` reports `ENGINE='InnoDB'` and a `utf8mb4` charset | database (`sql_require_primary_key`) + checker | `doctor --db-roles`, `db-grants.integration` | add the missing grants migration |
+| I-24 | Credential-kind consistency: every `access_tokens` row with `kind='oauth'` has non-`NULL` `client_id`, `consent_id` and `resource`, and every row with `kind='pat'` has all three `NULL` | checker (the columns are individually nullable because one table serves both kinds) | `doctor`, `oauth.principal-parity.prop` | reported per token; a row in this state is refused at verification anyway, so the repair is revocation, not a backfill |
+| I-25 | Refresh-chain consistency: within one `family_id`, at most one live row (`revoked_at IS NULL AND rotated_at IS NULL`) exists, every `rotated_from_id` names a row of the same family, the chain is acyclic, and no row's `expires_at` exceeds its family's `absolute_expires_at` | protocol (rotation in one transaction) + checker | `doctor`, `oauth.refresh-rotation.integration` | none automatic: two live rows in a family is the reuse signal the rotation path exists to detect, so `doctor` reports the family and the operator revokes it |
+| I-26 | `oauth_consent_vaults` is empty for every consent with `all_vaults = 1`; and `admin_owned = 1` implies `all_vaults = 0`, the same pairing I-21 asserts for a token | checker | `doctor` | delete the stray rows — `all_vaults` wins, exactly as it does for a token's `access_token_vaults` |
 
 `doctor` is designed to be safe on a live system: every check is a `SELECT`, reads are chunked by note id with `LIMIT`, and the expensive ones (I-12's re-projection, I-17's store walk) run only when explicitly requested or as part of `restore --verify`. `iridium doctor --db-roles` is the check added for I-23 (decision D03-02). `A57`'s own breadth list covers `--argon2`, `--stale-projections`, `--yjs-instances`, `--repair-heads` and `--repair-content`; the remaining flags this register cites — `--db-roles`, `--attachments`, `--oversize`, `--checkpoint-stale`, `--repair-denormalised`, `--repair-trash`, `--sizes` — and the mutating twins they prescribe are specified in `11-operations-and-deployment.md`, under OPS-17 (a mutation lives in the `iridium repair …` group, requires `--yes`, is audited, and refuses to run unless `doctor` currently reports the matching finding) and OPS-39 (the commands added beyond `A57`).
 
@@ -1804,7 +2026,7 @@ Two consequences matter for the schema rather than for operations:
 
 ## Decisions made in this section
 
-Decisions this section had to make because the skeleton does not cover them (or, where noted, because the skeleton's own text could not be implemented as written). Each is used consistently above and is offered to `13-decision-log.md` for merging. Ids follow the plan-wide `D<NN>-<n>` form with a two-digit section number, so this section owns `D03-01` … `D03-22`; a cross-reference written `D3-<n>` in another section denotes the same row.
+Decisions this section had to make because the skeleton does not cover them (or, where noted, because the skeleton's own text could not be implemented as written). Each is used consistently above and is offered to `13-decision-log.md` for merging. Ids follow the plan-wide `D<NN>-<n>` form with a two-digit section number, so this section owns `D03-01` … `D03-24`; a cross-reference written `D3-<n>` in another section denotes the same row.
 
 | Id | Decision | Rationale |
 |---|---|---|
@@ -1822,7 +2044,7 @@ Decisions this section had to make because the skeleton does not cover them (or,
 | D03-12 | `fm_tags` entries longer than 64 characters and `fm_aliases` entries longer than 255 characters are **dropped from the projection** and reported with the existing `tag_invalid` finding; the raw values stay in `frontmatter`/`frontmatter_raw` | A multi-valued index over `CAST(… AS CHAR(64) ARRAY)` rejects longer values at insert time, so the alternative is a failed projection for a note with one long tag. The source text is never modified, which keeps `F1` true |
 | D03-13 | `note_projections.heading_title` and `note_search.title` hold the first H1 flattened to plain text and truncated to 255 characters at a grapheme-cluster boundary | The columns are `VARCHAR(255)` and headings are unbounded; truncating mid-grapheme would corrupt display and mid-surrogate would corrupt the column |
 | D03-14 | `notes.last_edited_by`, `last_edited_at`, `size_chars`, `oversize`, `content_invalid`, `last_checkpoint_at` and `updated_at` are written by the compaction transaction in one `UPDATE notes`, never by the per-commit write transaction; the writer carries the last editor forward in memory (`NoteWriter.lastEditor`) | `A46` fixes the lock order and keeps the persistence writer out of every structural transaction; its guard locks exactly the two rows `A19` mandates (`note_docs` joined to `nodes`), so writing `notes` per commit would add a third row lock to the hot durability path for values whose freshness only needs to match the projection |
-| D03-15 | One invariant register (`I-01` … `I-23`) implemented once in `apps/server/src/db/invariants.ts` and consumed by `iridium doctor`, `iridium restore --verify` and the three model property suites | `A47` and `C.5` name overlapping invariant sets for different tools; a single implementation is the only way the checker and the tests cannot drift |
+| D03-15 | One invariant register (`I-01` … `I-26`) implemented once in `apps/server/src/db/invariants.ts` and consumed by `iridium doctor`, `iridium restore --verify` and the three model property suites | `A47` and `C.5` name overlapping invariant sets for different tools; a single implementation is the only way the checker and the tests cannot drift |
 | D03-16 | `iridium_app`'s DML is narrowed below `A8`'s blanket "DML on all tables" on four tables — `access_log` `SELECT, INSERT`; `note_updates` no `UPDATE`; `note_revisions` `UPDATE (id)` only (a column-scoped grant); `audit_chain_heads` no `DELETE` — and the whole matrix is rendered from one source, `apps/server/src/db/grants.ts`, into the migrations, `docs/ops/db-grants.sql` and the `db-grants.snapshot.sql` fixture | This is `A8`'s least-privilege intent applied per write path: every removed privilege is one the application has no code path for, and each closes a real tamper route — deleting a chain head and re-inserting a genesis row would restart a chain that `verify-chain` accepts, and `UPDATE` on the log or on a revision's text would rewrite history the durability and restore guarantees rest on. `UPDATE (id)` rather than no `UPDATE` at all is what keeps the idempotent `ON DUPLICATE KEY UPDATE id = id` checkpoint insert legal; switching that statement to `INSERT IGNORE` was rejected because it would also swallow foreign-key, `NOT NULL` and truncation errors. One rendered source is what stops this section, `11-operations-and-deployment.md` and the test fixture from drifting into three mutually failing matrices |
 | D03-17 | Unpublishing a desktop release is a **soft withdrawal** (`withdrawn_at`, `withdrawn_by`, set under a `withdrawn_at IS NULL` predicate) that regenerates `latest*.yml` without the version and keeps the row and the artefacts; `admin.release.withdrawn` is added to the closed audit vocabulary | `09-api-reference.md` D09-8 adds `DELETE /admin/releases/:channel/:version`, and a row delete would contradict both the "four hard-delete paths" enumeration of §1.4 and the release record itself, while breaking clients mid-download. A flag keeps the feed correct for updaters and the history correct for auditors, and the audit vocabulary needs a value for the action or the event cannot be written at all |
 | D03-18 | `note_links` carries `line INT UNSIGNED NOT NULL` (1-based Markdown source line of the reference start, from the mdast `position.start.line`) in addition to `start_offset`/`end_offset` | The skeleton's `note_links` DDL stores offsets only, but every link-facing DTO addresses lines: `Link` in `09-api-reference.md` §2.0 makes `line` required and the rename-impact response's `affectedLinks.samples[]` repeats it, so four routes (`/notes/:noteId/links`, `/backlinks`, `/nodes/:nodeId/inbound-links`, `PATCH /nodes/:nodeId`) could not be built from the projection at all. Deriving it at read time would mean re-scanning `note_projections.markdown` per backlink listing; the projection already has the number in hand |
@@ -1830,3 +2052,5 @@ Decisions this section had to make because the skeleton does not cover them (or,
 | D03-20 | `import_jobs.stats` has one field set, defined in §11.3: `upload {files, bytes, sha256\|null}` and `replaced` written during `phase='uploading'`, and `notes, categories, attachments, bytes, skipped, collisionsResolved, renamed` written by the commit | The skeleton declares the column but no shape, and three documents had grown three incompatible field lists. The upload half must live in the column rather than in the request handler, because the import flow is explicitly designed to resume after a restart; the commit half is absent until `committed_at`, which is exactly why `ImportJob.stats` is nullable on the wire while `ImportJob.upload` is not |
 | D03-21 | `iridium_backup` additionally holds `REPLICATION SLAVE`, `BACKUP_ADMIN` and `SHOW_ROUTINE` globally, and the grant verification — `db-grants.integration.test.ts` assertion (e) and `iridium doctor --backup-role` — executes the shipped dump command from one exported constant (`BACKUP_DUMP_ARGV`) rather than a shorter hand-written command | `A8`'s privilege list predates the dump command the plan now ships: `--single-transaction` with `--source-data` takes `LOCK INSTANCE FOR BACKUP` (needs `BACKUP_ADMIN`) on MySQL 8.0.21+, `--routines` needs `SHOW_ROUTINE` without global `SELECT`, and `mysqlbinlog --read-from-remote-server` needs `REPLICATION SLAVE`. A test that exercises a shorter command would pass while `iridium backup` failed in production or in a drill, which is the one failure mode a backup role must not have |
 | D03-22 | `system.audit.archived` is part of the closed audit vocabulary (§12.6), written on the `server` chain by the archive path with `{chain_id, from_id, to_id, rows, export_path, export_sha256}` | `11-operations-and-deployment.md`'s archive procedure emits it, and the vocabulary is enforced by a zod enum plus `audit.vocabulary.test.ts`: without the value, step 5 of the documented procedure throws and `iridium audit archive` cannot complete. Recording where a chain's earlier rows went is also what keeps a prefix-archived chain self-explanatory to an auditor |
+| D03-23 | MySQL 8.4 LTS (`mysql:8.4.11`) and MySQL 9.7 LTS (`mysql:9.7.2-oraclelinux9`) are equal required targets; 8.4.11 is the compatibility floor and the default of every unset image selector; the dialect rule of §1.1 governs every statement the product executes; the `note_projections` upsert uses the row-alias `ON DUPLICATE KEY UPDATE` form rather than the deprecated `VALUES(col)`; and the rule is held by `db.dialect-floor.guard`, the `db.version-floor.boot` refusal, the two-entry `ci.yml` matrices and `migrations.parity.integration` rather than by review | The owner made MySQL 8 a requirement (2026-09-12), read here as 8.4 LTS because 8.0 is end of life. Two required targets with a declared "primary" produce one engine that is really tested and one that is nominally tested, which is the state this change exists to leave. Making the floor the default an unset selector resolves to moves detection into the development loop; making the parity of the *produced schema* a test rather than the legality of each statement catches the class prose cannot — a construct legal on both engines that yields a different index, collation or generated-column shape on each. The upsert rewrite is the one statement in this section that a supported version merely deprecates rather than rejects, and a deprecation is a removal with a date on it |
+| D03-24 | Two columns the OAuth design (§4A) touches deviate from the shape it would otherwise imply, and both deviations are deliberate: `access_tokens.refresh_id` carries **no** foreign key to `oauth_refresh_tokens`, and `access_log.token_id` becomes nullable while `access_log.surface` gains the value `oauth` | Each resolves a contradiction between the OAuth tables and a rule this section already owns, and resolving it in the schema is the only place it can be resolved once. A `RESTRICT` foreign key on `refresh_id` would make §4A's refresh-token retention rule unreachable, because token rows are never deleted (`A31`): every refresh row would be pinned by the access tokens it minted, forever. `refresh_id` is provenance of exactly the kind `rotated_from_id` already is, and §1.4 lists both. For the log, two of the four OAuth actions (`oauth.authorize`, `oauth.consent`) happen before any token exists, so a `NOT NULL` `token_id` would have forced them into a separate table or out of the log entirely; keeping them here is what lets an operator read one connector's whole story — authorize, consent, issue, read, refresh — from one partitioned, indexed place, and the `NULL` is confined by a stated rule (§12.5) rather than left as a general nullable column |
