@@ -8,6 +8,12 @@ Iridium is an internal, self-hosted documentation platform that merges the vault
 
 The development plan in `docs/plan/` (README plus `01`–`15`) **is the specification**. Every settled decision has an ADR under `docs/adr/`, mirrored from `docs/plan/13-decision-log.md`, which is the authoritative record. When the plan says what to build, build what it says; when the tree and the plan diverge, amend the plan in the same change and say why. Do not invent scope the plan does not name.
 
+## Working With the User
+
+- **Never provide time or effort estimates.** No "30 minutes", "half a day", no tiering proposals by duration, and no choosing between approaches by which is faster to implement. Describe scope by what changes (files, mechanism, risk surface) and compare approaches by their technical trade-offs: correctness, dependencies, complexity, future flexibility. If asked how long something takes, say that an AI cannot reliably predict that and describe the scope instead. The plan itself carries no estimates, and neither do commits, pull requests or documents.
+- **Choose the solution that is best for the codebase, never the quick fix.** A localized workaround is not an option when a principled fix exists; risk is a reason to test carefully, not to pick the lesser change.
+- **The plan is the specification.** Implement what it says; when the tree must diverge, amend the plan in the same change and say why; when it is silent, say so and record the choice.
+
 ## Architecture
 
 One Node 24 process built on Fastify 5 owns all input and output:
@@ -70,27 +76,73 @@ infra/                                  compose.yaml, compose.prod.yaml, docker/
 
 ## Coding Standards
 
-### TypeScript
+These are the maintainer's programming standards, applied to this repository. Where a general rule and an established TypeScript convention conflict, the TypeScript convention takes precedence, in the same way the C# convention does in a C# project; each such case is called out below with its reason. Anything the toolchain enforces (oxfmt, oxlint, the TypeScript bases, the guards) is not a matter of taste in a pull request: fix the code, not the rule.
 
-- The shared bases in `tooling/tsconfig/` are strict and non-negotiable: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `verbatimModuleSyntax`, `erasableSyntaxOnly`, `isolatedModules`. Compiled packages also build with `isolatedDeclarations`.
-- Consequences to write by: no `enum`, no `namespace`, no constructor parameter properties (declare the field and assign it); `import type` for types; relative imports carry the `.ts` extension; exported values in compiled packages carry an explicit type annotation when inference would spread or infer a type (`isolatedDeclarations`); index access yields `T | undefined` and is handled, not asserted.
-- No `any`, no non-null assertions to silence the checker, no `@ts-nocheck`, no `@ts-ignore`. Narrow from `unknown` at every boundary (JSON, environment, wire payloads) with zod or an explicit guard.
-- Prefer explicit return types on exported functions. Prefer `readonly` for data that is not meant to change. Prefer discriminated unions over optional fields for state.
-- Errors are typed and carry a remedy: a thrown error names the file, key or value that was wrong and what to do about it. Scripts exit `0` on pass, `1` on a check failure, `2` on a usage or environment error.
+### Code formatting
 
-### Lint, format and comments
+- **The formatter owns whitespace.** oxfmt (`.oxfmtrc.jsonc`: 2-space indentation, 100 columns, single quotes, semicolons, trailing commas, sorted imports) formats every source file; never hand-format and never argue with its output. The general standard prefers tabs, 200-column lines and Allman braces; the TypeScript convention (2 spaces, K&R braces, a ~100-column width) takes precedence here, and Allman braces are unsafe in JavaScript in any case: `return` followed by a newline and `{` returns `undefined` through automatic semicolon insertion.
+- **Spacing**: one space after each comma; one space on both sides of binary, relational, logical and assignment operators; none around unary operators. oxfmt applies all of this.
+- **Blank lines**: one blank line separates logical blocks inside a function (after a guard clause, between an `if` block and the next statement) and top-level members of a module or class; no blank line between tightly coupled lines that form one unit (a declaration and the statement that uses it, consecutive related assignments). Import groups are separated by one blank line (Node built-ins, external packages, workspace packages, relative), which `sortImports` enforces.
+- **Line breaks**: a statement, a signature or a call stays on one line until the formatter's width breaks it; do not break lines for style. Do not align code vertically with extra spaces.
+- **Sections**: the language has no `#region`; group related members with a one-line comment header (`// ---- the three routes ----`) only where a module is long enough to need a map, and keep the header hugging what it introduces.
+- **Resource scope**: there is no braced `using` block. A resource with a lifetime (a database handle, a container, a socket, a timer) is released in `finally` or by an explicit `close()` the owner calls, and the owner is one object; never rely on garbage collection to release it.
 
-- oxlint (`oxlint.config.ts`, type-aware in CI) and oxfmt are the only style authorities. Never hand-format; run `pnpm exec oxfmt <paths>`. Lint must be clean with **zero warnings**, not just zero errors.
-- A disable directive always carries its reason on the same line: `// eslint-disable-next-line no-await-in-loop -- probes are sequential by design`. Never disable a rule for a whole file. `no-await-in-loop` is fixed by `Promise.all` when the awaits are independent and by a reasoned directive when the order matters.
-- `process.env` is read only in `apps/server/src/config/**` and `main.ts` (invariant 3). Numeric limits live only in `@iridium/contracts/limits.ts` (invariant 6; `limits.single-source.guard` has an allow-list file for reviewed exceptions). No `console` outside the CLI and scripts.
-- Banned imports per tag: `node:*`, `electron`, `react` and DOM globals in `core`; `node:*` (except type-only), `electron`, `react` in `iso`; `node:*`, `electron` in `browser`; `yjs`/`lib0`/`y-protocols` anywhere but `packages/crdt`. `setTimeout` sleeps are banned in test files.
-- Comments explain *why* and cite the plan section or decision that decides it (`(03-data-model.md §2)`, `(A14)`, `(D12-5)`). Module headers state what the module owns and what it deliberately does not. Write comments and documentation as the maintainers' own work; no tool attribution anywhere in the tree.
+### Naming
 
-### Modules and exports
+- **Descriptive names everywhere.** No one- or two-character identifiers except loop counters and conventional generics (`T`, `K`).
+- **PascalCase**: classes, interfaces, type aliases, React components, and enum-like `as const` objects' types.
+- **camelCase**: functions, methods, local variables, parameters, properties. (The general standard uses PascalCase for methods; the TypeScript convention is camelCase and takes precedence.)
+- **Private members**: ECMAScript private fields and methods (`#connection`, `#tick()`), not an underscore prefix; the runtime enforces the privacy the `_` prefix only signals. Static private state is `static #name`.
+- **Constants**: module-level constants are `UPPER_SNAKE_CASE` (`LIMITS`, `DB_ROLES`, `REQUIRED_MYSQL_IMAGES`); a class-private constant is a `static readonly` member declared at the top of the class.
+- **UI elements**: a variable or ref that holds a DOM node or a component instance says so (`saveButtonRef`, `titleInput`, `treePane`).
+- **Files**: kebab-case (`route-policy.ts`, `prefix-suffix-diff.ts`); tests `<area>.<subject>.<layer>.spec.ts`.
+- **Wire and database names** follow the plan: snake_case columns and JSON fields as `03-data-model.md` and `09-api-reference.md` state them; never rename a wire field to fit a code style.
 
-- Export only what something consumes. A barrel re-exports what is reached through it, nothing more. An export that exists only for tests carries a real doc comment ending in `@internal`, naming the suite that reads it (knip runs in production mode and ignores `@internal`).
-- Dead code is deleted, not kept "for later"; the plan and git history hold what a later milestone needs. Code the plan schedules for a later milestone is not written ahead, except the empty boot-step stubs and the declared-ahead dependency graph that `12-milestones.md §4.2` asks for.
-- One boot path: `buildApp({ mode })` is the only construction site of the Fastify instance; the modes differ only in listening, signals and the scheduler (invariant 1, `guards.one-boot-path.guard`).
+### Constants and configuration
+
+- Shared constants live in one owning module and are imported from it, the way every numeric limit lives in `@iridium/contracts/limits.ts` (invariant 6; `limits.single-source.guard` fails on a stray literal). Group related constants in one frozen object (`Object.freeze({...}) as const`) rather than loose exports.
+- Instance-specific constants are private and declared at the top of their class or module.
+- `const` always; `let` only when reassignment is the point; never `var`. Frozen objects and `readonly` arrays for shared data.
+- Prefer environment-defined values over literals: anything an operator may tune is an `EnvSchema` key (`apps/server/src/config/env.ts`) read once in `config/`, never `process.env` elsewhere (invariant 3).
+
+### Classes and modules
+
+- Modules of functions are the default unit; a class exists to own state with a lifetime (a readiness registry, a ticket store, a note writer). A class that owns state has an explicit constructor that receives its dependencies; no service locators, no globals.
+- Never expose mutable fields: `readonly` properties or accessors, and `#private` for everything internal.
+- No mutable module-level state except an explicitly named registry the module owns (and then it is `#private` behind functions); no global variables of any kind.
+- Initialize every variable at declaration; prefer discriminated unions to nullable fields for state.
+- Follow KISS, YAGNI, DRY, single responsibility and least astonishment. A duplicated block is extracted when the second copy appears, not the third.
+
+### Concurrency (the Node counterpart of the threading rules)
+
+- The event loop is never blocked: CPU-bound work (argon2, Markdown projection, compaction) runs in worker threads through piscina, and worker pools are bounded.
+- Every promise is awaited or explicitly handed off: `typescript/no-floating-promises` and `no-misused-promises` are errors. A background task has an owner that awaits it, a cancellation path and a bounded queue; nothing is fired and forgotten.
+- Shared mutable state across awaits is guarded by design (a per-note FIFO writer with a head-sequence compare-and-swap, `GET_LOCK` for cross-process work), not by hoping interleavings are benign. Timers are injected (`Clock`), never global.
+- Sequential loops of awaits are either made concurrent with `Promise.all` when independent or carry a reasoned `no-await-in-loop` directive when the order matters.
+
+### Commenting
+
+- Comments follow the indentation of the code they describe. Inline comments explain an ambiguous or complex line; block comments explain a module, class or function.
+- JSDoc/TSDoc (`/** … */`) on every exported function, class and type, with parameter and return descriptions where they are not self-evident and `@internal` on exports that exist for tests.
+- Comments explain *why*, cite the plan section or decision that decides it (`(03-data-model.md §2)`, `(A14)`, `(D12-5)`), and never restate the code. A module header says what the module owns and what it deliberately does not.
+- Write everything as the maintainers' own work: no tool attribution in comments, commits, pull requests or documentation.
+
+### Error handling
+
+- Exceptions are for exceptional conditions, never for control flow; an expected outcome is a returned discriminated union (`{ applied: false, skipped: 'no_grant_option' }`), not a thrown error.
+- Overusing `try`/`catch` is as bad as not using it: catch where the error can be handled or translated (a boundary, an adapter), let it propagate elsewhere, and never swallow one.
+- Validate at system boundaries — request bodies, environment, files, wire payloads, tool arguments — with zod or an explicit guard; trust the types inside.
+- A thrown error is a named class, carries the file, key or value that was wrong and states the remedy. Scripts exit `0` on pass, `1` on a check failure, `2` on a usage or environment error.
+
+### TypeScript specifics
+
+- The shared bases in `tooling/tsconfig/` are strict and non-negotiable: `strict`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `verbatimModuleSyntax`, `erasableSyntaxOnly`, `isolatedModules`; compiled packages also build with `isolatedDeclarations`.
+- Consequences: no `enum`, no `namespace`, no constructor parameter properties (declare the field and assign it); `import type` for types; relative imports carry the `.ts` extension; exported values in compiled packages carry an explicit type annotation where inference would spread; index access yields `T | undefined` and is handled, not asserted.
+- No `any`, no non-null assertions to silence the checker, no `@ts-nocheck`, no `@ts-ignore`. Explicit return types on exported functions.
+- Lint must be clean with **zero warnings**. A disable directive always carries its reason on the same line (`// eslint-disable-next-line no-await-in-loop -- probes are sequential by design`); never disable a rule for a whole file. `no-console` outside the CLI and scripts.
+- Banned imports per boundary tag: `node:*`, `electron`, `react` and DOM globals in `core`; `node:*` (except type-only), `electron`, `react` in `iso`; `node:*`, `electron` in `browser`; `yjs`/`lib0`/`y-protocols` anywhere but `packages/crdt`. `setTimeout` sleeps are banned in test files.
+- Export only what something consumes; a barrel re-exports what is reached through it. Dead code is deleted, not kept for later; the plan and git history hold what a later milestone needs.
+- One boot path: `buildApp({ mode })` is the only construction site of the Fastify instance (invariant 1).
 
 ### Tests
 
@@ -109,12 +161,13 @@ infra/                                  compose.yaml, compose.prod.yaml, docker/
 - `knip.jsonc` carries per-workspace `ignoreDependencies` for the dependencies declared ahead of their milestone; delete an entry the moment product code imports the package. Never add an ignore to hide a real finding.
 - Only the lead of a change runs `pnpm install`; parallel workers never write the lockfile. Note that `pnpm exec <tool>` triggers an install when manifests changed.
 
-### Commits and branches
+### Version control
 
+- Trunk-based development: `main` is always deployment-ready, feature branches are short-lived, and every change reaches `main` through a pull request — no direct commits once the repository has a remote (M0 landed directly because none existed yet). A branch is named `<type>/<short-description>`, mirroring the commit type.
 - Conventional Commits, enforced by commitlint through lefthook: `feat(collab): add saved-ack protocol`. Header under 100 characters, body lines under 100 characters, no time or effort estimates anywhere.
 - No `Co-Authored-By` trailers, no "Generated with" footers, no tool credits in commits, pull requests, comments or documentation.
-- `main` is the protected trunk. Milestone tags are `v0.<N>.0`, cut by hand on the exit-record commit after the required CI checks are green; `release.yml` skips `v0.0.0`.
-- A failed spike's note must name the commit that executed its fallback, and a commit cannot name itself: land the milestone commit first, then a docs commit that writes `commit <sha>` into the notes and `docs/milestones/M<N>-exit.md`.
+- The repository carries `README.md`, `.gitignore`, `CONTRIBUTING.md` and `SECURITY.md`; keep them current.
+- Milestone tags are `v0.<N>.0`, cut by hand on the exit-record commit after the required CI checks are green; `release.yml` skips `v0.0.0`. A failed spike's note must name the commit that executed its fallback, and a commit cannot name itself: land the milestone commit first, then a docs commit that writes `commit <sha>` into the notes and `docs/milestones/M<N>-exit.md`.
 
 ## Key Design Principles
 
