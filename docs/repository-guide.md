@@ -168,7 +168,7 @@ These are the maintainer's programming standards, applied to this repository. Wh
 
 ### Version control
 
-- Trunk-based development: `main` is always deployment-ready, feature branches are short-lived, and every change reaches `main` through a pull request — no direct commits once the repository has a remote (M0 landed directly because none existed yet). A branch is named `<type>/<short-description>`, mirroring the commit type.
+- Trunk-based development: `main` is always deployment-ready. **Commit and push directly to `main`; do not open a pull request, and do not create a branch, until told to change this rule.** The pull-request workflow this project will eventually use is not in force: it buys nothing while there is one author and no branch protection, and a session that imposes it is adding ceremony rather than following the standard. When the rule changes, this line changes with it, and branches are then named `<type>/<short-description>`, mirroring the commit type.
 - Conventional Commits, enforced by commitlint through lefthook: `feat(collab): add saved-ack protocol`. Header under 100 characters, body lines under 100 characters, no time or effort estimates anywhere.
 - No `Co-Authored-By` trailers, no "Generated with" footers, no tool credits in commits, pull requests, comments or documentation.
 - The repository carries `README.md`, `.gitignore`, `CONTRIBUTING.md` and `SECURITY.md`; keep them current.
