@@ -18,6 +18,7 @@ import type * as Y from 'yjs';
 
 import { hostileText, lfText } from '../test/arbitraries.ts';
 import { PROP } from '../test/prop-budget.ts';
+import { loadState } from './codec.ts';
 import { createNoteDoc, getContent, projectMarkdown } from './doc.ts';
 import { CrdtError, type CrdtErrorCode } from './errors.ts';
 import { assertLfOnly, assertNoAttributes, assertWithinCaps } from './guards.ts';
@@ -47,7 +48,6 @@ function docWith(text: string): Y.Doc {
 describe('crdt.guards.unit [hp:HP-4]', () => {
   describe('assertLfOnly', () => {
     it.prop([lfText()], PROP)('accepts normalised text', (text) => {
-      fc.pre(!text.startsWith(BOM));
       expect(outcomeOf(() => assertLfOnly(text))).toBe('accepted');
     });
 
@@ -56,10 +56,13 @@ describe('crdt.guards.unit [hp:HP-4]', () => {
       expect(outcomeOf(() => assertLfOnly(text))).toBe('cr');
     });
 
-    it.prop([lfText()], PROP)('refuses a leading byte order mark', (rest) => {
-      fc.pre(!rest.includes('\r'));
-      expect(outcomeOf(() => assertLfOnly(BOM + rest))).toBe('bom');
-    });
+    it.prop([lfText()], PROP)(
+      'preserves a leading content U+FEFF after source normalization',
+      (rest) => {
+        fc.pre(!rest.includes('\r'));
+        expect(outcomeOf(() => assertLfOnly(BOM + rest))).toBe('accepted');
+      },
+    );
 
     it('accepts U+FEFF away from the start, where it is a zero-width no-break space', () => {
       expect(outcomeOf(() => assertLfOnly(`a${BOM}b`))).toBe('accepted');
@@ -125,7 +128,6 @@ describe('crdt.guards.unit [hp:HP-4]', () => {
 
   describe('initialNoteState', () => {
     it.prop([lfText()], PROP)('accepts normalised Markdown and reports its size', (markdown) => {
-      fc.pre(!markdown.startsWith(BOM));
       const initial = initialNoteState(markdown);
 
       expect(initial.sizeChars).toBe(markdown.length);
@@ -136,7 +138,23 @@ describe('crdt.guards.unit [hp:HP-4]', () => {
 
     it('refuses text the four entry points should have normalised', () => {
       expect(outcomeOf(() => initialNoteState('one\r\ntwo'))).toBe('cr');
-      expect(outcomeOf(() => initialNoteState(`${BOM}# Title`))).toBe('bom');
+    });
+
+    it('keeps normalized U+FEFF content in both initial encodings', () => {
+      const text = `${BOM}# Title`;
+      const initial = initialNoteState(text);
+      for (const [encoded, format] of [
+        [initial.snapshot, 2],
+        [initial.update, 1],
+      ] as const) {
+        const doc = createNoteDoc();
+        try {
+          loadState(doc, encoded, format, ORIGIN);
+          expect(projectMarkdown(doc)).toBe(text);
+        } finally {
+          doc.destroy();
+        }
+      }
     });
   });
 

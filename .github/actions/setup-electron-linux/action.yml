@@ -1,0 +1,19 @@
+name: Prepare sandboxed Electron on Linux
+description: Installs native libraries and the pinned Electron sandbox helper on the disposable runner.
+
+runs:
+  using: composite
+  steps:
+    - name: Install native libraries
+      shell: bash
+      run: pnpm exec playwright install-deps chromium
+
+    - name: Install the sandbox helper
+      shell: bash
+      run: |
+        set -euo pipefail
+        helper="$(pnpm --filter @iridium/desktop exec node -p 'require("node:path").join(require("node:path").dirname(require("electron")), "chrome-sandbox")')"
+        # Match this Electron build, keep the helper outside the writable checkout, and retain
+        # chromiumSandbox: true. Ubuntu's restricted user namespaces require this fallback.
+        sudo install -o root -g root -m 4755 "$helper" /usr/local/sbin/iridium-chrome-sandbox
+        echo 'CHROME_DEVEL_SANDBOX=/usr/local/sbin/iridium-chrome-sandbox' >> "$GITHUB_ENV"

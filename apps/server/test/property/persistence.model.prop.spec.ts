@@ -34,6 +34,21 @@ afterAll(async () => {
 });
 
 describe('persistence.model.prop [area:collab] [spec:durable-saving] [hp:HP-1] [hp:HP-2]', () => {
+  test('preserves content U+FEFF after stripping one encoding BOM (seed -1165222821)', async () => {
+    const markdown = '\uFEFF';
+    const real = await fixture.create(markdown, `\uFEFF${markdown}`);
+    try {
+      const model = initialModel(markdown);
+      await assertLoad(real, model);
+      await real.persistence.compactNow(real.noteId, { trigger: 'flush' });
+      await real.reopen();
+      expect(projectMarkdown(real.document)).toBe(markdown);
+      await assertLoad(real, model);
+    } finally {
+      real.dispose();
+    }
+  });
+
   test('refuses the stale concurrent owner before writing (seed 2107810981)', async () => {
     const real = await fixture.create('');
     try {

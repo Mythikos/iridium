@@ -12,21 +12,17 @@ import { CrdtError } from './errors.ts';
 import { hasNonPlainContent } from './scan.ts';
 import { utf8ByteLength } from './unicode.ts';
 
-const BOM = 0xfeff;
-
 /**
- * The text is LF-only and BOM-free.
+ * The text is LF-only.
  *
- * `normalizeSource()` has already converted the line endings and stripped the BOM at every one of
- * the four text-entry points; this is the assertion that the conversion actually happened, and it is
- * what `initialNoteState` runs before a single byte reaches a `Y.Doc`.
+ * `normalizeSource()` already removed the source's encoding BOM at the four entry points. Any
+ * remaining U+FEFF is content, including at offset zero; rejecting it here loses valid text when
+ * the source began with two such characters (08 §4). Encoding provenance is not inferable from a
+ * normalized string. This guard checks only the line endings that would desynchronise positions.
  */
 export function assertLfOnly(text: string): void {
   if (text.includes('\r')) {
     throw new CrdtError('cr', 'note text is LF-only; a carriage return desynchronises positions');
-  }
-  if (text.charCodeAt(0) === BOM) {
-    throw new CrdtError('bom', 'note text is BOM-free; normalizeSource strips the byte order mark');
   }
 }
 

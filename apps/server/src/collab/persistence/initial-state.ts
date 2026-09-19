@@ -28,7 +28,7 @@ export const INITIAL_SEQ = 1;
 /** What the initialiser needs beside the normalised text. */
 export interface InitialStateInput {
   readonly noteId: NoteId;
-  /** Already through `normalizeSource`: LF-only, BOM-free. */
+  /** Already through `normalizeSource`: LF-only, with its encoding BOM removed. */
   readonly markdownLf: string;
   readonly origin: 'create' | 'import';
   readonly actor: UpdateActor;

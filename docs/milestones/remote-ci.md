@@ -57,3 +57,24 @@ Node 26), and the advisory MySQL innovation lane. That lane sets an ambient vers
 in-process fixtures do not inherit; its required-engine assertion also rejects the deliberately
 unsupported engine. This is an unresolved advisory harness issue, not evidence that either supported
 engine failed its version floor. Scheduled history is still absent; this first run is a manual dispatch.
+
+## Second repair
+
+Commit `97906b7fc3271a23f61ef5942ec455c3279db467` starts
+[CI 35476893797](https://github.com/Mythikos/iridium/actions/runs/35476893797). The preceding CI run
+was superseded and cancelled; its completed 8.4 integration output records 475 passes and two failures.
+In addition to fresh-capacity, property seed `-1165222821`, path `169:8`, found that creating a note
+from two U+FEFF characters returned 500. `normalizeSource` correctly removes one encoding BOM and
+preserves the next character (08 §4), but the CRDT initializer's old BOM guard rejected that content.
+The fix preserves the documented normalization rule and makes the guard check LF only. The retained
+counterexample fails before the fix and passes through creation, compaction and reload afterward;
+all 110 CRDT/Markdown unit checks and the full TypeScript build pass.
+
+The second repair's macOS and Windows Electron jobs pass on Actions. Linux now reaches launch and
+reports that the pinned Electron sandbox helper lacks root ownership and mode 4755. A shared action
+installs that exact helper outside the writable checkout and exposes `CHROME_DEVEL_SANDBOX`, following
+[Chromium's helper installation instructions](https://chromium.googlesource.com/chromium/src/+/main/docs/linux/suid_sandbox_development.md).
+Renderer sandboxing remains enabled. This does not supply the outstanding local macOS validation.
+
+A temporary, manually dispatched `runner-diagnostics` workflow isolates the fresh-capacity child
+lifecycle on Linux; it is a diagnostic and cannot stand in for a required matrix run.

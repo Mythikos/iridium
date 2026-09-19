@@ -392,9 +392,9 @@ jobs:
         shell: bash
         run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
       - uses: ./.github/actions/setup-e2e-server
-      - name: Install the Playwright Linux dependencies
+      - name: Prepare sandboxed Electron on Linux
         if: runner.os == 'Linux'
-        run: pnpm exec playwright install-deps chromium
+        uses: ./.github/actions/setup-electron-linux
       - name: Build the desktop shell (unpackaged) and the server
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
       - name: Apply the migrations

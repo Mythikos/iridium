@@ -103,7 +103,7 @@ export function decodeAwarenessStates(update: Uint8Array): Array<{ clientId: num
 ### Document model
 
 - Exactly one `Y.Doc` per note; the body is the single `Y.Text` under the fixed key `content`. Never `Y.XmlFragment`, never `Y.Map` metadata (metadata lives in MySQL), never formatting attributes or embeds — `Y.Text.toString()` drops `ContentFormat`/`ContentEmbed` silently, which would make projections, search and export diverge from the CRDT. `scanHostileContent` enforces this at every compaction (see "Hostile CRDT content" below).
-- The Y.Text content is LF-only, BOM-free Unicode with U+0000 replaced by U+FFFD, normalised once at the four text-entry points (create, import, version restore, repair) by `normalizeSource()` from `@iridium/markdown` (see 08-markdown-pipeline-import-export.md). CodeMirror treats `\r\n` as one position while `Y.Text` counts two UTF-16 units (y-codemirror.next issue #35); any `\r` in the text desynchronises positions. The client also strips `\r` on paste.
+- The Y.Text content is LF-only Unicode with one encoding BOM removed and U+0000 replaced by U+FFFD, normalised once at the four text-entry points (create, import, version restore, repair) by `normalizeSource()` from `@iridium/markdown` (see 08-markdown-pipeline-import-export.md). Subsequent U+FEFF characters remain content, even at offset zero after normalization; the CRDT guard cannot infer encoding provenance from that text. CodeMirror treats `\r\n` as one position while `Y.Text` counts two UTF-16 units (y-codemirror.next issue #35); any `\r` in the text desynchronises positions. The client also strips `\r` on paste.
 - `yDocOptions.gc` stays `true` on the server: deleted content becomes GC structs, keeping snapshots small. History is therefore never based on `Y.snapshot` (which requires `gc:false`); it is based on `note_revisions` Markdown checkpoints plus optional V2 blobs (see "Compaction and V2 snapshots").
 - Relative positions (`Y.RelativePosition`) are used for remote cursors, caret restoration after an `EditorView` rebuild and undo selection restore; they may resolve to `null` after GC of their anchor, and every consumer handles `null`.
 - Server-side clientIDs: each Hocuspocus `Document` has its own clientID but the server never authors content except through a `DirectConnection` (version restore, repair). Each client window's `NoteSession` owns one Y.Doc with a random 32-bit clientID for the life of the session.
@@ -391,7 +391,7 @@ Properties this buys:
 ```ts
 // packages/crdt/src/initial-state.ts
 export function initialNoteState(markdownLf: string): { update: V1Update; snapshot: V2State; sv: StateVector; sizeChars: number } {
-  assertLfOnly(markdownLf);                                  // throws on '\r' or BOM — defence in depth behind normalizeSource
+  assertLfOnly(markdownLf);                                  // throws on '\r'; remaining U+FEFF is content (08 §4)
   const doc = new Y.Doc({ gc: true });
   try {
     doc.transact(() => { doc.getText(CONTENT_KEY).insert(0, markdownLf); }, INIT_ORIGIN);

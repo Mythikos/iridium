@@ -7,8 +7,6 @@
 export type CrdtErrorCode =
   /** A carriage return reached note text; positions would desynchronise (y-codemirror.next #35). */
   | 'cr'
-  /** A byte order mark reached note text; the content of record is BOM-free. */
-  | 'bom'
   /** A `ContentFormat` (formatting attribute) or `ContentEmbed` reached the note's `Y.Text`. */
   | 'attributes'
   /** An encoded update above `LIMITS.YJS_UPDATE_MAX_BYTES`. */

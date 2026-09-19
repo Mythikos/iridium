@@ -1,0 +1,28 @@
+# Temporary remote probe while repairing the first Actions runs. Not milestone evidence.
+name: runner-diagnostics
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: '1'
+  UV_THREADPOOL_SIZE: '8'
+  IRIDIUM_TEST_TARGET_MILESTONE: M1
+  IRIDIUM_MYSQL_IMAGE: mysql:8.4.11
+
+jobs:
+  child-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-workspace
+      - name: Build the child server
+        run: pnpm turbo run build --filter=@iridium/server
+      - name: Reproduce the native lifecycle timeout
+        run: >-
+          pnpm exec vitest run --project integration
+          apps/server/test/integration/notes.fresh-capacity.integration.spec.ts
