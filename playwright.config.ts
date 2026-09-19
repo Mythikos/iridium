@@ -28,6 +28,8 @@ export default defineConfig({
           url: 'http://127.0.0.1:4000/readyz',
           reuseExistingServer: !CI,
           timeout: 120_000,
+          stdout: 'pipe',
+          stderr: 'pipe',
           env: {
             NODE_ENV: 'test',
             PUBLIC_ORIGIN: 'http://127.0.0.1:4000',

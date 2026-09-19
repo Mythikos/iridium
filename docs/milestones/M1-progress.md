@@ -12,7 +12,7 @@ The historical 53h production image is `iridium-server:m1-53h`, ID `sha256:0822e
 
 ## Independent review corrections
 
-The review fixes remain uncommitted on `492d87088501a379c2d7de7b3dab2586e900902d`. The following results are targeted historical review evidence; they do not replace the final frozen build, aggregate coverage, mutation, database matrix, or formal exit prerequisites.
+The implementation and review fixes were committed and pushed in `29155191d4c116db1897fc083d9939e3ce588f30` (`feat: land the M1 kernel`), including the S01/S02/S14/S06 spike-harness deletions. The following results are targeted historical review evidence; they do not replace the final frozen build, aggregate coverage, mutation, database matrix, or formal exit prerequisites.
 
 | Review finding | Correction and observed boundary |
 |---|---|

@@ -2271,7 +2271,7 @@ A nightly failure opens (or updates) one issue per job with the artifacts attach
 
 ### `release.yml` — milestone tags
 
-The workflow triggers on a manually cut `v<major>.<minor>.<patch>` product tag, including prereleases; `changeset git-tag` emits per-package tags and is not the milestone tag command. `version-pr` runs only on `main` and prepares package versions and per-package changelogs. `release-plan` reads the tagged tree, requires the tag to match `apps/server/package.json` and the last exited milestone in `docs/milestones/CURRENT`, and selects the jobs below: M0 publishes no artifacts; `verify` and `server-image` run from M1, `bridge` from M3, `desktop` and `release-feed` from M5, and `drill` from M8. Before 1.0 the tag minor equals the exited milestone number; 1.x and later require M8. Every artifact job keeps its successful verification dependencies. This applies the owning milestones of §7, §9 and §12 in 12-milestones.md and D12-1/D12-2; an artifact scheduled for a later milestone is not an earlier exit gate.
+The workflow triggers on a manually cut `v<major>.<minor>.<patch>` product tag, including prereleases; `changeset git-tag` emits per-package tags and is not the milestone tag command. While development lands directly on `main`, run `pnpm changeset version` locally and commit the resulting package versions and changelogs before the exit record. No workflow creates a version branch or pull request. `release-plan` reads the tagged tree, requires the tag to match `apps/server/package.json` and the last exited milestone in `docs/milestones/CURRENT`, and selects the jobs below: M0 publishes no artifacts; `verify` and `server-image` run from M1, `bridge` from M3, `desktop` and `release-feed` from M5, and `drill` from M8. Before 1.0 the tag minor equals the exited milestone number; 1.x and later require M8. Every artifact job keeps its successful verification dependencies. This applies the owning milestones of §7, §9 and §12 in 12-milestones.md and D12-1/D12-2; an artifact scheduled for a later milestone is not an earlier exit gate.
 
 | Job | Steps |
 |---|---|
@@ -2282,7 +2282,7 @@ The workflow triggers on a manually cut `v<major>.<minor>.<patch>` product tag, 
 | `release-feed` (renamed from `update-feed`) | **M5 onward** — publish the six bundles through `iridium desktop-updates publish <dir>`, which re-verifies both digests server-side; then fetch `<PUBLIC_ORIGIN>/desktop/updates/<channel>/SHA256SUMS` and `<PUBLIC_ORIGIN>/api/v1/desktop/update-policy` and assert the published digests equal the built ones. There is no end-to-end updater test at 1.0 — there is no updater; `desktop.update-from-previous` returns with the post-1.0 signing epic |
 | `bridge` | **M3 onward** — build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`; run `bridge.parity.contract` against the release image |
 | `drill` | **M8 onward** — the backup/restore drill against the release image, so "restorable" is a property of the artifact and not of `main` |
-| `version-pr` | `changesets/action@v2.1.2` |
+| Version preparation (local) | `pnpm changeset version`, committed and pushed directly to `main`; no version-PR job |
 
 ### What blocks a merge
 

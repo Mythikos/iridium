@@ -93,7 +93,7 @@ function workflowIssues(source: string): string[] {
     'release-feed': { output: 'release_feed', needs: '[release-plan, desktop, server-image]' },
     drill: { output: 'drill', needs: '[release-plan, server-image]' },
   };
-  const expectedJobs = ['release-plan', ...Object.keys(required), 'version-pr'].toSorted();
+  const expectedJobs = ['release-plan', ...Object.keys(required)].toSorted();
   if (JSON.stringify([...jobs.keys()].toSorted()) !== JSON.stringify(expectedJobs)) {
     issues.push('The release jobs differ from the reviewed artifact inventory');
   }

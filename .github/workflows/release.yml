@@ -2,10 +2,9 @@
 # 11-operations-and-deployment.md, "Container images and build" and "What a release is";
 # 12-milestones.md §4.3 row "CI" and §12.3).
 #
-# Two triggers, because the workflow owns both halves of a release:
-#   * a push to `main` runs `version-pr` only — `changesets/action` keeps the Version PR open;
-#   * a manually cut product tag selects only the artifact jobs due at its exited milestone.
-# A tag is never trusted to match a green pull request, which is why `verify` re-runs the
+# Changesets versions and changelogs are committed directly to main before the exit record.
+# A manually cut product tag selects only the artifact jobs due at its exited milestone.
+# A tag is never trusted to match a green main commit, which is why `verify` re-runs the
 # blocking lanes before anything is built or published.
 #
 # There are no signing or notarisation secrets: none exist at 1.0, and the six desktop
@@ -14,7 +13,6 @@ name: release
 
 on:
   push:
-    branches: [main]
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+-*'
@@ -219,7 +217,7 @@ jobs:
 
       - name: Install the Playwright Linux dependencies
         if: runner.os == 'Linux'
-        run: npx playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium
 
       - name: Build the renderer, the preload and the main process
         run: pnpm turbo run build --filter=@iridium/desktop
@@ -346,28 +344,3 @@ jobs:
         if: always()
         with:
           name: release-drill-${{ matrix.mysql }}
-
-  # The Version PR. Changesets keeps one product version across the server image, the web
-  # bundle, the desktop bundles and `iridium-mcp`; merging it records versions and per-package
-  # changelogs. The milestone exit then cuts the product tag by hand (D12-1).
-  version-pr:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - uses: ./.github/actions/setup-workspace
-
-      # v2 renamed these three inputs and stopped reading the environment for its token:
-      # `GITHUB_TOKEN` in `env:` leaves the action unauthenticated, so it is an input here.
-      - uses: changesets/action@66d7d1ddafddf1ef45f98ee51a7496f9cdadb2f4 # v2.1.2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          version-script: pnpm changeset version
-          commit-message: 'chore: version packages'
-          pr-title: 'chore: version packages'

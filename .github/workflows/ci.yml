@@ -48,9 +48,15 @@ jobs:
   static:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      web: ${{ steps.scope.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-workspace
+
+      - name: Resolve the due E2E scope
+        id: scope
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `web=${Number(process.env.IRIDIUM_TEST_TARGET_MILESTONE.slice(1)) >= 4}\n`)'
 
       # `deps.single-instance.guard` analyses the web bundle and `check-bundle-budget.ts`
       # reads `apps/web/dist` + `apps/desktop/dist/renderer`, so the build comes first.
@@ -191,7 +197,8 @@ jobs:
         with:
           name: vitest-blob-unit-${{ matrix.os }}
           path: .vitest-reports/
-          if-no-files-found: ignore
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
   # Two required checks: `integration (mysql:8.4.11)` and
@@ -285,7 +292,8 @@ jobs:
         with:
           name: vitest-blob-integration-${{ steps.image.outputs.slug }}
           path: .vitest-reports/
-          if-no-files-found: ignore
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload conformance and fuzz reports
@@ -343,7 +351,8 @@ jobs:
         with:
           name: vitest-blob-chaos-${{ steps.image.outputs.slug }}
           path: .vitest-reports/
-          if-no-files-found: ignore
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
 
   # Required on all four shards from M4, the milestone that writes the first
@@ -352,6 +361,7 @@ jobs:
   # stricter engine.
   e2e-web:
     needs: static
+    if: needs.static.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -467,7 +477,7 @@ jobs:
 
       - name: Install the Playwright Linux dependencies
         if: runner.os == 'Linux'
-        run: npx playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium
 
       - name: Build the desktop shell (unpackaged) and the server
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
