@@ -38,6 +38,7 @@ describe('testkit.fault-registry.unit [area:testkit]', () => {
       'store.throw-after-commit-before-ack',
       'store.crash-before-commit',
       'store.crash-after-commit-before-ack',
+      'store.hold-before-commit',
       'store.slow',
       'store.kill-after-ack',
       'compact.throw',

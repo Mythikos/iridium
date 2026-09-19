@@ -101,6 +101,7 @@ export interface WriterDocument {
 
 /** The fault registry slice the writer fires (`ops/faults.ts`). */
 export interface WriterFaults {
+  hold(point: string): Promise<void>;
   fire(
     point: string,
     connectionId?: string,
@@ -678,6 +679,7 @@ export class NoteWriter implements Schedulable {
           throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId, expected: from });
         }
         await this.#faults.delay('store.slow');
+        await this.#faults.hold('store.hold-before-commit');
         this.#faults.crash('store.crash-before-commit');
         return from;
       });

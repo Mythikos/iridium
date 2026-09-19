@@ -262,7 +262,30 @@ describe('ops.faults.unit [area:ops]', () => {
     });
   });
 
-  describe('the three shapes a call site uses', () => {
+  describe('the shapes a call site uses', () => {
+    it.each(['point', 'all'] as const)(
+      'holds one caller until %s disarm and leaves other callers free',
+      async (method) => {
+        const { faults, clock } = registry();
+        faults.arm({ point: 'store.hold-before-commit' });
+        let released = false;
+        const waiting = faults.hold('store.hold-before-commit').then(() => {
+          released = true;
+          return undefined;
+        });
+        clock.runPending();
+        await faults.hold('store.hold-before-commit');
+        expect(released).toBe(false);
+        if (method === 'point') faults.arm({ point: 'store.hold-before-commit', count: 0 });
+        else faults.disarmAll();
+        await waiting;
+        expect(released).toBe(true);
+        const production = registry({ nodeEnv: 'production' }).faults;
+        expect(production.arm({ point: 'store.hold-before-commit' }).armed).toBe(false);
+        await production.hold('store.hold-before-commit');
+      },
+    );
+
     it('delay() waits the armed duration through the injected clock, and not at all otherwise', async () => {
       const { faults, clock } = registry();
       let resolved = false;

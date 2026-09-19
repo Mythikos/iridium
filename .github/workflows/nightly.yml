@@ -239,9 +239,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           playwright-browsers: --with-deps chromium
-      - name: Generate the ephemeral keyring
-        run: |
-          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-e2e-server
       - name: Build the web host and the server
         run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
       - name: Apply the migrations
@@ -393,13 +391,10 @@ jobs:
       - name: Create the database
         shell: bash
         run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
-      - name: Generate the ephemeral keyring
-        shell: bash
-        run: |
-          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-e2e-server
       - name: Install the Playwright Linux dependencies
         if: runner.os == 'Linux'
-        run: npx playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium
       - name: Build the desktop shell (unpackaged) and the server
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
       - name: Apply the migrations
@@ -560,10 +555,8 @@ jobs:
           IRIDIUM_MIGRATE_ON_BOOT=true
           READYZ_STRICT_DURABILITY=false
           ENV
-      - name: Generate the ephemeral keyring
+      - uses: ./.github/actions/setup-e2e-server
         if: needs.milestone.outputs.web == 'true'
-        run: |
-          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
       - name: Apply the migrations
         if: needs.milestone.outputs.web == 'true'
         run: pnpm --filter @iridium/server run iridium migrate up

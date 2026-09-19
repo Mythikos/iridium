@@ -32,12 +32,12 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
         });
         await expectConverged(harness, cast.note.id, clients);
         await fair.waitFor('saved');
-        const slow = await harness.server.faults.arm(FAULT.storeSlow, { arg: 5_000 });
+        const held = await harness.server.faults.arm(FAULT.storeHoldBeforeCommit);
         const logStart = harness.logs.length;
         const first = clients[0];
         if (first === undefined) throw new Error('The writer needs an attached producer.');
         first.marker('queue-hold');
-        await waitFault(harness, FAULT.storeSlow, logStart);
+        await waitFault(harness, FAULT.storeHoldBeforeCommit, logStart);
         const failures = clients.map((client) =>
           client.waitForStateless('persist-failed', { timeoutMs: 15_000 }).then((message) => ({
             message,
@@ -79,13 +79,13 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
         // A refused edit stays local until the role-restoration sync replays it.
         const rejected = first.marker('pressure-rejected');
         expect(first.provider?.unsyncedChanges).toBeGreaterThan(0);
-        // Already-entered delays still hold this queue while another writer gets its own pool slot.
-        await slow.disarm();
+        // The one-shot hold keeps this queue full while another writer gets its own pool slot.
         const started = Date.now();
         const fairMarker = fair.marker('fair-through-pressure');
         await fair.waitFor('saved', { timeoutMs: 2_000 });
         expect(Date.now() - started).toBeLessThan(2_000);
         expect((await harness.committed(independent.id)).text).toContain(fairMarker);
+        await held.disarm();
         await Promise.all(clients.map((client) => client.waitFor('saved', { timeoutMs: 30_000 })));
         const recovered = await expectConverged(harness, cast.note.id, clients);
         for (const marker of [...markers, rejected])
@@ -94,6 +94,7 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
         expect((await harness.server.metrics())['iridium_persist_queue_depth']).toBe(0);
         expect(harness.logs.some((line) => line.includes('persist.cas_mismatch'))).toBe(false);
       } finally {
+        await harness.server.faults.disarmAll();
         await harness.close();
       }
     }, 180_000);

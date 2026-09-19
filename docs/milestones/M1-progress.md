@@ -172,9 +172,9 @@ At the historical 53h checkpoint, the database and desktop snapshots preceded fi
 
 ## Formal exit prerequisites
 
-This checkout still lacks remote required-check evidence, configured branch protection and the predecessor `v0.0.0` tag. A sealed local Linux checkout is not GitHub Actions evidence. macOS Electron remains unverified; current58 Windows and fresh native Linux desktop proofs pass locally, as recorded above.
+Remote CI is now running on `main`; its failures and repairs are recorded in [remote-ci.md](remote-ci.md). A complete green required-check run and the predecessor `v0.0.0` tag remain prerequisites. The owner's direct-main rule defers branch protection and forbids version PR automation. A sealed local Linux checkout is not GitHub Actions evidence. Local macOS Electron remains outstanding; current58 Windows and fresh native Linux desktop proofs pass locally, as recorded above.
 
-Nightly-health run IDs are absent. The rule that no job remain red for three consecutive nights is therefore unverified, not presumed satisfied because no runs are recorded. The exit record must identify the actual required workflow runs.
+The first nightly workflow was manually dispatched as run `35475597877`; its failures are retained in [remote-ci.md](remote-ci.md). Scheduled nightly history is still absent. The exit record must distinguish that missing history from the actual dispatch results and identify the required workflow runs.
 
 The M1 changeset is prepared. Versions, `CURRENT` and tags remain unchanged; the exit record and `v0.1.0` tag follow completion of the predecessor and [M1 exit criteria](../plan/12-milestones.md#54-exit-criteria). M5/M6/M8 manual acceptance records and the M8 restore drill do not add an M1 UI or operations-review gate.
 

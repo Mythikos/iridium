@@ -19,6 +19,7 @@ export const FAULT = {
   storeCrashBeforeCommit: 'store.crash-before-commit',
   storeCrashAfterCommitBeforeAck: 'store.crash-after-commit-before-ack',
   storeSlow: 'store.slow',
+  storeHoldBeforeCommit: 'store.hold-before-commit',
   storeKillAfterAck: 'store.kill-after-ack',
   compactThrow: 'compact.throw',
   compactSnapshotOversize: 'compact.snapshot-oversize',
@@ -92,6 +93,14 @@ export const FAULT_POINTS: readonly FaultPointDescriptor[] = [
     argument: 'none',
     lifetime: 'one-shot',
     firesIn: "after COMMIT, before broadcastStateless({t:'persisted'})",
+    specifiedIn: '10-testing-and-quality.md, Fault injection',
+  },
+  {
+    point: 'store.hold-before-commit',
+    constant: 'storeHoldBeforeCommit',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn: 'hold one writer transaction before COMMIT until the harness disarms the point',
     specifiedIn: '10-testing-and-quality.md, Fault injection',
   },
   {

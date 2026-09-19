@@ -21,7 +21,7 @@ export interface ClosePolicy {
    * ever made. `once` is a single attempt. `repeat` re-attaches until it succeeds.
    */
   readonly reattach: 'never' | 'once' | 'repeat';
-  /** When an attempt is made: at once, after the backoff ladder, or after the server's `graceMs`. */
+  /** At once, on the backoff ladder, or on that ladder no earlier than the server's `graceMs`. */
   readonly when: 'immediate' | 'backoff' | 'grace';
   /**
    * The session becomes dormant: the provider is detached and the last rendered text is kept as a

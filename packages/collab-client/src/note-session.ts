@@ -157,6 +157,9 @@ const BASELINE_REREQUEST_MS = 5_000;
 /** The grace window a `closing` message asks for when the server sends none. */
 const DEFAULT_CLOSING_GRACE_MS = 2_000;
 
+/** Bound a missing document CLOSE echo before retiring its ambiguous socket generation. */
+const CLOSE_HANDSHAKE_TIMEOUT_MS = 5_000;
+
 /** Role order, for deciding whether a `{t:'role'}` message upgraded the connection (A20). */
 function roleRank(role: Role): number {
   return ROLES.indexOf(role);
@@ -460,6 +463,8 @@ export class NoteSession {
    * A routing key has one attachment generation. Hocuspocus echoes the old provider's CLOSE after
    * removing its server connection; attaching sooner lets that echo reset the replacement. Keep
    * the key vacant until the echo arrives, or until the socket closes and all old attachments die.
+   * A missing echo forces the shared transport through its existing reconnect path after 5 s;
+   * attaching on the old socket would let a late echo close the replacement generation.
    */
   #waitForCloseHandshake(): void {
     const finish = (): void => {
@@ -485,7 +490,14 @@ export class NoteSession {
     const onStatus = ({ status }: { readonly status: SaveStateInput['socket'] }): void => {
       if (status !== 'connected') finish();
     };
+    const deadline = this.#clock.after(CLOSE_HANDSHAKE_TIMEOUT_MS, () => {
+      this.#log.warn('collab.close-handshake-timeout', { noteId: this.#noteId });
+      // The provider uses this same forced-close path for an unresponsive socket. It removes
+      // old transport listeners synchronously and owns reconnect cancellation and backoff.
+      this.#socket.onClose({ event: { code: 4408, reason: 'close-handshake-timeout' } });
+    });
     this.#cancelCloseHandshake = (): void => {
+      deadline.cancel();
       this.#socket.off('message', onMessage);
       this.#socket.off('status', onStatus);
       this.#cancelCloseHandshake = null;
@@ -692,7 +704,7 @@ export class NoteSession {
       when === 'immediate'
         ? 0
         : when === 'grace'
-          ? this.#closingGraceMs
+          ? Math.max(this.#closingGraceMs, reattachDelayMs(this.#attempt, this.#random))
           : reattachDelayMs(this.#attempt, this.#random);
     this.#reattachTimer = this.#clock.after(delay, () => {
       this.#reattachTimer = null;

@@ -1,0 +1,28 @@
+name: Prepare the E2E server environment
+description: Creates runner-owned storage and a fresh keyring for the real E2E server.
+
+runs:
+  using: composite
+  steps:
+    - name: Create writable storage and ephemeral keys
+      shell: bash
+      run: |
+        node --input-type=module <<'NODE'
+        import { randomBytes } from 'node:crypto';
+        import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs';
+        import { join } from 'node:path';
+
+        const root = mkdtempSync(join(process.env.RUNNER_TEMP, 'iridium-e2e-'));
+        const values = [];
+        for (const key of ['ATTACHMENTS_DIR', 'STAGING_DIR', 'EXPORTS_DIR', 'DESKTOP_UPDATES_DIR']) {
+          const path = join(root, key.toLowerCase());
+          mkdirSync(path);
+          values.push(`${key}=${path}`);
+        }
+        for (const key of ['AUTH_PASSWORD_PEPPER_V1', 'AUDIT_HMAC_KEY_V1', 'MCP_CURSOR_KEY_V1']) {
+          const secret = randomBytes(32).toString('base64');
+          console.log(`::add-mask::${secret}`);
+          values.push(`${key}=${secret}`);
+        }
+        appendFileSync(process.env.GITHUB_ENV, `${values.join('\n')}\n`);
+        NODE

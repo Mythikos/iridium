@@ -117,6 +117,7 @@ const fakes = vi.hoisted(() => {
 
   class FakeSocket {
     status: 'connecting' | 'connected' | 'disconnected' = 'connected';
+    readonly forcedCloses: Array<{ code: number; reason: string }> = [];
     readonly listeners = new Map<string, Set<Listener>>();
     on(event: string, listener: Listener): void {
       const listeners = this.listeners.get(event) ?? new Set<Listener>();
@@ -125,6 +126,11 @@ const fakes = vi.hoisted(() => {
     }
     off(event: string, listener: Listener): void {
       this.listeners.get(event)?.delete(listener);
+    }
+    onClose({ event }: { event: { code: number; reason: string } }): void {
+      this.forcedCloses.push(event);
+      this.status = 'disconnected';
+      this.emit('status', { status: 'disconnected' });
     }
     emit(event: string, data: unknown): void {
       for (const listener of this.listeners.get(event) ?? []) {
@@ -163,6 +169,7 @@ function build(
   options: {
     readonly role?: 'viewer' | 'editor' | 'manager';
     readonly log?: NoteSessionOptions['log'];
+    readonly random?: () => number;
   } = {},
 ): Harness {
   fakes.FakeProvider.instances.length = 0;
@@ -179,7 +186,7 @@ function build(
     socket: socket as unknown as NoteSessionOptions['socket'],
     tickets,
     clock,
-    random: () => 0,
+    random: options.random ?? (() => 0),
     ...(options.log === undefined ? {} : { log: options.log }),
     ...(options.role === undefined ? {} : { role: options.role }),
     onSessionProbe: (reason): void => {
@@ -678,6 +685,77 @@ describe('note-session.unit [hp:HP-1]', () => {
   });
 
   describe('role changes on a live connection', () => {
+    it('retires the socket generation at a missing CLOSE deadline and retains pending edits', async () => {
+      const harness = build({ role: 'viewer' });
+      try {
+        harness.session.attach();
+        harness.latest().emit('authenticated', { scope: 'readonly' });
+        const document = harness.session.ydoc;
+        const undo = harness.session.undoManager;
+        harness.session.ytext.insert(0, 'pending through a lost CLOSE');
+        harness.latest().emit('stateless', {
+          payload: encodeStateless({ v: 1, t: 'role', role: 'editor' }),
+        });
+        await harness.clock.advance(4_999);
+        expect(harness.session.provider).toBeNull();
+        expect(harness.socket.forcedCloses).toEqual([]);
+        await harness.clock.advance(1);
+        expect(harness.socket.forcedCloses).toEqual([
+          { code: 4408, reason: 'close-handshake-timeout' },
+        ]);
+        expect(fakes.FakeProvider.instances).toHaveLength(2);
+        expect(harness.session.input.socket).toBe('disconnected');
+        expect(harness.session.ydoc).toBe(document);
+        expect(harness.session.undoManager).toBe(undo);
+        expect(projectMarkdown(document)).toBe('pending through a lost CLOSE');
+        expect(harness.session.saveState).not.toBe('saved');
+        expect(harness.socket.listeners.get('message')?.size).toBe(0);
+        harness.socket.status = 'connected';
+        harness.latest().emit('status', { status: 'connected' });
+        settle(harness);
+        expect(harness.session.saveState).toBe('saved');
+        undo.undo();
+        expect(projectMarkdown(document)).toBe('');
+      } finally {
+        harness.session.dispose();
+      }
+      expect(harness.clock.armed).toBe(0);
+    });
+
+    it.each(['echo', 'disconnect', 'dispose'] as const)(
+      'cancels the CLOSE deadline after %s without a later socket reset',
+      async (completion) => {
+        const harness = build({ role: 'viewer' });
+        try {
+          harness.session.attach();
+          harness.latest().emit('authenticated', { scope: 'readonly' });
+          harness.latest().emit('stateless', {
+            payload: encodeStateless({ v: 1, t: 'role', role: 'editor' }),
+          });
+          if (completion === 'echo') {
+            const name = Uint8Array.from(`note:${NOTE_ID}`, (character) => character.charCodeAt(0));
+            const reason = Uint8Array.from('provider_initiated', (character) =>
+              character.charCodeAt(0),
+            );
+            harness.socket.emit('message', {
+              data: Uint8Array.from([name.length, ...name, 7, reason.length, ...reason]),
+            });
+          } else if (completion === 'disconnect') {
+            harness.socket.status = 'disconnected';
+            harness.socket.emit('status', { status: 'disconnected' });
+          } else {
+            harness.session.dispose();
+          }
+          await harness.clock.advance(60_000);
+          expect(harness.socket.forcedCloses).toEqual([]);
+          expect(fakes.FakeProvider.instances).toHaveLength(completion === 'dispose' ? 1 : 2);
+          expect(harness.clock.armed).toBe(0);
+        } finally {
+          harness.session.dispose();
+        }
+      },
+    );
+
     it.each([
       { v: 1, t: 'content-invalid', reason: 'attributes' },
       { v: 1, t: 'size-exceeded', size: 1_000_001, max: 1_000_000 },
@@ -797,6 +875,37 @@ describe('note-session.unit [hp:HP-1]', () => {
   });
 
   describe('closes', () => {
+    it.each([0, 12_000])(
+      'backs off repeated note-closing refusals with grace %i',
+      async (graceMs) => {
+        const harness = build({ role: 'editor', random: () => 1 });
+        try {
+          harness.session.attach();
+          settle(harness);
+          harness.session.ytext.insert(0, 'pending while closing');
+          const document = harness.session.ydoc;
+          const delays = [5_000, 10_000, 20_000, 40_000, 60_000, 60_000];
+          for (const [index, backoff] of delays.entries()) {
+            harness.latest().emit('stateless', {
+              payload: encodeStateless({ v: 1, t: 'closing', reason: 'note-trashed', graceMs }),
+            });
+            harness.latest().emit('close', { event: { code: 1000, reason: 'note-closing' } });
+            // eslint-disable-next-line no-await-in-loop -- each refusal advances the same retry ladder
+            await harness.clock.advance(Math.max(graceMs, backoff) - 1);
+            expect(fakes.FakeProvider.instances).toHaveLength(index + 1);
+            // eslint-disable-next-line no-await-in-loop -- observe the exact deadline of this attempt
+            await harness.clock.advance(1);
+            expect(fakes.FakeProvider.instances).toHaveLength(index + 2);
+            expect(harness.session.ydoc).toBe(document);
+            expect(harness.session.saveState).not.toBe('saved');
+          }
+          expect(projectMarkdown(document)).toBe('pending while closing');
+        } finally {
+          harness.session.dispose();
+        }
+      },
+    );
+
     it('destroys the provider and never retries a terminal close', async () => {
       const harness = build({ role: 'editor' });
       harness.session.attach();

@@ -234,9 +234,13 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
         const before = await harness.committed(cast.note.id);
         const acknowledgements = persistedCount(editor);
         await harness.server.faults.arm(point);
-        const logStart = harness.logs.length;
         const marker = editor.marker(`unacked-${String(iteration)}`);
-        await waitFault(harness, point, logStart);
+        // SIGKILL can discard the final piped log on Unix; observe the actual crash.
+        await expect.poll(() => harness.server.lastExit, { timeout: 10_000 }).not.toBeNull();
+        expect(harness.server.lastExit?.code).not.toBe(0);
+        expect(harness.server.lastExit?.signal).toBe(
+          process.platform === 'win32' ? null : 'SIGKILL',
+        );
         await editor.disconnectSocket();
         expect(persistedCount(editor)).toBe(acknowledgements);
         const durable = await harness.committed(cast.note.id);

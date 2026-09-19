@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFailed } from 'vitest';
 
 import { startCollab } from '../support/collab-harness.ts';
 import { registerRecordingOpenApiMatcher } from '../support/openapi-coverage.ts';
@@ -11,6 +11,17 @@ describe('notes.fresh-capacity.integration [area:contracts]', () => {
       mode: 'child',
       limits: { maxLoadedDocs: 1 },
       collab: { debounceMs: 60_000, maxDebounceMs: 60_000 },
+    });
+    let phase = 'seed';
+    onTestFailed(() => {
+      process.stderr.write(
+        `${JSON.stringify({
+          phase,
+          lastExit: harness.server.lastExit,
+          stdout: harness.server.stdout.slice(-30),
+          stderr: harness.server.stderr.slice(-30),
+        })}\n`,
+      );
     });
     try {
       const admin = await harness.server.seed.admin();
@@ -26,15 +37,19 @@ describe('notes.fresh-capacity.integration [area:contracts]', () => {
         markdown: 'other\n',
       });
       const writer = await harness.open(admin, stale.id, { role: 'manager' });
+      phase = 'initial baseline';
       await writer.waitFor('saved');
       writer.marker('durable-unprojected');
+      phase = 'pending update commit';
       await writer.waitFor('saved');
       const before = await harness.committed(stale.id);
       expect(before.projected).toBeLessThan(before.head);
       await harness.server.kill('SIGKILL');
       await writer.close();
+      phase = 'restart readiness';
       await harness.server.restart();
       const blocker = await harness.open(admin, occupied.id, { role: 'manager' });
+      phase = 'occupied baseline';
       await blocker.waitFor('saved');
       const rest = await harness.server.loginAs(admin);
       const committed = await rest.get(`/notes/${stale.id}/markdown`);
@@ -47,6 +62,7 @@ describe('notes.fresh-capacity.integration [area:contracts]', () => {
       await expect(fresh).toMatchOpenApi('notes.getMarkdown', 503);
       expect((await harness.committed(stale.id)).projected).toBe(before.projected);
       expect(blocker.closes).toEqual([]);
+      phase = 'cleanup';
     } finally {
       await harness.close();
     }

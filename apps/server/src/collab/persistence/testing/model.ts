@@ -126,6 +126,7 @@ export interface ModelActor {
 
 /** The writer faults that never fire. */
 const NO_WRITER_FAULTS: WriterFaults = {
+  hold: async () => undefined,
   fire: () => ({ fired: false, arg: undefined }),
   delay: async () => undefined,
   crash: () => undefined,

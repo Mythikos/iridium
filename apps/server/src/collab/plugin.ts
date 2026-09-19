@@ -178,6 +178,7 @@ export async function applyCollabPlugin(
       delay: (point) => app.faults.delay(point),
       crash: (point) => app.faults.crash(point),
       maybeThrow: (point, error) => app.faults.maybeThrow(point, error),
+      hold: (point) => app.faults.hold(point),
     },
     limits,
     // One connection of the persist pool holds the owner lease for the life of the process.

@@ -1046,7 +1046,7 @@ The close-reason column of 09-api-reference.md §3.6 maps onto these rules one-t
 | `revoked` | `revoked` | Stop retrying; keep the buffered text visible and exportable |
 | `note-not-found` | `closed` | Stop; close the tab with an explanation |
 | `note-trashed` | `trashed` | Stop; show the trash notice and offer the export |
-| `note-closing` | `closed` | Re-attach after `graceMs` |
+| `note-closing` | `closed` | Re-attach on the 5 s to 60 s jittered backoff ladder, no earlier than `graceMs`; zero grace never creates an immediate retry loop |
 | `vault-archived` | `vault-archived` | Switch the workspace to read-only |
 | `too-large` | `too-large` | Do **not** retry the same update; offer **Export my text** / **Discard my changes** |
 | `rate-limited` via `close-frame` (the 200-messages-per-10 s cap, 4403) | `closed` | Back off and re-attach once |
@@ -1484,6 +1484,12 @@ So the upgrade path is:
 2. Client (`NoteSessionRegistry` in `@iridium/collab-client`): on a `role` message that upgrades the session, **detach and destroy the `HocuspocusProvider` and attach a fresh one on the same `Y.Doc`** — a new auth ticket, a full `SyncStep1`/`SyncStep2` exchange that merges every local update the Y.Doc still holds (including the previously rejected ones, because they are in the document, not in a provider-side buffer), and `unsyncedChanges` reset to a correct value.
 3. The client then sends `{t:'baseline'}` after the new `synced` event, so the indicator resolves to `saved` as soon as the writer has committed the merged edits.
 4. The `Y.Doc`, the `UndoManager`, the `EditorView` and the caret are untouched by the re-attach, so the user sees the editor become writable and their pending text get saved, with no content loss and no visual jump.
+
+Provider replacement waits for the old document's CLOSE echo before attaching the same name again.
+The session's injected clock bounds that wait to 5 s. If the echo never arrives while the socket
+remains connected, the session retires that socket generation through its normal disconnect path;
+the shared reconnect owner then resumes every attached document. A late CLOSE from the retired
+transport cannot detach the replacement provider. Echo, disconnect and disposal cancel the deadline.
 
 `collab.live-revocation` covers downgrade → rejected → upgrade → re-attach → saved as one test, and asserts that the text the viewer typed while read-only is exactly the text that ends up committed after the upgrade.
 

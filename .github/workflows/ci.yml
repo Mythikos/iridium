@@ -405,9 +405,7 @@ jobs:
         with:
           playwright-browsers: --with-deps chromium
 
-      - name: Generate the ephemeral keyring
-        run: |
-          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-e2e-server
 
       - name: Build the web host and the server
         run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
@@ -470,10 +468,7 @@ jobs:
         shell: bash
         run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
 
-      - name: Generate the ephemeral keyring
-        shell: bash
-        run: |
-          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-e2e-server
 
       - name: Install the Playwright Linux dependencies
         if: runner.os == 'Linux'

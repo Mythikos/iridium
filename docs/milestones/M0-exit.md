@@ -1,6 +1,6 @@
 # M0 exit record (formal exit pending)
 
-Prepared on 2026-09-13 as an M0 exit candidate using the fields of 12-milestones.md §13.2 (D12-8), and revised after local review. Formal exit remains pending: required remote CI, branch protection, macOS Electron evidence and `v0.0.0` are not verified. The dated results below record local validation; current local revalidation is recorded in [M1-progress.md](M1-progress.md).
+Prepared on 2026-09-13 as an M0 exit candidate using the fields of 12-milestones.md §13.2 (D12-8), and revised after local review. Formal exit remains pending: a green remote required-check run and `v0.0.0` are not verified. Remote attempts are now recorded in [remote-ci.md](remote-ci.md); the owner has deferred branch protection under the direct-main rule. The dated results below are historical local validation; local macOS Electron remains outstanding. Current local revalidation is recorded in [M1-progress.md](M1-progress.md).
 
 ## Review (2026-09-17)
 

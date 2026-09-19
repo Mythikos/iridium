@@ -91,6 +91,12 @@ export const FAULT_POINTS: readonly FaultPointDescriptor[] = Object.freeze([
     firesIn: "after COMMIT, before broadcastStateless({t:'persisted'})",
   },
   {
+    point: 'store.hold-before-commit',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn: 'hold one writer transaction before COMMIT until the harness disarms the point',
+  },
+  {
     point: 'store.slow',
     argument: 'milliseconds',
     lifetime: 'until-disarmed',
@@ -220,6 +226,7 @@ export interface FaultRegistryOptions {
 export class FaultRegistry {
   readonly #armed = new Map<string, ArmedFault>();
   readonly #perConnectionFired = new Set<string>();
+  readonly #holds = new Map<string, Set<() => void>>();
   readonly #enabled: boolean;
   readonly #clock: Clock;
   readonly #logger: FaultLogger;
@@ -266,6 +273,7 @@ export class FaultRegistry {
     if (request.count === 0) {
       this.#armed.delete(request.point);
       this.#perConnectionFired.clear();
+      this.#release(request.point);
       return { armed: true, fault: { point: request.point, arg: undefined, remaining: 0 } };
     }
 
@@ -296,6 +304,7 @@ export class FaultRegistry {
   disarmAll(): void {
     this.#armed.clear();
     this.#perConnectionFired.clear();
+    for (const point of this.#holds.keys()) this.#release(point);
   }
 
   /**
@@ -349,6 +358,22 @@ export class FaultRegistry {
     await new Promise<void>((resolve) => {
       this.#clock.after(ms, resolve);
     });
+  }
+
+  /** Hold one instruction boundary until explicit disarm, independently of runner speed. */
+  async hold(point: string): Promise<void> {
+    if (!this.fire(point).fired) return;
+    await new Promise<void>((resolve) => {
+      const pending = this.#holds.get(point) ?? new Set<() => void>();
+      pending.add(resolve);
+      this.#holds.set(point, pending);
+    });
+  }
+
+  #release(point: string): void {
+    const pending = this.#holds.get(point);
+    this.#holds.delete(point);
+    if (pending !== undefined) for (const resolve of pending) resolve();
   }
 
   /**
