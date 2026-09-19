@@ -1,6 +1,6 @@
 # A17 — Hocuspocus 4.7.0 embedded as the `Hocuspocus` class inside Fastify with Iridium's own extensions
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); amended 2026-09-17.
 
 ## Context
 
@@ -9,6 +9,8 @@ Spec §6 names Hocuspocus and states that MySQL integration is part of this proj
 ## Decision
 
 `new Hocuspocus({timeout: 60000, debounce: 2000, maxDebounce: 10000, unloadImmediately: true, yDocOptions: {gc: true}, maxPendingDocuments: 100, extensions: [IridiumAuth, IridiumLimits, IridiumPersistence, IridiumVaultChannel]})` created in `apps/server/src/collab/server.ts` and mounted with `app.get('/collab', {websocket: true, preValidation: [originAllowlist, connectionCaps]}, …)` via @fastify/websocket 11.3.0 (`options.maxPayload = 2 MiB`), forwarding `message`/`close` to `ClientConnection.handleMessage`/`handleClose`. Document names are `note:<uuid>` and `vault:<uuid>`. The **persistence listener is Iridium's own `document.on('update')`** registered in `afterLoadDocument`, filtering `LOAD_ORIGIN` and accepting `{source:'connection'}` and `{source:'local'}` origins; `onChange` is not used for persistence. Every hook body is wrapped so it never rejects (issue #754). `@hocuspocus/extension-database` is not used. Hocuspocus specifics are confined behind `CollabServer` (start/stop, `closeNote`, `revokeUser`, `changeRole`, `broadcastVault`, `openServerEdit`, `participants`) and `CollabPersistence` interfaces in `apps/server/src/collab/`. Hook contract per document (skeleton §D.2): `onAuthenticate`, `onLoadDocument`, `afterLoadDocument`, `beforeHandleMessage`, `beforeHandleAwareness`, `onStateless`, `onTokenSync`, `onStoreDocument`, `beforeUnloadDocument`, `afterUnloadDocument`. `onLoadDocument` refuses unknown, trashed, foreign-vault and archived notes so Hocuspocus can never create phantom documents.
+
+**Amendment (2026-09-17): awareness frame fidelity.** The pinned 4.7.0 `MessageReceiver` creates a scratch awareness instance whose synthetic local `{}` state reaches identity hooks, and its filtered re-encoding drops explicit null removals. Keep a version-bound pnpm patch to the source and both shipped runtimes: remove only that scratch participant and metadata, preserve null removals from the input, and retain a hook's deletion of a non-null state as suppression. Register restored presence (reported as `updated` by y-protocols) back to its connection so a later close removes it. The client adapter publishes only its own document client id, including null removal; remote timeouts remain local. Iridium validates every raw awareness entry before dispatch, including duplicate client ids and removal ownership, then keeps the identity/shape hook as defence in depth. This preserves strict impersonation checks and legitimate disconnect presence removal. `collab.awareness-identity.integration`, `crdt.frame.unit`, and `kernel.smoke.integration` verify the boundary; remove the patch only when an upstream version passes the same tests.
 
 ## Alternatives Considered
 
@@ -36,3 +38,10 @@ Digest §2.1–§2.5, §11.6 (framework), §11.22; spec §6; plan-risk-first ADR
 ---
 
 Source: docs/plan/13-decision-log.md, decision A17. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).
+
+
+The pinned provider patch adds `detach(notifyServer = true)` on the provider and shared socket.
+After a server-originated refusal, `NoteSession` calls `detach(false)` before destruction so cleanup
+cannot enqueue another CLOSE against the next attachment. Normal client detach still sends CLOSE
+and role upgrades wait for its acknowledgement before reusing the document routing key. The real
+child restart and kill-after-commit suites retain the original client to verify this ordering.

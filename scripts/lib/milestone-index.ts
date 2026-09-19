@@ -179,7 +179,9 @@ export function readMilestoneIndex(): MilestoneIndex {
   // 4. Section 3 - the cross-cutting gates. "These gates are evaluated at every milestone exit ...
   //    They exist from M0 onward - except where a row names a later milestone because the artefact it
   //    checks does not exist before it." So a guard named in a gate row is due at M0 unless the row
-  //    itself names a milestone, in which case the earliest one it names is the answer.
+  //    itself names a milestone, in which case the earliest one it names is the answer. This is a
+  //    fallback only: a row mentioning the M1 fixture and the M8 upgrade rehearsal must not
+  //    override the rehearsal explicitly scheduled by the M8 exit table.
   const gates = sections.find((section) => section.title.startsWith('3. Cross-cutting gates'));
   if (gates !== undefined) {
     const table = requireTable(
@@ -195,7 +197,9 @@ export function readMilestoneIndex(): MilestoneIndex {
         mentioned[0] ?? 'M0',
       );
       for (const span of codeSpans(row[1] ?? '')) {
-        if (isTestName(span)) record(span, milestone, '12-milestones.md §3 (cross-cutting gates)');
+        if (isTestName(span) && !claims.has(span)) {
+          record(span, milestone, '12-milestones.md §3 (cross-cutting gates)');
+        }
       }
     }
   }

@@ -11,9 +11,9 @@
  * - **Migrations run through the product.** The template and every worker schema are built by
  *   `iridium migrate up`, not by a SQL file, so the migration code path is exercised on every run
  *   (fixture policy rule 2).
- * - **No raw SQL client.** Everything the harness does to the database itself goes through the
- *   container's own `mysql` client (`MysqlAdmin`), which keeps `mysql2` and `kysely` out of the
- *   harness's dependency surface and keeps the *only* first-party SQL path the product's own.
+ * - **One fixture provisioning transport.** Environment setup uses the container's own `mysql`
+ *   client (`MysqlAdmin`), not a second Node pool. Named testkit database probes may use Kysely over
+ *   a caller-owned executor; they neither provision an alternate schema nor replace product seeding.
  * - **The mount is verified, not assumed.** A `my.cnf` the server declined to read and an
  *   `01_roles.sh` the entrypoint executed instead of sourcing both produce a database that looks
  *   plausible and is not the tested one, so `assertShippedConfiguration()` reads the server back
@@ -31,6 +31,7 @@ import { getContainerRuntimeClient } from 'testcontainers';
 import type { ExecResult, StartedNetwork } from 'testcontainers';
 
 import { MYSQL_CONF_FILE, MYSQL_INIT_ROLES_FILE, requireExistingPath } from '../paths.ts';
+import type { DatabasePasswords } from '../server/env.ts';
 import { DEFAULT_DATABASE_NAME, TEST_DB_PASSWORDS } from '../server/env.ts';
 
 /** The compatibility floor every unset selector resolves to (03-data-model.md; D10-42). */
@@ -123,7 +124,8 @@ export const ROLE_SECRET_FILES = {
 /**
  * Tables per-test truncation leaves alone: the migration ledger and the two rows the boot sequence
  * reads before it will serve anything (02-system-architecture.md boot step 2 loads `schema_meta` and
- * `server_settings` into the `SettingsStore`). Truncating them would leave the schema looking
+ * `server_settings` into the `SettingsStore`, and collaboration claims the seeded singleton in
+ * `collab_owner_fence`). Truncating them would leave the schema looking
  * unmigrated to a server that is already running, which is a harness bug wearing a product failure's
  * clothes. A suite that means to change settings does it through `PUT /admin/settings`.
  */
@@ -132,9 +134,12 @@ export const PRESERVED_TABLES: readonly string[] = [
   'kysely_migration_lock',
   'schema_meta',
   'server_settings',
+  'collab_owner_fence',
 ];
 
 export interface StartMysqlOptions {
+  /** Random material for a production-mode server, otherwise obvious fixture credentials. */
+  readonly passwords?: DatabasePasswords;
   /** Defaults to `IRIDIUM_MYSQL_IMAGE`, then to the floor. */
   readonly image?: string;
   /** Join a shared Docker network so Toxiproxy can reach `mysql:3306`. */
@@ -152,6 +157,7 @@ export function resolveMysqlImage(explicit?: string): string {
  */
 export async function startMysql(options: StartMysqlOptions = {}): Promise<StartedMySqlContainer> {
   const image = resolveMysqlImage(options.image);
+  const passwords = options.passwords ?? TEST_DB_PASSWORDS;
   requireExistingPath(
     MYSQL_CONF_FILE,
     'the shipped MySQL configuration (infra/docker/mysql/my.cnf)',
@@ -166,8 +172,8 @@ export async function startMysql(options: StartMysqlOptions = {}): Promise<Start
   let container = new MySqlContainer(image)
     .withDatabase(DEFAULT_DATABASE_NAME)
     .withUsername('iridium')
-    .withUserPassword(TEST_DB_PASSWORDS.app)
-    .withRootPassword(TEST_DB_PASSWORDS.root)
+    .withUserPassword(passwords.app)
+    .withRootPassword(passwords.root)
     .withTmpFs({ '/var/lib/mysql': 'rw' })
     // The image's own `CMD`, plus the one override of `FIXTURE_REDO_LOG_CAPACITY`. `ENTRYPOINT` is
     // untouched, so `docker-entrypoint.sh` still initialises the data directory and still runs
@@ -178,14 +184,14 @@ export async function startMysql(options: StartMysqlOptions = {}): Promise<Start
       { source: MYSQL_INIT_ROLES_FILE, target: MYSQL_INIT_TARGET, mode: MOUNTED_FILE_MODE },
     ])
     .withCopyContentToContainer([
-      { content: TEST_DB_PASSWORDS.app, target: ROLE_SECRET_FILES.app, mode: MOUNTED_FILE_MODE },
+      { content: passwords.app, target: ROLE_SECRET_FILES.app, mode: MOUNTED_FILE_MODE },
       {
-        content: TEST_DB_PASSWORDS.migrator,
+        content: passwords.migrator,
         target: ROLE_SECRET_FILES.migrator,
         mode: MOUNTED_FILE_MODE,
       },
       {
-        content: TEST_DB_PASSWORDS.backup,
+        content: passwords.backup,
         target: ROLE_SECRET_FILES.backup,
         mode: MOUNTED_FILE_MODE,
       },
@@ -194,9 +200,9 @@ export async function startMysql(options: StartMysqlOptions = {}): Promise<Start
       IRIDIUM_DB_APP_PASSWORD_FILE: ROLE_SECRET_FILES.app,
       IRIDIUM_DB_MIGRATOR_PASSWORD_FILE: ROLE_SECRET_FILES.migrator,
       IRIDIUM_DB_BACKUP_PASSWORD_FILE: ROLE_SECRET_FILES.backup,
-      IRIDIUM_DB_APP_PASSWORD: TEST_DB_PASSWORDS.app,
-      IRIDIUM_DB_MIGRATOR_PASSWORD: TEST_DB_PASSWORDS.migrator,
-      IRIDIUM_DB_BACKUP_PASSWORD: TEST_DB_PASSWORDS.backup,
+      IRIDIUM_DB_APP_PASSWORD: passwords.app,
+      IRIDIUM_DB_MIGRATOR_PASSWORD: passwords.migrator,
+      IRIDIUM_DB_BACKUP_PASSWORD: passwords.backup,
     });
 
   if (options.network !== undefined) {
@@ -208,7 +214,7 @@ export async function startMysql(options: StartMysqlOptions = {}): Promise<Start
   // on its own defaults, and a role bootstrap that never ran leaves a database that answers every
   // query the harness asks next. Reading the server back here turns either into one failure with a
   // cause, instead of a migration or a grant failing three layers away.
-  await assertShippedConfiguration(mysqlAdmin(started));
+  await assertShippedConfiguration(mysqlAdmin(started, passwords.root));
   return started;
 }
 
@@ -252,7 +258,6 @@ export function parseMysqlRows(output: string): readonly (readonly string[])[] {
  * removing it here removes it at the source; `parseMysqlRows` reading only standard output is the
  * second line of defence, for a warning some future client emits for a reason of its own.
  */
-const MYSQL_EXEC_ENV: Readonly<Record<string, string>> = { MYSQL_PWD: TEST_DB_PASSWORDS.root };
 
 function mysqlArgv(sql: string, flags: readonly string[]): string[] {
   return ['mysql', '-h', '127.0.0.1', '-u', 'root', ...flags, '-e', sql];
@@ -269,9 +274,12 @@ type ExecInContainer = (
   env: Readonly<Record<string, string>>,
 ) => Promise<Pick<ExecResult, 'stdout' | 'stderr' | 'exitCode'>>;
 
-function adminOver(exec: ExecInContainer): MysqlAdmin {
+function adminOver(
+  exec: ExecInContainer,
+  rootPassword: string = TEST_DB_PASSWORDS.root,
+): MysqlAdmin {
   const run = async (sql: string, flags: readonly string[] = []): Promise<string> => {
-    const result = await exec(mysqlArgv(sql, flags), MYSQL_EXEC_ENV);
+    const result = await exec(mysqlArgv(sql, flags), { MYSQL_PWD: rootPassword });
     if (result.exitCode !== 0) {
       throw new Error(
         `@iridium/testkit: mysql exited ${String(result.exitCode)} for: ${sql}\n${result.stderr}`,
@@ -288,8 +296,11 @@ function adminOver(exec: ExecInContainer): MysqlAdmin {
 }
 
 /** An admin over a container this process started. */
-export function mysqlAdmin(container: StartedMySqlContainer): MysqlAdmin {
-  return adminOver(async (argv, env) => container.exec(argv, { env }));
+export function mysqlAdmin(
+  container: StartedMySqlContainer,
+  rootPassword: string = TEST_DB_PASSWORDS.root,
+): MysqlAdmin {
+  return adminOver(async (argv, env) => container.exec(argv, { env }), rootPassword);
 }
 
 /**
@@ -297,10 +308,16 @@ export function mysqlAdmin(container: StartedMySqlContainer): MysqlAdmin {
  * `global/worker-schema.setup.ts` create and truncate its own schema: `globalSetup` provides the id,
  * and `testcontainers`' own runtime client reaches the same daemon from the worker.
  */
-export async function mysqlAdminByContainerId(containerId: string): Promise<MysqlAdmin> {
+export async function mysqlAdminByContainerId(
+  containerId: string,
+  rootPassword: string = TEST_DB_PASSWORDS.root,
+): Promise<MysqlAdmin> {
   const client = await getContainerRuntimeClient();
   const container = client.container.getById(containerId);
-  return adminOver(async (argv, env) => client.container.exec(container, argv, { env }));
+  return adminOver(
+    async (argv, env) => client.container.exec(container, argv, { env }),
+    rootPassword,
+  );
 }
 
 /**

@@ -8,63 +8,35 @@
  * That single state also drives the shutdown drain, which is why a drain and a pending migration
  * cannot disagree about whether traffic should arrive.
  *
- * Only `migrations` is **fail-closed**: a pending migration flips the state, because a server whose
- * schema is behind its code must never handle a request. Every other check failing makes `/readyz`
+ * Pending migrations and absent collaboration ownership are **fail-closed**: serving with the wrong
+ * schema or alongside another owner would bypass the durable and authorization boundaries. Other failing checks make `/readyz`
  * answer `503` while the server keeps serving, because a degraded Iridium that still lets people
  * read their notes is better than a closed door (11, "Boot sequence and fail-closed readiness").
  */
+import {
+  READYZ_CHECK_NAMES,
+  type ReadyzBody,
+  type ReadyzCheck,
+  type ReadyzCheckName,
+  type ReadyzStatus,
+} from '@iridium/contracts';
+
 import { toRfc3339, type Clock } from './clock.ts';
 
-/**
- * The fifteen readiness checks. This list is `ReadyzCheckName` in 09-api-reference.md section 2.17
- * and the readiness table of 11-operations-and-deployment.md; the same strings are the `check` label
- * of `iridium_readyz_check_status` and what the alert expressions match on. `readyz.integration`
- * asserts the served set equals it exactly, so the three cannot drift apart.
- */
-export const READYZ_CHECK_NAMES = [
-  'mysql_version',
-  'db_app',
-  'db_persist',
-  'migrations',
-  'grants',
-  'durability',
-  'attachment_store',
-  'persist_backlog',
-  'doc_budget',
-  'projection_workers',
-  'clock_skew',
-  'key_versions',
-  'tls_cert',
-  'shutdown',
-  'access_log_partitions',
-] as const;
-
-/** One of the fifteen readiness check names. */
-export type ReadyzCheckName = (typeof READYZ_CHECK_NAMES)[number];
-
-/** The per-check and overall vocabulary. A single `fail` makes the whole response `503`. */
-export type ReadyzStatus = 'ok' | 'warn' | 'fail';
+// The wire contract owns the check names and body shape; readiness supplies their evaluations.
+export { READYZ_CHECK_NAMES } from '@iridium/contracts';
+export type { ReadyzBody, ReadyzCheck, ReadyzCheckName, ReadyzStatus } from '@iridium/contracts';
 
 /** The checks whose failure flips `ReadinessState` and gates every non-ops route. */
-export const FAIL_CLOSED_CHECKS: readonly ReadyzCheckName[] = Object.freeze(['migrations']);
+export const FAIL_CLOSED_CHECKS: readonly ReadyzCheckName[] = Object.freeze([
+  'migrations',
+  'collab_owner_lease',
+]);
 
 /** What one check returns. `durationMs` is measured by the runner, never by the check. */
 export interface CheckOutcome {
   readonly status: ReadyzStatus;
   readonly detail?: string;
-}
-
-/** One check as served: the outcome plus its name and measured duration. */
-export interface ReadyzCheck extends CheckOutcome {
-  readonly name: ReadyzCheckName;
-  readonly durationMs: number;
-}
-
-/** The `/readyz` body of 09-api-reference.md section 2.17, served identically with `200` and `503`. */
-export interface ReadyzBody {
-  readonly status: ReadyzStatus;
-  readonly checks: readonly ReadyzCheck[];
-  readonly checkedAt: string;
 }
 
 /** A registered check. Failures are caught by the runner, so an implementation may throw. */
@@ -88,6 +60,78 @@ export function httpStatusFor(status: ReadyzStatus): number {
   return status === 'fail' ? 503 : 200;
 }
 
+// -----------------------------------------------------------------------------------------------
+// Thresholds the checks share, so the subsystem that has the numbers does not also own the policy
+// -----------------------------------------------------------------------------------------------
+
+/** Fraction of either admission budget at which `doc_budget` warns (skeleton A49: "warn >= 80 %"). */
+const DOC_BUDGET_WARN_FRACTION = 0.8;
+/** Oldest pending update, in milliseconds, above which `persist_backlog` warns (11, "Health"). */
+const PERSIST_BACKLOG_WARN_MS = 10_000;
+/** Oldest pending update, in milliseconds, above which `persist_backlog` fails (11, "Health"). */
+const PERSIST_BACKLOG_FAIL_MS = 30_000;
+/** How long a writer may stay `failed` before `persist_backlog` fails (11, "Health"). */
+const PERSIST_WRITER_FAILED_FAIL_MS = 60_000;
+
+/** What the collaboration server reports for `doc_budget` (A50's two budgets). */
+export interface DocBudgetReading {
+  readonly loadedDocs: number;
+  readonly maxLoadedDocs: number;
+  readonly stateBytes: number;
+  readonly maxStateBytes: number;
+}
+
+/**
+ * The `doc_budget` outcome for a reading: `fail` at 100 % of either budget, `warn` from 80 %.
+ *
+ * The thresholds live here rather than in `collab/` because they are a readiness policy and because a
+ * server that can admit no new document is not ready for new traffic even though already-open documents
+ * are never evicted (A50 refuses rather than evicting). The subsystem supplies the numbers; this decides
+ * what they mean.
+ */
+export function docBudgetOutcome(reading: DocBudgetReading): CheckOutcome {
+  const docFraction = reading.maxLoadedDocs === 0 ? 0 : reading.loadedDocs / reading.maxLoadedDocs;
+  const byteFraction = reading.maxStateBytes === 0 ? 0 : reading.stateBytes / reading.maxStateBytes;
+  const detail =
+    `${String(reading.loadedDocs)}/${String(reading.maxLoadedDocs)} documents, ` +
+    `${String(reading.stateBytes)}/${String(reading.maxStateBytes)} bytes`;
+  if (docFraction >= 1 || byteFraction >= 1) return { status: 'fail', detail };
+  if (docFraction >= DOC_BUDGET_WARN_FRACTION || byteFraction >= DOC_BUDGET_WARN_FRACTION) {
+    return { status: 'warn', detail };
+  }
+  return { status: 'ok', detail };
+}
+
+/** What the persistence writers report for `persist_backlog`. */
+export interface PersistBacklogReading {
+  /** Age of the oldest un-committed update in milliseconds; `0` when nothing is queued. */
+  readonly oldestPendingMs: number;
+  /** Writers in the `failed` state. */
+  readonly failedWriters: number;
+  /** How long the longest-failing writer has been `failed`, in milliseconds. */
+  readonly longestFailedMs: number;
+}
+
+/**
+ * The `persist_backlog` outcome: `ok` under 10 s with no failed writer, `warn` from 10 s, `fail` past
+ * 30 s or when a writer has been `failed` for more than 60 s (11, "Health").
+ */
+export function persistBacklogOutcome(reading: PersistBacklogReading): CheckOutcome {
+  const detail =
+    `oldest pending ${String(Math.round(reading.oldestPendingMs))}ms, ` +
+    `${String(reading.failedWriters)} failed writer(s)`;
+  if (
+    reading.oldestPendingMs > PERSIST_BACKLOG_FAIL_MS ||
+    (reading.failedWriters > 0 && reading.longestFailedMs > PERSIST_WRITER_FAILED_FAIL_MS)
+  ) {
+    return { status: 'fail', detail };
+  }
+  if (reading.oldestPendingMs >= PERSIST_BACKLOG_WARN_MS || reading.failedWriters > 0) {
+    return { status: 'warn', detail };
+  }
+  return { status: 'ok', detail };
+}
+
 /**
  * The single `ReadinessState` owner. Nothing else may decide whether the process accepts work.
  */
@@ -99,6 +143,7 @@ export class Readiness {
   readonly #clock: Clock;
   readonly #listeners = new Set<(state: ReadinessState, reason: string) => void>();
   #last: ReadyzBody | null = null;
+  readonly #gates = new Map<ReadyzCheckName, () => boolean>();
 
   constructor(clock: Clock) {
     this.#clock = clock;
@@ -106,12 +151,22 @@ export class Readiness {
 
   /** The current state. */
   get state(): ReadinessState {
-    return this.#state;
+    return this.#blockedGate() === undefined ? this.#state : 'not_ready';
   }
 
   /** Why the process is in its current state, for the `503 not_ready` body's `detail`. */
   get reason(): string {
-    return this.#reason;
+    const blocked = this.#blockedGate();
+    return blocked === undefined ? this.#reason : `${blocked}: unavailable`;
+  }
+
+  /** A local subsystem gate is checked at admission, even between asynchronous readiness probes. */
+  blockWhen(name: ReadyzCheckName, blocked: () => boolean): void {
+    this.#gates.set(name, blocked);
+  }
+
+  #blockedGate(): ReadyzCheckName | undefined {
+    return [...this.#gates].find(([, blocked]) => blocked())?.[0];
   }
 
   /** Whether the shutdown drain has started; the `shutdown` check reads it. */
@@ -166,7 +221,7 @@ export class Readiness {
       } else {
         try {
           // Sequential on purpose: a later check reads what an earlier one recorded (`grants` reads
-          // the migration status `migrations` just took), and fifteen probes racing for the same pool
+          // the migration status `migrations` just took), and sixteen probes racing for the same pool
           // would make each one's measured duration a measure of the others.
           // eslint-disable-next-line no-await-in-loop -- checks are sequential by design; see above
           outcome = await check();

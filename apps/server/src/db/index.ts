@@ -22,14 +22,18 @@
 import { Kysely, MysqlDialect } from 'kysely';
 import { createPool, type Pool } from 'mysql2';
 
+import { systemClock, type Clock } from '../ops/clock.ts';
 import {
   DB_CONNECT_TIMEOUT_MS_DEFAULT,
   DB_POOL_SIZE,
+  DB_QUERY_TIMEOUT_MS_DEFAULT,
   parseDatabaseUrl,
   poolOptions,
   type MysqlConnectionTarget,
 } from './pool.ts';
+import { withQueryDeadline } from './query-deadline.ts';
 import type { Database } from './schema.ts';
+import { servingLockWaitSeconds, withServingSession } from './session-policy.ts';
 import {
   assertMysqlVersionFloor,
   type DbLogger,
@@ -52,7 +56,6 @@ export { MysqlUnsupportedError, type DbLogger, type MysqlServerVersion } from '.
  * schema the two required MySQL lines produce. They parse the container URL exactly as
  * `createDatabaseLayer` does rather than assembling a `PoolOptions` of their own.
  *
- * @internal
  */
 export { parseDatabaseUrl } from './pool.ts';
 
@@ -75,9 +78,30 @@ export interface DatabaseLayerOptions {
   readonly poolPersist?: number;
   /** `DB_CONNECT_TIMEOUT_MS`. */
   readonly connectTimeoutMs?: number;
+  /** DB_QUERY_TIMEOUT_MS: each statement and each pool acquisition, excluding migration DDL. */
+  readonly queryTimeoutMs?: number;
+  readonly clock?: Clock;
   /** `IRIDIUM_ALLOW_UNTESTED_MYSQL`: downgrades the version-floor refusal to a permanent warning. */
   readonly allowUntestedMysql?: boolean;
   readonly logger?: DbLogger;
+}
+
+/** Connections checked out of each pool, for `iridium_db_pool_in_use{pool}` (11, "Metrics"). */
+export interface PoolsInUse {
+  readonly app: number;
+  readonly persist: number;
+}
+
+/** Serving-pool borrowers awaiting a connection within their acquisition deadline. */
+export interface PendingAcquisitions {
+  readonly app: number;
+  readonly persist: number;
+}
+
+/** Completed SQL attempts, including failures, observed through the driver log callback. */
+export interface QueryCounts {
+  readonly app: number;
+  readonly persist: number;
 }
 
 export interface DatabaseLayer {
@@ -87,6 +111,12 @@ export interface DatabaseLayer {
   readonly dbPersist: Kysely<Database>;
   /** What `SELECT VERSION()` reported, for the `/readyz` `mysql_version` check. */
   readonly serverVersion: MysqlServerVersion;
+  /** A live reading of both pools' occupancy, sampled by the ops plugin. */
+  poolsInUse(): PoolsInUse;
+  /** Borrowers awaiting a connection within their acquisition deadline. */
+  pendingAcquisitions(): PendingAcquisitions;
+  /** Completed SQL attempts per request/persistence pool; no SQL or parameters are retained. */
+  queryCounts(): QueryCounts;
   /** Closes both pools. Safe to call twice. */
   destroy(): Promise<void>;
 }
@@ -96,10 +126,35 @@ export function createDb(
   target: MysqlConnectionTarget,
   connectionLimit: number,
   connectTimeoutMs: number = DB_CONNECT_TIMEOUT_MS_DEFAULT,
-): { db: Kysely<Database>; pool: Pool } {
+  queryTimeoutMs: number = DB_QUERY_TIMEOUT_MS_DEFAULT,
+  clock: Clock = systemClock,
+): {
+  db: Kysely<Database>;
+  pool: Pool;
+  queriesExecuted(): number;
+  inUse(): number;
+  pendingAcquisitions(): number;
+} {
+  // Refuse an impossible budget before allocating a pool.
+  servingLockWaitSeconds(queryTimeoutMs);
   const pool = createPool(poolOptions(target, connectionLimit, connectTimeoutMs));
-  const db = new Kysely<Database>({ dialect: new MysqlDialect({ pool }) });
-  return { db, pool };
+  const bounded = withQueryDeadline(pool, queryTimeoutMs, clock);
+  let completedQueries = 0;
+  const db = new Kysely<Database>({
+    dialect: new MysqlDialect({ pool: withServingSession(bounded, queryTimeoutMs) }),
+    // Kysely emits exactly one query/error event for each completed executeQuery attempt.
+    // Count only; SQL text, bind values, and driver errors never enter an observer or log.
+    log: (): void => {
+      completedQueries += 1;
+    },
+  });
+  return {
+    db,
+    pool,
+    queriesExecuted: () => completedQueries,
+    inUse: () => bounded.inUse(),
+    pendingAcquisitions: () => bounded.pendingAcquisitions(),
+  };
 }
 
 /**
@@ -122,8 +177,21 @@ export function createDb(
 export async function createDatabaseLayer(options: DatabaseLayerOptions): Promise<DatabaseLayer> {
   const target = parseDatabaseUrl(options.url);
   const connectTimeoutMs = options.connectTimeoutMs ?? DB_CONNECT_TIMEOUT_MS_DEFAULT;
-  const app = createDb(target, options.poolApp ?? DB_POOL_SIZE.app, connectTimeoutMs);
-  const persist = createDb(target, options.poolPersist ?? DB_POOL_SIZE.persist, connectTimeoutMs);
+  const queryTimeoutMs = options.queryTimeoutMs ?? DB_QUERY_TIMEOUT_MS_DEFAULT;
+  const app = createDb(
+    target,
+    options.poolApp ?? DB_POOL_SIZE.app,
+    connectTimeoutMs,
+    queryTimeoutMs,
+    options.clock,
+  );
+  const persist = createDb(
+    target,
+    options.poolPersist ?? DB_POOL_SIZE.persist,
+    connectTimeoutMs,
+    queryTimeoutMs,
+    options.clock,
+  );
 
   let destroyed = false;
   const destroy = async (): Promise<void> => {
@@ -131,6 +199,7 @@ export async function createDatabaseLayer(options: DatabaseLayerOptions): Promis
     destroyed = true;
     await Promise.all([app.db.destroy(), persist.db.destroy()]);
   };
+  const poolsInUse = (): PoolsInUse => ({ app: app.inUse(), persist: persist.inUse() });
 
   try {
     const versionOptions: { allowUntested?: boolean; logger?: DbLogger } = {};
@@ -141,7 +210,18 @@ export async function createDatabaseLayer(options: DatabaseLayerOptions): Promis
       versionOptions.logger = options.logger;
     }
     const serverVersion = await assertMysqlVersionFloor(app.db, versionOptions);
-    return { dbApp: app.db, dbPersist: persist.db, serverVersion, destroy };
+    return {
+      dbApp: app.db,
+      dbPersist: persist.db,
+      serverVersion,
+      poolsInUse,
+      pendingAcquisitions: () => ({
+        app: app.pendingAcquisitions(),
+        persist: persist.pendingAcquisitions(),
+      }),
+      queryCounts: () => ({ app: app.queriesExecuted(), persist: persist.queriesExecuted() }),
+      destroy,
+    };
   } catch (error) {
     await destroy();
     throw error;

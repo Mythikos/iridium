@@ -50,6 +50,8 @@
  * re-searched on other inputs; the ordinary test lanes leave it unset and keep drawing fresh seeds.
  */
 process.env['IRIDIUM_PROP_SEED'] ??= '42';
+// Instrumented large-update properties must finish the same 200 cases; only the deadline widens.
+process.env['IRIDIUM_PROP_INTERRUPT_MS'] ??= '600000';
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
@@ -93,6 +95,8 @@ export default {
     'coverage',
     'test-results',
     'playwright-report',
+    // Historical evidence and sealed checkouts are outputs, never mutation or test inputs.
+    '/reports',
   ],
   // Stryker's default name, and it has to stay a bare directory name: the walk that symlinks
   // `node_modules` into the sandbox skips the temp directory by comparing `tempDirName` against a
@@ -105,6 +109,8 @@ export default {
   incrementalFile: 'tooling/mutation/reports/stryker-incremental.json',
   concurrency: 4,
   timeoutMS: 10000,
+  // The full 200-case property baseline spans all mutation targets before any mutant runs.
+  dryRunTimeoutMinutes: 20,
   thresholds: { high: 90, low: 75, break: 70 },
   reporters: ['progress', 'clear-text', 'html', 'json'],
   htmlReporter: { fileName: 'tooling/mutation/reports/mutation/mutation.html' },

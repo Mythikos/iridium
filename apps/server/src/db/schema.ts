@@ -686,6 +686,35 @@ export interface ServerSettingsTable {
   version: Generated<number>;
 }
 
+/** At-least-once session invalidations; deliberately independent of session-row retention. */
+/** A successful result and its exact session events commit together with the revocation. */
+export type SessionRevocationCommandResult =
+  | {
+      readonly ok: true;
+      readonly users: number;
+      readonly sessions: readonly { readonly userId: string; readonly sessionId: string }[];
+    }
+  | { readonly ok: false };
+
+export interface SessionRevocationCommandsTable {
+  id: Buffer;
+  /** Null selects every user with a live session when the owner executes the command. */
+  user_id: Buffer | null;
+  actor_type: AuditActorType;
+  actor_id: Buffer | null;
+  actor_display: string | null;
+  context: Json<AuditContext>;
+  created_at: Date;
+  result: NullableJson<SessionRevocationCommandResult>;
+  delivered_at: Date | null;
+}
+
+/** The singleton generation changed only by an exclusive collaboration lease claimant. */
+export interface CollabOwnerFenceTable {
+  id: number;
+  generation: Buffer;
+}
+
 export interface SchemaMetaTable {
   key: string;
   value: string;
@@ -726,6 +755,7 @@ export interface Database {
   audit_chain_heads: AuditChainHeadsTable;
   audit_events: AuditEventsTable;
   audit_events_archive: AuditEventsTable;
+  collab_owner_fence: CollabOwnerFenceTable;
   desktop_releases: DesktopReleasesTable;
   export_jobs: ExportJobsTable;
   import_jobs: ImportJobsTable;
@@ -750,6 +780,7 @@ export interface Database {
   schema_meta: SchemaMetaTable;
   server_settings: ServerSettingsTable;
   sessions: SessionsTable;
+  session_revocation_commands: SessionRevocationCommandsTable;
   trash_entries: TrashEntriesTable;
   user_credentials: UserCredentialsTable;
   users: UsersTable;

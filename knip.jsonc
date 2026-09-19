@@ -50,12 +50,7 @@
       "entry": ["src/index.ts!", "src/global/*.ts", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
       "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
       // Declared ahead (see the policy at the top of this file).
-      "ignoreDependencies": [
-        "@iridium/api-client",
-        "@iridium/contracts",
-        "@iridium/crdt",
-        "@modelcontextprotocol/client",
-      ],
+      "ignoreDependencies": ["@iridium/api-client", "@modelcontextprotocol/client"],
     },
     "packages/editor": {
       "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
@@ -95,13 +90,6 @@
     "packages/collab-client": {
       "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
       "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
-      // Declared ahead (see the policy at the top of this file).
-      "ignoreDependencies": [
-        "@hocuspocus/common",
-        "@hocuspocus/provider",
-        "@iridium/contracts",
-        "@iridium/crdt",
-      ],
     },
     "packages/api-client": {
       "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
@@ -158,8 +146,6 @@
     "packages/crdt": {
       "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
       "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
-      // Declared ahead (see the policy at the top of this file).
-      "ignoreDependencies": ["lib0", "y-protocols"],
     },
     "apps/server": {
       "entry": [
@@ -176,29 +162,21 @@
         "tsdown.config.ts",
         "kysely.config.ts",
       ],
-      "project": ["src/**/*.ts!", "migrations/*.ts!", "test/**/*.{ts,js,mjs}"],
-      // `src/ops/openapi.ts` is reached only through `src/index.ts` by the `pnpm gen` OpenAPI export
-      // until M1's rest plugin registers it as its first statement (12-milestones.md §4.3; the
-      // module's own header). Delete this entry with that M1 change.
-      "ignore": ["src/ops/openapi.ts"],
+      // Unit/property doubles remain in normal analysis but are not production roots.
+      "project": [
+        "src/**/*.ts!",
+        "!src/**/testing/**!",
+        "migrations/*.ts!",
+        "test/**/*.{ts,js,mjs}",
+      ],
       "ignoreDependencies": [
         // Declared ahead (see the policy at the top of this file).
         "@aws-sdk/client-s3",
-        "@fastify/csrf-protection",
         "@fastify/multipart",
-        "@fastify/swagger",
-        "@fastify/swagger-ui",
-        "@fastify/websocket",
-        "@hocuspocus/server",
-        "@iridium/crdt",
-        "@iridium/markdown",
         "@modelcontextprotocol/core",
         "@modelcontextprotocol/fastify",
         "@modelcontextprotocol/node",
-        "@modelcontextprotocol/server",
-        "fastify-type-provider-zod",
         "file-type",
-        "rate-limiter-flexible",
         "yauzl",
         "yazl",
         // A command-line tool: `scripts/check-kysely-schema.ts` resolves its bin from this package

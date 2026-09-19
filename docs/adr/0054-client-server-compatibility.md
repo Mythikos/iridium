@@ -32,3 +32,9 @@ Gap fix (no digest section; product expectations in digest §10.2). Implemented 
 ---
 
 Source: docs/plan/13-decision-log.md, decision A54. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).
+
+## M1 amendment (2026-09-18)
+
+The live floor is the committed `schema_meta.min_client_version`, seeded without replacing an existing value by forward migration `0055_min_client_version`. Both discovery and enforcement use the same reader. A well-formed presented client version below the floor receives `426 client_outdated`, whose detail is the current floor, on reads and writes. Absent headers preserve existing non-Iridium callers; malformed explicit headers receive `422 validation_failed`. Authentication and CSRF run first, operational endpoints retain their liveness contracts, and `GET /api/v1/meta` is exempt from refusal so it remains discoverable. `X-Iridium-Api-Version` is sent on early refusals too. The real metadata integration suite observes a committed mid-session floor raise, refusal before a mutation, policy recovery, and the zero-query malformed-credential ordering.
+
+Source: `docs/plan/13-decision-log.md`, M1 independent-review amendments, A54.

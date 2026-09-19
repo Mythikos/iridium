@@ -1,6 +1,6 @@
 # A51 — Testing harnesses: one runner per layer, real infrastructure, one boot path, `@iridium/testkit`
 
-**Status:** Accepted (2026-09-11); the `integration` project's single MySQL image is **superseded in part by A59 (2026-09-12)**: the project runs as a two-entry matrix over `mysql:8.4.11` and `mysql:9.7.2-oraclelinux9`, with an unset `IRIDIUM_MYSQL_IMAGE` resolving to the floor. **Amended 2026-09-13:** the coverage numbers in the Decision below are unchanged, but they are **enforced from the M1 exit onward** rather than at M0 — the root `vitest.config.ts` applies `coverage.thresholds` only when the job sets `IRIDIUM_COVERAGE_GATE=1` and `docs/milestones/CURRENT` is past M0, because M0 deliberately contains the empty stubs of every M1+ boot step and the placeholder packages, so the aggregate would measure stubs and the 100 %-per-file rule on `apps/server/src/authz/**` cannot hold while `route-policy.ts` is reached only by its boot guard. The M0 exit record reports the merged numbers without gating on them, and "a threshold is never lowered" applies from the first exit that enforces them (10-testing-and-quality.md, "Coverage").
+**Status:** Accepted (2026-09-11); the `integration` project's single MySQL image is **superseded in part by A59 (2026-09-12)**: the project runs as a two-entry matrix over `mysql:8.4.11` and `mysql:9.7.2-oraclelinux9`, with an unset `IRIDIUM_MYSQL_IMAGE` resolving to the floor. **Amended 2026-09-13:** the coverage numbers in the Decision below are unchanged, but they are **enforced for the M1 exit and its rehearsals onward** rather than at M0 — the root `vitest.config.ts` applies `coverage.thresholds` only when the job sets `IRIDIUM_COVERAGE_GATE=1` and the effective test target is past M0 (`IRIDIUM_TEST_TARGET_MILESTONE` when set; otherwise the last exited milestone in CURRENT), because the M0 tree deliberately contained the empty stubs of every M1+ boot step and the placeholder packages, so the aggregate would measure stubs and the 100 %-per-file rule on `apps/server/src/authz/**` could not hold while `route-policy.ts` was reached only by its boot guard. CI defaults the target to at least M1 while CURRENT still records M0, so the M1 gate is enforced before the pointer advances. The M0 exit record reports the merged numbers without gating on them, and "a threshold is never lowered" applies from the first exit that enforces them (10-testing-and-quality.md, "Coverage").
 
 ## Context
 
@@ -37,3 +37,11 @@ Digest §8.1–§8.5, §11.21, §2.2 (`SyncStatus` timing), §11.4 (no store ret
 ---
 
 Source: docs/plan/13-decision-log.md, decision A51. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).
+
+## M1 amendment (2026-09-18)
+
+Test forks default to `UV_THREADPOOL_SIZE=8` before Node starts and at most `min(4, availableParallelism())` workers. CI and the mutation child process use the same pool setting; Stryker's worker threads require the environment in their parent before startup. Retry, load-shedding thresholds, property budgets and coverage thresholds remain unchanged.
+
+The requested target milestone governs due names and exit coverage before `CURRENT` changes. CI defaults to M1 while `CURRENT` still names M0 and refuses to target an earlier milestone than the last exited one. Every scheduled name in the complete acceptance inventory must identify a selected, correctly tagged suite; unexplained unscheduled rows are rejected. A fresh mutation proof must distinguish newly executed mutants from reused results and retain its actual input provenance.
+
+Source: `docs/plan/13-decision-log.md`, M1 independent-review amendments, A51 and D10/D12.

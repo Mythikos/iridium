@@ -1,3 +1,9 @@
+# Archived S6 evidence
+
+The temporary S1/S2-backed load driver was retired with the M1 kernel (D12-5). Its recorded results
+remain in `results/`; the production writer, reconnect, backpressure and durability suites now use
+`@iridium/testkit` against the real server and MySQL. The commands below describe the historical run.
+
 # Spike S6 harness — k6 2.2.0 with a bundled Yjs client
 
 The question is in `docs/plan/12-milestones.md` §4.4 and `docs/plan/14-risks-and-open-questions.md`

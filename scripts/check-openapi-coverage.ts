@@ -6,7 +6,7 @@
  * The rule is 10-testing-and-quality.md, "REST — OpenAPI contract" and decision D10-10: every
  * documented `(operationId, status)` pair must be exercised somewhere in the `integration` +
  * `contract` run. `apps/server/test/contract/openapi.coverage.contract.spec.ts` records each pair a
- * test asserted, its workers write to a shared file, and this script aggregates them in
+ * test validated, its recorders write separate files, and this script aggregates them in
  * `merge-reports` — the one job that sees every lane.
  *
  * That makes the OpenAPI document honest in **both** directions. The `static` job's Redocly lint and
@@ -18,28 +18,33 @@
  *
  * ## At M0 there are no operations, and that passes
  *
- * `packages/contracts/openapi/openapi.json` is generated from the server's own route table and
- * currently declares zero paths. Zero documented pairs means zero uncovered pairs, so the check
+ * `packages/contracts/openapi/openapi.json` is generated from the server's own route table. At M0 it
+ * declares zero paths. Zero documented pairs means zero uncovered pairs, so the check
  * passes and says so. It starts biting at M1, the milestone the inventory row gives
  * `openapi.coverage.contract` — with no edit here, because the rule is a comparison and not a list.
  *
  * ## Where the exercised pairs come from
  *
  * `reports/openapi-coverage/*.json`, each file `{ "pairs": [{ "operationId": …, "status": … }] }`,
- * one per worker. The directory is overridable with `IRIDIUM_TEST_OPENAPI_COVERAGE_REPORTS`, which
+ * one per recorder. The directory is overridable with `IRIDIUM_TEST_OPENAPI_COVERAGE_REPORTS`, which
  * mirrors `IRIDIUM_TEST_HOST_CONTRACT_REPORTS` in the same job: the plan fixes the mechanism ("a
  * shared JSON file that the `merge-reports` job aggregates") and not the path, so the path follows
  * the convention the neighbouring check already established — a directory under `reports/`, one file
  * per writer, because concurrent Vitest workers cannot share one file without losing records.
  *
- * `default` responses are not pairs. A `default` is the shape of *whatever else* an operation can
- * return, so "exercising the default" names no status a test could assert; every concrete status
- * beside it is in the list.
+ * Every explicit non-default response key needs an observation that selected that schema. Selection
+ * follows the oracle's exact, range, then default precedence: an exact 200 does not cover a declared
+ * 2XX, while a 201 selected through 2XX does. Default observations remain visible without creating a
+ * finite coverage requirement or satisfying any explicit key.
+ *
+ * Usage: `node scripts/check-openapi-coverage.ts [--document <path>]`. The explicit document input
+ * lets contract fixtures exercise this same CLI; CI uses the committed generated document.
  */
 import { readFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 import {
+  EnvironmentError,
   finding,
   repoPath,
   runAsMain,
@@ -70,7 +75,25 @@ function reportsDirectory(): string {
   return isAbsolute(configured) ? configured : join(REPO_ROOT, configured);
 }
 
-/** One documented `(operationId, status)` pair, with where it is documented. */
+function documentPath(argv: readonly string[]): string {
+  if (argv.length === 0) return ARTEFACTS.openapi;
+  const candidate = argv[1];
+  if (
+    argv.length !== 2 ||
+    argv[0] !== '--document' ||
+    candidate === undefined ||
+    candidate.trim() === '' ||
+    candidate.startsWith('--')
+  ) {
+    throw new EnvironmentError(
+      'Usage: node scripts/check-openapi-coverage.ts [--document <path>]. ' +
+        'Omit the option to check the committed OpenAPI document.',
+    );
+  }
+  return resolve(REPO_ROOT, candidate);
+}
+
+/** One explicit `(operationId, status)` response key, including ranges, and its location. */
 interface Pair {
   readonly operationId: string;
   readonly status: string;
@@ -80,16 +103,18 @@ interface Pair {
 
 interface Document {
   readonly pairs: readonly Pair[];
+  readonly responses: ReadonlyMap<string, ReadonlySet<string>>;
   /** Operations with no `operationId`, which cannot be covered by name. */
   readonly unnamed: readonly { readonly path: string; readonly method: string }[];
 }
 
-function readDocument(): Document {
-  const parsed = parseJson(readFileSync(ARTEFACTS.openapi, 'utf8'));
+function readDocument(inputPath: string): Document {
+  const parsed = parseJson(readFileSync(inputPath, 'utf8'));
   const paths = isRecord(parsed) ? parsed['paths'] : undefined;
   const pairs: Pair[] = [];
+  const responseKeys = new Map<string, ReadonlySet<string>>();
   const unnamed: { path: string; method: string }[] = [];
-  if (!isRecord(paths)) return { pairs, unnamed };
+  if (!isRecord(paths)) return { pairs, responses: responseKeys, unnamed };
 
   for (const [path, item] of Object.entries(paths)) {
     if (!isRecord(item)) continue;
@@ -103,6 +128,7 @@ function readDocument(): Document {
       }
       const responses = operation['responses'];
       if (!isRecord(responses)) continue;
+      responseKeys.set(operationId, new Set(Object.keys(responses)));
       for (const status of Object.keys(responses)) {
         if (status.toLowerCase() === 'default') continue;
         pairs.push({ operationId, status, path, method });
@@ -113,6 +139,7 @@ function readDocument(): Document {
     pairs: pairs.toSorted(
       (a, b) => a.operationId.localeCompare(b.operationId) || a.status.localeCompare(b.status),
     ),
+    responses: responseKeys,
     unnamed: unnamed.toSorted(
       (a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method),
     ),
@@ -158,18 +185,58 @@ function readExercised(directory: string): Exercised {
   return { pairs, files: files.length, unreadable };
 }
 
+interface ObservationClassification {
+  readonly covered: ReadonlySet<string>;
+  readonly exact: readonly string[];
+  readonly range: readonly string[];
+  readonly fallback: readonly string[];
+  readonly unmatched: readonly string[];
+}
+
+function classifyObservations(
+  document: Document,
+  exercised: ReadonlySet<string>,
+): ObservationClassification {
+  const covered = new Set<string>();
+  const exact: string[] = [];
+  const range: string[] = [];
+  const fallback: string[] = [];
+  const unmatched: string[] = [];
+  for (const pair of [...exercised].toSorted()) {
+    const separator = pair.lastIndexOf(' ');
+    const operationId = pair.slice(0, separator);
+    const status = pair.slice(separator + 1);
+    const responses = document.responses.get(operationId);
+    if (responses === undefined || !/^[1-5][0-9]{2}$/.test(status)) {
+      unmatched.push(pair);
+    } else if (responses.has(status)) {
+      exact.push(pair);
+      covered.add(pair);
+    } else if (responses.has(`${status[0]}XX`)) {
+      range.push(pair);
+      covered.add(`${operationId} ${status[0]}XX`);
+    } else if (responses.has('default')) {
+      fallback.push(pair);
+    } else {
+      unmatched.push(pair);
+    }
+  }
+  return { covered, exact, range, fallback, unmatched };
+}
+
 export const check: Check = {
   name: 'check-openapi-coverage',
   workflow: 'ci.yml › merge-reports › `OpenAPI operation coverage`',
   owns: '10-testing-and-quality.md, "REST — OpenAPI contract" (D10-10)',
-  run(): CheckResult {
+  run(argv: readonly string[]): CheckResult {
     const findings: Finding[] = [];
     const details: string[] = [];
+    const openapiPath = documentPath(argv);
 
-    if (!isFile(ARTEFACTS.openapi)) {
+    if (!isFile(openapiPath)) {
       findings.push(
         finding(
-          ARTEFACTS.openapi,
+          openapiPath,
           'the OpenAPI document does not exist, so nothing can be compared against it.',
           "run `pnpm gen` to regenerate it from the server's route table.",
         ),
@@ -177,13 +244,13 @@ export const check: Check = {
       return { summary: 'the OpenAPI document is missing.', findings };
     }
 
-    const document = readDocument();
+    const document = readDocument(openapiPath);
     const directory = reportsDirectory();
     const exercised = readExercised(directory);
 
     details.push(
-      `${String(document.pairs.length)} documented (operationId, status) pair(s) in ` +
-        `${repoPath(ARTEFACTS.openapi)}.`,
+      `${String(document.pairs.length)} documented non-default (operationId, status) pair(s) in ` +
+        `${repoPath(openapiPath)}.`,
     );
     if (isDirectory(directory)) {
       details.push(
@@ -200,7 +267,7 @@ export const check: Check = {
     for (const operation of document.unnamed) {
       findings.push(
         finding(
-          ARTEFACTS.openapi,
+          openapiPath,
           `\`${operation.method.toUpperCase()} ${operation.path}\` has no \`operationId\`, so no test can ` +
             'record covering it.',
           'give the route an `operationId` in its Fastify schema and run `pnpm gen`; coverage is keyed on ' +
@@ -220,13 +287,14 @@ export const check: Check = {
       );
     }
 
+    const observations = classifyObservations(document, exercised.pairs);
     const uncovered = document.pairs.filter(
-      (pair) => !exercised.pairs.has(`${pair.operationId} ${pair.status}`),
+      (pair) => !observations.covered.has(`${pair.operationId} ${pair.status}`),
     );
     for (const pair of uncovered) {
       findings.push(
         finding(
-          ARTEFACTS.openapi,
+          openapiPath,
           `\`${pair.operationId}\` documents a ${pair.status} response ` +
             `(\`${pair.method.toUpperCase()} ${pair.path}\`) that no test in the integration or contract ` +
             'run exercised.',
@@ -236,14 +304,25 @@ export const check: Check = {
       );
     }
 
-    // Recorded pairs the document does not describe are a drift signal in the other direction: the
-    // test asserted something the document has since dropped or renamed.
-    const documented = new Set(document.pairs.map((pair) => `${pair.operationId} ${pair.status}`));
-    const stale = [...exercised.pairs].filter((pair) => !documented.has(pair)).toSorted();
-    if (stale.length > 0) {
+    details.push(
+      `${String(observations.exact.length)} recorded pair(s) match an exact response status.`,
+    );
+    if (observations.range.length > 0) {
       details.push(
-        `${String(stale.length)} recorded pair(s) are not in the document any more: ${stale.join(', ')}. ` +
-          'The document is the authority; a stale record means an operation was renamed or removed.',
+        `${String(observations.range.length)} recorded pair(s) match a response range: ` +
+          `${observations.range.join(', ')}. These do not cover other concrete statuses.`,
+      );
+    }
+    if (observations.fallback.length > 0) {
+      details.push(
+        `${String(observations.fallback.length)} recorded pair(s) match a default response: ` +
+          `${observations.fallback.join(', ')}. These do not cover other concrete statuses.`,
+      );
+    }
+    if (observations.unmatched.length > 0) {
+      details.push(
+        `${String(observations.unmatched.length)} recorded pair(s) have no matching operation/response: ` +
+          `${observations.unmatched.join(', ')}. Check for removed operations or response declarations.`,
       );
     }
 
@@ -251,7 +330,7 @@ export const check: Check = {
       summary:
         findings.length === 0
           ? document.pairs.length === 0
-            ? 'the OpenAPI document declares no operations yet; nothing to cover.'
+            ? 'the OpenAPI document declares no non-default response keys; nothing to cover.'
             : `all ${String(document.pairs.length)} documented (operationId, status) pair(s) were exercised.`
           : `${String(uncovered.length)} of ${String(document.pairs.length)} documented ` +
             '(operationId, status) pair(s) were never exercised.',

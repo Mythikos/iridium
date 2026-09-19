@@ -66,6 +66,8 @@ export const test = base.extend<DesktopFixtures>({
     const userData = await mkdtemp(path.join(tmpdir(), 'iridium-e2e-'));
     const electronApp = await _electron.launch({
       executablePath: electronBinary,
+      // Playwright otherwise adds --no-sandbox on Linux, overriding the hardened shell.
+      chromiumSandbox: true,
       // `.` so Electron reads `apps/desktop/package.json`, exactly as `electron .` does — which is
       // what makes `app.getVersion()` and `app.getAppPath()` report what a packaged build reports.
       args: ['.'],

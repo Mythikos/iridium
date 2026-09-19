@@ -11,7 +11,9 @@
 
 import { z } from 'zod';
 
+import { hasLoneSurrogate } from './paths.ts';
 import type { EnumOf } from './schema.ts';
+import { AUDIT_TIMESTAMP_PATTERN } from './time.ts';
 
 /** The closed `audit_events.action` vocabulary, grouped as 03-data-model.md groups it. */
 export const AUDIT_ACTIONS = [
@@ -294,3 +296,189 @@ export const OAUTH_ACCESS_LOG_ACTIONS = [
 
 /** An authorization-server `access_log.action`. */
 export type OAuthAccessLogAction = (typeof OAUTH_ACCESS_LOG_ACTIONS)[number];
+
+// ---------------------------------------------------------------------------------------------
+// The hashed row shape and its canonicalisation
+// ---------------------------------------------------------------------------------------------
+
+/** `audit_events.schema_version` for rows this version writes. */
+export const AUDIT_SCHEMA_VERSION = 1;
+
+/** The `prev_hash` of a chain's first row: 32 zero bytes (03-data-model.md section 12.2). */
+export const GENESIS_CHAIN_HASH: Uint8Array = new Uint8Array(32);
+
+/**
+ * Exactly what the chain hashes (03-data-model.md section 12.2). Field names are the column names,
+ * because the pre-image is taken over the row rather than over a wire body, and `prev_id` is inside
+ * the payload while `id` is not: `id` is assigned by `AUTO_INCREMENT` after the pre-image is
+ * computed, so including the predecessor's id instead is what binds a row to a position in its
+ * chain and makes a deletion or a re-ordering detectable.
+ *
+ * Binary ids are canonical lowercase UUID strings and timestamps carry six fractional digits, so a
+ * row read back from MySQL canonicalises to the same bytes the writer hashed. A field that is
+ * absent is omitted from the JSON rather than serialised as `null` — which is why every optional
+ * member here is `?` and not `| null`.
+ */
+export interface AuditChainPayload {
+  /** `audit_chain_heads.last_id` under the row lock; `0` for a chain's first row. */
+  readonly prev_id: number;
+  /** `YYYY-MM-DDTHH:MM:SS.ffffffZ` (`AUDIT_TIMESTAMP_PATTERN`). */
+  readonly occurred_at: string;
+  readonly schema_version: number;
+  readonly chain_id: string;
+  readonly action: AuditAction;
+  readonly actor_type: AuditActorType;
+  readonly actor_id?: string;
+  readonly actor_display?: string;
+  readonly on_behalf_of_user_id?: string;
+  readonly credential_type: AuditCredentialType;
+  readonly credential_id?: string;
+  readonly vault_id?: string;
+  readonly target_type?: string;
+  readonly target_id?: string;
+  readonly targets?: readonly AuditTarget[];
+  readonly outcome: AuditOutcome;
+  readonly reason?: string;
+  /** `{ip, user_agent, request_id, client, mcp_client}`; always present, never `null`. */
+  readonly context: CanonicalObject;
+  /** Before/after values of non-content fields only; never a note body. */
+  readonly metadata?: CanonicalObject;
+}
+
+/** A value `canonicalJson` can serialise. */
+export type CanonicalValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly CanonicalValue[]
+  | CanonicalObject;
+
+/** An object `canonicalJson` can serialise. An `undefined` member is omitted, never emitted. */
+export interface CanonicalObject {
+  readonly [key: string]: CanonicalValue | undefined;
+}
+
+/**
+ * Thrown when a value cannot be canonicalised. It names the path and states the remedy, because the
+ * only way to hit it is a payload the caller built wrongly — and a silently coerced value would
+ * produce a hash that a later verification cannot reproduce.
+ */
+export class AuditCanonicalError extends Error {
+  /** The dotted path of the offending value, `''` for the root. */
+  readonly path: string;
+
+  constructor(path: string, problem: string, remedy: string) {
+    super(`cannot canonicalise ${path === '' ? 'the payload' : path}: ${problem}. ${remedy}`);
+    this.name = 'AuditCanonicalError';
+    this.path = path;
+  }
+}
+
+const CONTROL_ESCAPES: Readonly<Record<number, string>> = {
+  0x08: String.raw`\b`,
+  0x09: String.raw`\t`,
+  0x0a: String.raw`\n`,
+  0x0c: String.raw`\f`,
+  0x0d: String.raw`\r`,
+};
+
+const HEX_ESCAPE_WIDTH = 4;
+/** One reverse solidus, named so the escaping below reads as the two characters it emits. */
+const BACKSLASH = '\\';
+const FIRST_PRINTABLE = 0x20;
+
+/** RFC 8785 section 3.2.2.2 string serialisation: the two mandatory escapes, then the short forms. */
+function canonicalString(value: string, path: string): string {
+  if (hasLoneSurrogate(value)) {
+    throw new AuditCanonicalError(
+      path,
+      'the string contains an unpaired surrogate, so it has no UTF-8 encoding',
+      'Replace it with U+FFFD before the row is written; the hash is taken over UTF-8 bytes.',
+    );
+  }
+  let out = '"';
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (character === '"') out += String.raw`\"`;
+    else if (character === BACKSLASH) out += `${BACKSLASH}${BACKSLASH}`;
+    else if (code < FIRST_PRINTABLE) {
+      out +=
+        CONTROL_ESCAPES[code] ??
+        `${BACKSLASH}u${code.toString(16).padStart(HEX_ESCAPE_WIDTH, '0')}`;
+    } else out += character;
+  }
+  return `${out}"`;
+}
+
+/** RFC 8785 section 3.2.2.3: the ECMAScript shortest round-trip form, which `JSON.stringify` emits. */
+function canonicalNumber(value: number, path: string): string {
+  if (!Number.isFinite(value)) {
+    throw new AuditCanonicalError(
+      path,
+      `${String(value)} is not a finite number and RFC 8785 has no serialisation for it`,
+      'Record the quantity as a string, or omit it.',
+    );
+  }
+  return JSON.stringify(value);
+}
+
+/** `Array.isArray` alone does not narrow a readonly array out of the union, so the guard is named. */
+function isCanonicalArray(value: CanonicalValue): value is readonly CanonicalValue[] {
+  return Array.isArray(value);
+}
+
+function canonicalise(value: CanonicalValue, path: string): string {
+  if (value === null) return 'null';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return canonicalNumber(value, path);
+  if (typeof value === 'string') return canonicalString(value, path);
+  if (isCanonicalArray(value)) {
+    const items = value.map((item, index) => canonicalise(item, `${path}[${String(index)}]`));
+    return `[${items.join(',')}]`;
+  }
+  // An object: sorted by key over UTF-16 code units, which is what `sort()` compares strings by.
+  const keys = Object.keys(value).filter((key) => value[key] !== undefined);
+  keys.sort();
+  const members = keys.map((key) => {
+    // The filter above dropped every absent member, so `?? null` is unreachable and is here only
+    // because index access yields `T | undefined` under `noUncheckedIndexedAccess`.
+    const member = value[key] ?? null;
+    const serialised = canonicalise(member, path === '' ? key : `${path}.${key}`);
+    return `${canonicalString(key, path)}:${serialised}`;
+  });
+  return `{${members.join(',')}}`;
+}
+
+/**
+ * RFC 8785 (JSON Canonicalization Scheme): keys sorted by UTF-16 code unit, no insignificant
+ * whitespace, shortest round-trip numbers, absent members omitted. The audit chain and
+ * `iridium audit verify-chain` both hash the output of this function, and the audit export re-emits
+ * it byte for byte, so it lives here rather than in either of them.
+ */
+export function canonicalJson(value: CanonicalValue): string {
+  return canonicalise(value, '');
+}
+
+/**
+ * The bytes `HMAC-SHA256(key, prev_hash ‖ …)` covers for one row. The HMAC itself belongs to the
+ * server, which has `node:crypto`; the pre-image is a pure function of the row and is shared by the
+ * writer, the verifier and the export.
+ */
+export function auditChainPreimage(payload: AuditChainPayload): string {
+  if (!AUDIT_TIMESTAMP_PATTERN.test(payload.occurred_at)) {
+    throw new AuditCanonicalError(
+      'occurred_at',
+      `'${payload.occurred_at}' is not YYYY-MM-DDTHH:MM:SS.ffffffZ`,
+      'Format it with toTimestamp(); a second spelling of one instant is a second hash.',
+    );
+  }
+  if (!ChainId.safeParse(payload.chain_id).success) {
+    throw new AuditCanonicalError(
+      'chain_id',
+      `'${payload.chain_id}' is neither 'server' nor 'vault:<32 lowercase hex>'`,
+      'Build it with chainIdForVault(); a second spelling of one chain forks it.',
+    );
+  }
+  return canonicalJson({ ...payload });
+}

@@ -53,6 +53,9 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
-    "@iridium/tsconfig": "workspace:*"
+    "@fast-check/vitest": "catalog:",
+    "@iridium/tsconfig": "workspace:*",
+    "fast-check": "catalog:",
+    "vitest": "catalog:"
   }
 }

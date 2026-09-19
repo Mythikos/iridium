@@ -11,12 +11,6 @@
  * entry point.
  */
 
-export {
-  commandRegistry,
-  type CommandBinding,
-  type CommandContext,
-  type CommandRegistry,
-} from './commands/registry.ts';
 export { HostError } from './host.ts';
 export type {
   ApiRequest,

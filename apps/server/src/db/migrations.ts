@@ -64,6 +64,13 @@ import * as m0045 from '../../migrations/0045_oauth_refresh_tokens_grants.ts';
 import * as m0046 from '../../migrations/0046_access_tokens_oauth_columns.ts';
 import * as m0047 from '../../migrations/0047_access_tokens_oauth_indexes.ts';
 import * as m0048 from '../../migrations/0048_access_log_oauth_client.ts';
+import * as m0049 from '../../migrations/0049_admin_users_lock.ts';
+import * as m0050 from '../../migrations/0050_session_revocation_commands.ts';
+import * as m0051 from '../../migrations/0051_session_revocation_commands_grants.ts';
+import * as m0052 from '../../migrations/0052_collab_owner_fence.ts';
+import * as m0053 from '../../migrations/0053_collab_owner_fence_grants.ts';
+import * as m0054 from '../../migrations/0054_grants_provenance.ts';
+import * as m0055 from '../../migrations/0055_min_client_version.ts';
 
 /** Every migration of 03-data-model.md section 14.1, in apply order. */
 export const MIGRATIONS: Readonly<Record<string, Migration>> = Object.freeze({
@@ -115,6 +122,13 @@ export const MIGRATIONS: Readonly<Record<string, Migration>> = Object.freeze({
   '0046_access_tokens_oauth_columns': m0046,
   '0047_access_tokens_oauth_indexes': m0047,
   '0048_access_log_oauth_client': m0048,
+  '0049_admin_users_lock': m0049,
+  '0050_session_revocation_commands': m0050,
+  '0051_session_revocation_commands_grants': m0051,
+  '0052_collab_owner_fence': m0052,
+  '0053_collab_owner_fence_grants': m0053,
+  '0054_grants_provenance': m0054,
+  '0055_min_client_version': m0055,
 });
 
 /** The names `/readyz` compares against `kysely_migration`, in apply order. */

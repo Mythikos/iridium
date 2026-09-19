@@ -7,6 +7,9 @@
 import type { TestEnvMysql } from '../env/start-test-env.ts';
 
 export interface ProvidedToxiproxy {
+  /** Bind a child server here to exercise the portable host-to-container WebSocket proxy. */
+  readonly collabServerPort: number;
+  readonly collabProxy: { readonly host: string; readonly port: number };
   /** The Toxiproxy control API, e.g. `http://127.0.0.1:32773`; `connectToxiproxy` takes it. */
   readonly controlUrl: string;
   /** The `mysql` proxy's listener, which is what a degraded `DATABASE_URL` points at. */

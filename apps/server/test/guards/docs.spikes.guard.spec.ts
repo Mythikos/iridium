@@ -265,7 +265,9 @@ function readTemplateHeadings(): readonly string[] {
 }
 
 function readCurrentMilestone(): number {
-  const text = readFileSync(CURRENT_MILESTONE_FILE, 'utf8').trim();
+  const text = (
+    process.env['IRIDIUM_TEST_TARGET_MILESTONE'] ?? readFileSync(CURRENT_MILESTONE_FILE, 'utf8')
+  ).trim();
   const digits = /^M(\d+)$/.exec(text)?.[1];
   if (digits === undefined) {
     throw new Error(`docs/milestones/CURRENT holds ${JSON.stringify(text)}, not an \`M<n>\` line.`);

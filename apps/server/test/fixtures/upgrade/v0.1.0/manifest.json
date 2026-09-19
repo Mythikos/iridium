@@ -1,0 +1,113 @@
+{
+  "format": "iridium-upgrade-fixture/1",
+  "milestone": "M1",
+  "version": "v0.1.0",
+  "generated_at": "2026-09-19T10:32:11.223Z",
+  "dataset": "seed.kernel",
+  "mysql_line": "8.4",
+  "mysql_version": "8.4.11",
+  "mysql_client": "mysqldump  Ver 9.7.2 for Linux on x86_64 (MySQL Community Server - GPL)",
+  "dump": {
+    "file": "dump.sql.gz",
+    "compression": "gzip",
+    "bytes": 19024,
+    "sha256": "d1922c1197a3b4593a42aa5fb7aadf2f5eae2b1b3fd367c243251baea84da1d9",
+    "argv": [
+      "--single-transaction",
+      "--hex-blob",
+      "--max-allowed-packet=1G",
+      "--routines",
+      "--events",
+      "--skip-triggers",
+      "--set-gtid-purged=OFF",
+      "--source-data=2",
+      "--default-character-set=utf8mb4",
+      "--databases",
+      "iridium"
+    ],
+    "role": "iridium_backup",
+    "restored_with_shipped_mysql": true
+  },
+  "counts": {
+    "users": 6,
+    "user_credentials": 6,
+    "password_setup_tokens": 6,
+    "sessions": 1,
+    "session_revocation_commands": 0,
+    "login_throttle": 0,
+    "access_tokens": 0,
+    "access_token_vaults": 0,
+    "oauth_clients": 0,
+    "oauth_consents": 0,
+    "oauth_consent_vaults": 0,
+    "oauth_authorization_codes": 0,
+    "oauth_refresh_tokens": 0,
+    "vaults": 1,
+    "vault_members": 4,
+    "nodes": 2,
+    "trash_entries": 0,
+    "notes": 1,
+    "collab_owner_fence": 1,
+    "note_docs": 1,
+    "note_projections": 1,
+    "note_search": 0,
+    "note_links": 0,
+    "attachments": 0,
+    "jobs": 0,
+    "import_jobs": 0,
+    "export_jobs": 0,
+    "server_settings": 0,
+    "schema_meta": 47,
+    "desktop_releases": 0,
+    "note_updates": 1,
+    "note_revisions": 1,
+    "audit_chain_heads": 2,
+    "audit_events": 75,
+    "audit_events_archive": 0,
+    "access_log": 0,
+    "kysely_migration": 55,
+    "kysely_migration_lock": 1
+  },
+  "counts_provenance": "unmodified dump restored into an isolated same-line schema",
+  "attachments": {
+    "count": 0,
+    "bytes": 0,
+    "files": []
+  },
+  "kernel": {
+    "vault_id": "01a0b939-12ca-7336-a5cc-c1ecb6631f4f",
+    "note_id": "01a0b939-12fe-74a5-a082-9d7ab7881277",
+    "markdown": "⟦IMPORT-MARK⟧ kernel note\n",
+    "users": [
+      {
+        "id": "01a0b939-1229-73d0-a490-3107fb7d87b5",
+        "email": "admin@iridium.test"
+      },
+      {
+        "id": "01a0b939-1294-7bd1-b6b5-232888d9bd1d",
+        "email": "editorA@iridium.test"
+      },
+      {
+        "id": "01a0b939-1294-7bd2-9d4b-a56c33a58b9d",
+        "email": "editorB@iridium.test"
+      },
+      {
+        "id": "01a0b939-1298-7880-acfd-8bf2b9513bc7",
+        "email": "editorC@iridium.test"
+      },
+      {
+        "id": "01a0b939-1298-7881-a432-f1816775e7d1",
+        "email": "viewer@iridium.test"
+      },
+      {
+        "id": "01a0b939-1298-7882-947f-e533aeb9000f",
+        "email": "outsider@iridium.test"
+      }
+    ]
+  },
+  "fixture_keys": {
+    "AUTH_PASSWORD_PEPPER": "test-pepper-not-a-secret",
+    "AUDIT_HMAC_KEY": "test-audit-not-a-secret",
+    "MCP_CURSOR_KEY": "test-cursor-not-a-secret"
+  }
+}

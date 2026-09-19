@@ -36,7 +36,8 @@ declare module 'fastify' {
   }
 }
 
-const CLIENT_VERSION_MAX_LENGTH = 64;
+/** Maximum wire and durable compatibility-version length; the metadata contract has the same cap. */
+export const CLIENT_VERSION_MAX_LENGTH = 64;
 
 function headerValue(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name];

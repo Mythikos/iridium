@@ -76,7 +76,6 @@ console.warn = intercept(originalWarn);
  * asserts the content and not merely that a refusal happened. `iridium doctor --yjs-instances`
  * prints the same list from M1.
  *
- * @internal
  */
 export function capturedYjsWarnings(): readonly string[] {
   return [...captured];
@@ -88,7 +87,6 @@ export function capturedYjsWarnings(): readonly string[] {
  * `deps.single-instance.guard` reads it to pin the meaning of the global: the guard is worthless if
  * the key Yjs sets ever stops being the thing this module watches for.
  *
- * @internal
  */
 export function yjsIsLoaded(): boolean {
   return YJS_GLOBAL_KEY in globalThis;

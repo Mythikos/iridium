@@ -41,3 +41,9 @@ Digest §8.2 (Stryker 10, TS 7 API), §11.19, §11.21; plan-risk-first §9 harne
 ---
 
 Source: docs/plan/13-decision-log.md, decision A2. This file is a faithful copy of that entry's Status, Context, Decision, Alternatives considered, Consequences, Verification and References fields; the decision log remains the authoritative, continuously-maintained record (status supersessions are recorded there first).
+
+## M1 report-isolation amendment (2026-09-18)
+
+Stryker's project walker does not consult `.gitignore`; root `reports/` is excluded explicitly because it contains generated evidence and sealed historical checkouts. The installed walker comparison confirms that this changes neither configured mutation sources nor selected unit tests. The configured mutate globs, thresholds, concurrency and deadlines remain unchanged. The fresh full-scope runner starts with no input cache and proves zero reused results; its written incremental file is retained as output evidence.
+
+Source: `docs/plan/13-decision-log.md`, M1 independent-review amendments, D10 mutation report isolation.

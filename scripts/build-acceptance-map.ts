@@ -63,7 +63,7 @@ import {
 import { readMilestoneIndex, type MilestoneIndex } from './lib/milestone-index.ts';
 import { ARTEFACTS, CURRENT_MILESTONE_FILE, PLAN_DOCUMENTS } from './lib/paths.ts';
 import { runAsMain, type Step, type StepContext, type StepResult } from './lib/step.ts';
-import { earlierMilestone, isTestName, layerOf } from './lib/test-names.ts';
+import { earlierMilestone, inventoryMilestone, isTestName, layerOf } from './lib/test-names.ts';
 import { writeJsonOrCompare } from './lib/write.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -791,8 +791,10 @@ function readInventory(
         // only place some tests are scheduled at all - `crdt.insert-chunking.prop` carries `**M0**`
         // here and 12-milestones.md §4.3 names neither it nor `insertChunked`, which that section
         // records as a correction due there.
-        const inlineMilestone = /\*\*(M\d)\*\*/.exec(asserts ?? '')?.[1];
-        if (inlineMilestone !== undefined) claimMilestone(name, inlineMilestone);
+        const inlineMilestone = inventoryMilestone(asserts ?? '');
+        if (inlineMilestone !== undefined) {
+          for (const sibling of names) claimMilestone(sibling, inlineMilestone);
+        }
 
         const projectCell = cellByHeader(group.table, row, [
           'Project',
@@ -946,6 +948,8 @@ export interface AcceptanceMap {
   readonly description: string;
   readonly currentMilestone: string;
   readonly milestones: readonly string[];
+  /** Every explicitly named milestone exit test, including tests outside acceptance rows. */
+  readonly exitCriteria: Readonly<Record<string, readonly string[]>>;
   readonly entries: readonly MapEntry[];
   readonly rows: readonly { rowId: string; title: string; greenAt: string }[];
   readonly hardProperties: readonly HardProperty[];
@@ -990,28 +994,30 @@ export function buildMap(): { map: AcceptanceMap; gaps: MapGaps } {
   const { rules, entries: ruleEntries } = readRules(sections);
   const rowMapEntries = rows.flatMap((row) => rowEntries(row));
 
-  /**
-   * The milestone a test is due at, from every source that states one.
-   *
-   * 12-milestones.md is the primary source, but it does not name every test: `collab.revocation-race.chaos`,
-   * for instance, appears in no exit-criteria table, while 10's own overview schedules it through row
-   * 5's `L5@M1`. Both the overview and the rules table pair a layer with a milestone, so each of a
-   * row's or rule's tests at that layer inherits it. The earliest claim wins.
-   */
+  /** Explicit test schedules take precedence over the enclosing area's layer schedule. */
   const claims = new Map<string, string>();
-  const claim = (name: string, milestone: string): void => {
-    const existing = claims.get(name);
-    claims.set(name, existing === undefined ? milestone : earlierMilestone(existing, milestone));
-  };
-  for (const [name, value] of milestones.byTest) claim(name, value.milestone);
-  for (const entry of [...rowMapEntries, ...ruleEntries]) {
-    for (const test of entry.tests) claim(test, entry.sinceMilestone);
-  }
-  // 15-requirements-traceability.md fills gaps only; see `fallbackByTest` for why it is not a peer.
+  for (const [name, value] of milestones.byTest) claims.set(name, value.milestone);
+  // Traceability fills only tests absent from 12. A row spanning several milestones must schedule
+  // its individual tests in 12; an area's M1 proof does not pull its M2 search proof into M1.
   for (const [name, value] of milestones.fallbackByTest) {
     if (!claims.has(name)) claims.set(name, value.milestone);
   }
+  const explicit = new Set(claims.keys());
+  const claim = (name: string, milestone: string): void => {
+    if (explicit.has(name)) return;
+    const existing = claims.get(name);
+    claims.set(name, existing === undefined ? milestone : earlierMilestone(existing, milestone));
+  };
+  for (const entry of [...rowMapEntries, ...ruleEntries]) {
+    for (const test of entry.tests) claim(test, entry.sinceMilestone);
+  }
   const milestoneOf = (name: string): string | undefined => claims.get(name);
+
+  // Guards have their own inventory table; its assertion carries the same explicit schedule syntax.
+  for (const guard of readGuards(sections)) {
+    const declared = inventoryMilestone(guard.asserts);
+    if (declared !== undefined) claim(guard.name, declared);
+  }
 
   const inventory = readInventory(sections, milestoneOf, claim);
 
@@ -1072,6 +1078,7 @@ export function buildMap(): { map: AcceptanceMap; gaps: MapGaps } {
       'key of it.',
     currentMilestone,
     milestones: milestones.milestones,
+    exitCriteria: Object.fromEntries(milestones.exitCriteria),
     entries,
     rows: rows.map((row) => ({ rowId: row.rowId, title: row.title, greenAt: row.greenAt })),
     hardProperties: readHardProperties(sections),
@@ -1121,10 +1128,20 @@ export const step: Step = {
   run(context: StepContext): Promise<StepResult> {
     const { map, gaps } = buildMap();
     const milestones = readMilestoneIndex();
-    const problems = assertM0ExitCriteria(map, milestones);
+    const excluded = new Map(map.postOnePointZero.map((entry) => [entry.name, entry]));
+    const unscheduled = Object.entries(map.tests)
+      .filter(([name, record]) => {
+        if (record.sinceMilestone !== null) return false;
+        const exclusion = excluded.get(name);
+        return (
+          exclusion === undefined || exclusion.epic.trim() === '' || exclusion.asserts.trim() === ''
+        );
+      })
+      .map(([name]) => `${name}: no milestone and no explained post-1.0 exclusion`);
+    const problems = [...assertM0ExitCriteria(map, milestones), ...unscheduled];
     if (problems.length > 0) {
       throw new Error(
-        'docs/acceptance-map.json does not cover 12-milestones.md §4.6 (M0 exit criteria):\n' +
+        'docs/acceptance-map.json has unresolved milestone requirements:\n' +
           problems.map((problem) => `  ${problem}`).join('\n'),
       );
     }

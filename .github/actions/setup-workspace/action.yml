@@ -48,6 +48,26 @@ runs:
         node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
         cache: pnpm
 
+    # CURRENT is the last exited milestone. M1 is in progress; future CURRENT values must
+    # advance the default, and a dispatch may advance it further but never suppress due gates.
+    - name: Resolve the test milestone
+      shell: bash
+      env:
+        IRIDIUM_REQUESTED_TEST_MILESTONE: ${{ github.event.inputs.milestone_exit }}
+      run: |
+        node --input-type=commonjs <<'NODE'
+        const { appendFileSync, readFileSync } = require('node:fs');
+        const current = readFileSync('docs/milestones/CURRENT', 'utf8').trim();
+        const requested = process.env.IRIDIUM_TEST_TARGET_MILESTONE || process.env.IRIDIUM_REQUESTED_TEST_MILESTONE;
+        const index = (value) => {
+          if (!/^M[0-8]$/.test(value)) throw new Error(`Invalid milestone: ${value}`);
+          return Number(value.slice(1));
+        };
+        const target = requested && requested !== 'none' ? requested : `M${Math.max(1, index(current))}`;
+        if (index(target) < index(current)) throw new Error(`Test target ${target} precedes CURRENT ${current}`);
+        appendFileSync(process.env.GITHUB_ENV, `IRIDIUM_TEST_TARGET_MILESTONE=${target}\n`);
+        NODE
+
     - name: Install the workspace
       if: inputs.install == 'true'
       shell: bash

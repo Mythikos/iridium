@@ -126,9 +126,23 @@ export function mergeV1(updates: V1Update[]): V1Update {
   return Y.mergeUpdates(updates) as V1Update;
 }
 
+/** Read the vector from a merged V1 update without materializing a document (Yjs update API). */
+export function stateVectorFromV1(update: V1Update): StateVector {
+  return Y.encodeStateVectorFromUpdate(update) as StateVector;
+}
+
 /** The document's state vector. */
 export function stateVector(doc: Y.Doc): StateVector {
   return Y.encodeStateVector(doc) as StateVector;
+}
+
+/**
+ * Whether two documents contain the same integrated CRDT state, including deletions.
+ * State vectors alone omit deletion-only edits. Snapshot comparison uses the vector and delete
+ * set without restoring historical content, so it also works with garbage collection enabled.
+ */
+export function sameDocumentState(left: Y.Doc, right: Y.Doc): boolean {
+  return Y.equalSnapshots(Y.snapshot(left), Y.snapshot(right));
 }
 
 /**

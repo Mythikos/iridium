@@ -38,6 +38,7 @@ export const ERROR_CODES = [
   'invalid_name',
   'email_conflict',
   'not_found',
+  'method_not_allowed',
   'forbidden',
   'vault_archived',
   'attachment_referenced',
@@ -83,6 +84,7 @@ export const ERROR_CODE_STATUS: Readonly<Record<ErrorCode, number>> = {
   invalid_name: 422,
   email_conflict: 409,
   not_found: 404,
+  method_not_allowed: 405,
   forbidden: 403,
   vault_archived: 409,
   attachment_referenced: 409,
@@ -122,6 +124,7 @@ export const ERROR_CODE_TITLE: Readonly<Record<ErrorCode, string>> = {
   invalid_name: 'That name cannot be used',
   email_conflict: 'That e-mail address is already registered',
   not_found: 'Not found',
+  method_not_allowed: 'Method not allowed',
   forbidden: 'You do not have permission to do that',
   vault_archived: 'This vault is archived',
   attachment_referenced: 'This attachment is still in use',
@@ -201,19 +204,21 @@ export const OAuthErrorCode: EnumOf<typeof OAUTH_ERROR_CODES> = z.enum(OAUTH_ERR
 export const ProblemValidationIssue: z.ZodObject<
   { path: z.ZodString; message: z.ZodString; code: z.ZodString },
   z.core.$strict
-> = z.strictObject({
-  /** Dotted location: `body.name`, `query.limit`, `headers.if-match`. */
-  path: z.string(),
-  message: z.string(),
-  /** A zod issue code or a policy code (`too_short`, `breached`, `invalid_name`). */
-  code: z.string(),
-});
+> = z
+  .strictObject({
+    /** Dotted location: `body.name`, `query.limit`, `headers.if-match`. */
+    path: z.string(),
+    message: z.string(),
+    /** A zod issue code or a policy code (`too_short`, `breached`, `invalid_name`). */
+    code: z.string(),
+  })
+  .meta({ id: 'ProblemValidationIssue' });
 
 /** One entry of `ProblemDetails.references`, present only with `attachment_referenced`. */
 export const ProblemReference: z.ZodObject<
   { noteId: typeof NoteId; path: z.ZodString },
   z.core.$strict
-> = z.strictObject({ noteId: NoteId, path: z.string() });
+> = z.strictObject({ noteId: NoteId, path: z.string() }).meta({ id: 'ProblemReference' });
 
 /** The RFC 9457 body every REST error carries. */
 export const ProblemDetails: z.ZodObject<
@@ -230,24 +235,26 @@ export const ProblemDetails: z.ZodObject<
     retryAfterMs: z.ZodOptional<z.ZodInt>;
   },
   z.core.$strict
-> = z.strictObject({
-  /** `urn:iridium:problem:<code>`. */
-  type: z.string(),
-  /** Human-readable, stable per code, English. */
-  title: z.string(),
-  status: z.int().min(400).max(599),
-  code: ErrorCode,
-  /** Request-specific; never note content, credentials, stack traces or SQL. */
-  detail: z.string().optional(),
-  /** The current representation on `stale_version` / `precondition_required`. */
-  current: z.unknown().optional(),
-  /** Always present; echoed in `X-Request-Id`. */
-  requestId: z.string(),
-  errors: z.array(ProblemValidationIssue).optional(),
-  references: z.array(ProblemReference).optional(),
-  /** Mirrors `Retry-After`, in milliseconds. */
-  retryAfterMs: z.int().optional(),
-});
+> = z
+  .strictObject({
+    /** `urn:iridium:problem:<code>`. */
+    type: z.string(),
+    /** Human-readable, stable per code, English. */
+    title: z.string(),
+    status: z.int().min(400).max(599),
+    code: ErrorCode,
+    /** Request-specific; never note content, credentials, stack traces or SQL. */
+    detail: z.string().optional(),
+    /** The current representation on `stale_version` / `precondition_required`. */
+    current: z.unknown().optional(),
+    /** Always present; echoed in `X-Request-Id`. */
+    requestId: z.string(),
+    errors: z.array(ProblemValidationIssue).optional(),
+    references: z.array(ProblemReference).optional(),
+    /** Mirrors `Retry-After`, in milliseconds. */
+    retryAfterMs: z.int().optional(),
+  })
+  .meta({ id: 'ProblemDetails' });
 
 /** The RFC 9457 body every REST error carries. */
 export type ProblemDetails = z.infer<typeof ProblemDetails>;
@@ -260,11 +267,13 @@ export const OAuthErrorBody: z.ZodObject<
     error_uri: z.ZodOptional<z.ZodString>;
   },
   z.core.$strict
-> = z.strictObject({
-  error: OAuthErrorCode,
-  error_description: z.string().optional(),
-  error_uri: z.string().optional(),
-});
+> = z
+  .strictObject({
+    error: OAuthErrorCode,
+    error_description: z.string().optional(),
+    error_uri: z.string().optional(),
+  })
+  .meta({ id: 'OAuthErrorBody' });
 
 /** The OAuth-shaped body the MCP mounts and the `/oauth/*` endpoints answer with. */
 export type OAuthErrorBody = z.infer<typeof OAuthErrorBody>;

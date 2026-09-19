@@ -1,12 +1,33 @@
-# M0 exit record
+# M0 exit record (formal exit pending)
 
-Written per 12-milestones.md §13.2 (decision D12-8) at the exit of milestone M0 on 2026-09-13, and revised the same day after the exit review.
+Prepared on 2026-09-13 as an M0 exit candidate using the fields of 12-milestones.md §13.2 (D12-8), and revised after local review. Formal exit remains pending: required remote CI, branch protection, macOS Electron evidence and `v0.0.0` are not verified. The dated results below record local validation; current local revalidation is recorded in [M1-progress.md](M1-progress.md).
+
+## Review (2026-09-17)
+
+**M0 is locally revalidated, but formal sign-off remains pending.** The reviewed tree is `492d870` plus the existing M1 work in progress and the corrections below. There is still no Git remote, remote CI run, branch protection, or `v0.0.0` tag. Linux clean-clone and Linux/macOS Electron results cannot be inferred from Windows or Docker results. `CURRENT` remains `M0`; M1 work is authorized and recorded in [M1-progress.md](M1-progress.md).
+
+| Current evidence | Result |
+|---|---|
+| `pnpm exec turbo run build check-types lint test --output-logs=errors-only` | 57/57 tasks successful, including valid cache hits; `reports/m0-m1-validation.log` |
+| Full TypeScript project build, root type-aware lint, formatting, production Knip and package boundaries | Pass; boundary scan covers 791 files in 20 packages |
+| Entire guard project | 173/173 tests in 14 files pass; generation drift, boot path, migrations dialect, dependency identity and acceptance-map checks included |
+| MySQL matrix | 76/76 tests in 10 files pass **on each** of `mysql:8.4.11` and `mysql:9.7.2-oraclelinux9`. Covers all five M0 database suites plus kernel, lease, awareness, password-link and text-projection regressions. Logs: `reports/milestone-matrix-84.log`, `reports/milestone-matrix-97.log` |
+| Windows Electron smoke | 4 passed. The actual Electron renderer preserves `Origin: app://iridium` over HTTP/WS and HTTPS/WSS across navigation/reload. No Linux/macOS or application API connectivity claim |
+| Production image | Build succeeds with frozen pruned install and the version-bound Hocuspocus patch. `infra/docker/runtime-smoke.ts` passes on both MySQL images: image-default UID/GID 10001, read-only root filesystem (`EROFS` probe), only documented writable mounts, `/readyz` HTTP 200 with healthy core checks, and `migrate status` current with 48 applied. Overall readiness retains the existing `access_log_partitions` warning. Logs: `reports/m0-runtime-84-verified.log`, `reports/m0-runtime-97-verified.log`. The runtime gate is now wired into both integration CI entries |
+| Supply-chain and metadata gates | License scan, high-severity audit threshold, dedupe, bundle budget, exclusion hygiene, environment lists and test-name references pass. Audit reports 3 moderate advisories and no high/critical advisories |
+| OpenAPI lint | Valid with 60 warnings (missing license and unused component declarations); warning cleanup and complete contract coverage remain M1 work |
+
+Corrections from this review include the expired `minimumReleaseAgeExclude` entries, an outdated readiness expectation, the two-argument Vitest assertion lint rule, complete explicit-file coverage in the sequence guard, and the missing container runtime and repeatable Electron Origin gates. The M1 kernel proof also corrected child startup/shutdown cleanup, schema-scoped ownership, concurrent password-link issuance, awareness handling, and monotonic projection assignment order.
+
+Coverage and mutation scores in the historical table below were **not rerun or re-certified** for the unfinished M1 tree. The M1 exit requires its complete test, coverage, mutation and chaos gates. No remote run, release tag or milestone exit was manufactured by this review.
+
+## Historical record (2026-09-13)
 
 | Field | Content |
 |---|---|
 | Commit and tag | The milestone commit is `71915f5` (`feat: land milestone M0 (contracts, crdt, testkit, server core, infra, codegen, spikes)`, on top of the bootstrap commit `90a3ec6`). `ef51fdc` added this record and the commit references in the four failed-spike notes; the exit review's fixes (six missing M0 tests, the `check-env-lists` gate, the coverage-gate wiring, the release floor) follow in the next commit. The tag `v0.0.0` is cut by hand on that commit once the first push to a remote shows the §13.3 required checks green; it is not cut before, because §13.2 asks this record to cite the CI runs and none exists until then. |
-| Milestone pointer | `docs/milestones/CURRENT` reads `M0` — set at bootstrap and unchanged, because `CURRENT` names the last exited milestone and M0 is the first. M1 work begins without touching it; the M1 exit advances it. |
-| Exit tests | No continuous-integration run exists yet: the repository has no remote at M0, so every lane of `ci.yml` was run locally on 2026-09-13 (Windows 11, Node 24.21.0 through mise, pnpm 12.4.1, Docker Desktop). The table below names each exit test of §4.6 with the command that proved it. The first push must show `static`, `unit (ubuntu-latest, windows-latest)`, `integration (mysql:8.4.11, mysql:9.7.2-oraclelinux9)`, `e2e-electron (ubuntu, windows, macos)` and `merge-reports` green before branch protection is enabled (§13.3); the three-operating-system criteria (`desktop.launch.e2e`, S3's Origin verdict) are proven on Windows only until then. |
+| Milestone pointer | `docs/milestones/CURRENT` remains `M0`, its bootstrap value. Although the plan defines this pointer as the last exited milestone, that existing value does not establish completion of M0's formal prerequisites. M1 rehearsal and implementation do not advance it. |
+| Exit tests | No continuous-integration run exists yet: the repository has no remote at M0, so the available Windows and Docker checks were run locally on 2026-09-13 (Windows 11, Node 24.21.0 through mise, pnpm 12.4.1, Docker Desktop). The table below names each exit test of §4.6 with the command that proved it. The first push must show `static`, `unit (ubuntu-latest, windows-latest)`, `integration (mysql:8.4.11, mysql:9.7.2-oraclelinux9)`, `e2e-electron (ubuntu, windows, macos)` and `merge-reports` green before branch protection is enabled (§13.3); the three-operating-system criteria (`desktop.launch.e2e`, S3's Origin verdict) are proven on Windows only until then. |
 | Cross-cutting gates | See "Gates" below. |
 | Spec rows | None retired; §4.7 lists none for M0. Coverage extended: none — the acceptance rows begin at M1. |
 | Spikes | S1 pass, S2 pass, S3 pass (Windows; the register's three-OS claim is completed by the first `e2e-electron` matrix run), S6 pass, S8 pass, S14 pass. S4, S5, S7 and S13 fail with their recorded fallbacks executed by commit `71915f5` (each note's "Fallback executed" section names it; `docs.spikes.spec` asserts the reference). |

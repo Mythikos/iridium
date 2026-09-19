@@ -52,7 +52,7 @@ export const PROP = {
   verbose: fc.VerbosityLevel.Verbose,
   /** A truncated run is a failure, never a silent pass. */
   markInterruptAsFailure: true,
-  interruptAfterTimeLimit: 60_000,
+  interruptAfterTimeLimit: Number(env['IRIDIUM_PROP_INTERRUPT_MS'] ?? 60_000),
 } as const;
 
 /**
@@ -69,6 +69,7 @@ const SIZES: Record<string, fc.SizeForArbitrary> = {
   max: 'max',
   '=': '=',
   '+1': '+1',
+  '+2': '+2',
   '-1': '-1',
 };
 

@@ -26,6 +26,10 @@ Positive: both directions are handled without losing text; the same `Y.Doc` and 
 
 `collab.live-revocation.integration` (includes downgrade → upgrade re-attach, asserting pending updates land and Saved is reached); `status-pill.transitions.component` (a fake provider driven through baseline and re-attach, M4); `revocation-while-open.e2e`.
 
+
+
+**M1 recovery amendment (2026-09-17).** The same resynchronization is required after a persistence outage, backpressure, content repair or an oversize reduction, even when the ACL role is unchanged. Only the writer's committed recovery path emits `role {role, recovered:true}`, after every write latch has cleared. The client then replaces its provider on the same document and undo manager, resends refused local edits and reseeds content latches through a fresh handshake. Ordinary membership and epoch refreshes carry no marker and reapply the writer's current latches server-side, so an ACL upgrade cannot unlock an invalid note. Detach waits for the previous attachment's close echo before installing its replacement. `notes.repair-content.integration`, `collab.db-outage.chaos`, `collab.backpressure.chaos` and `note-session.unit` cover these paths.
+
 ## References
 
 Digest §2.2 (readOnly enforcement, `unsyncedChanges` accounting, per-document close semantics); spec §4, §5; gap fix "role upgrade after downgrade". Implemented in `05-collaboration-and-durability.md` and `07-client-applications.md`.

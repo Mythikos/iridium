@@ -12,10 +12,9 @@
  * > baseline is updated only by an explicit commit with the run artifact attached, never
  * > automatically.
  *
- * The `load` job is **not** gated on a milestone in `nightly.yml`: it runs every night from M0, and
- * at M0 it fails at the `k6 run` step, because `apps/server/test/load/scenarios.js` arrives with the
- * generator (spike S6, M8 gate). This script is therefore written for the state it will meet from M8
- * and is explicit about the two earlier states:
+ * The `load` job is enabled at M8, when its generator and committed baseline are due. A nightly
+ * exit rehearsal can target M8 without changing CURRENT. If this script is invoked directly before
+ * those inputs exist, it reports the missing evidence rather than treating an empty run as a pass:
  *
  *  - **No summary in `reports/load/`** → exit `2`, naming the step that produces one. The rule was
  *    not evaluated, and saying so is the only honest report.

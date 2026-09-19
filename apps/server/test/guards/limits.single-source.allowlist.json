@@ -42,14 +42,59 @@
       "reason": "The Strict-Transport-Security max-age helmet emits: one year, as the security-headers table fixes it. It is the value of an HTTP response header, read by browsers and not by Iridium, and changing it changes a header rather than what any request or document may contain."
     },
     {
-      "file": "apps/server/src/security/ip-range.ts",
-      "name": "HEX_GROUP_MAX",
-      "reason": "0xffff is the largest value one group of an IPv6 address can hold, declared beside IPV6_GROUPS and BITS_PER_BYTE. It is part of the address syntax the parser accepts, so it is a property of the format rather than a limit Iridium imposes on anything."
-    },
-    {
       "file": "apps/server/src/security/plugin.ts",
       "name": "maxRssBytes",
       "reason": "Zero is @fastify/under-pressure's 'disabled' sentinel, not a byte budget: the plugin sheds on event-loop delay and heap usage, both of which come from config.ops, and the RSS check is deliberately off. Recording a limit for it would invent a cap that is not enforced."
+    },
+    {
+      "file": "apps/server/src/auth/user-agent.ts",
+      "name": "USER_AGENT_MAX_BYTES",
+      "reason": "255 is the width of sessions.user_agent VARCHAR(255) (03-data-model.md section 3) and the byte cut 04-auth-and-access-control.md section 11.1 applies to audit_events.context.user_agent. It bounds what the server records from an untrusted header, refuses no request, and is published to no client, so it is a column width rather than a product cap."
+    },
+    {
+      "file": "apps/server/src/auth/sessions/issuer.ts",
+      "name": "CLIENT_VERSION_MAX_CHARS",
+      "reason": "32 is the width of sessions.client_version VARCHAR(32) (03-data-model.md section 3). The header parser already caps X-Iridium-Client-Version at CLIENT_VERSION_MAX_LENGTH before it is read; this second cut only fits the recorded value to its column, refuses nothing and is seen by no client."
+    },
+    {
+      "file": "apps/server/src/auth/sessions/cookie.ts",
+      "name": "maxAge",
+      "reason": "Zero is the Max-Age that expires the __Host-iridium_session cookie on logout (04-auth-and-access-control.md section 4.3: Set-Cookie with Max-Age=0). It is the value of a Set-Cookie attribute the browser reads, exactly like the HSTS max-age, and not a budget the server enforces on anything."
+    },
+    {
+      "file": "apps/server/src/collab/persistence/testing/model.ts",
+      "name": "max",
+      "reason": "The property model samples a dimensionless position in [0, 1] before scaling it by the current document length. One is the endpoint of that mathematical interval, not a product limit or request budget."
+    },
+    {
+      "file": "apps/server/src/collab/testing/fake-hocuspocus.ts",
+      "name": "flushMaxBytes",
+      "reason": "Zero disables Hocuspocus batching in the unit-test document double. It is a library sentinel in test support, not a byte limit accepted or enforced by the production server."
+    },
+    {
+      "file": "apps/server/src/security/problem.ts",
+      "name": "HTTP_MAX_ERROR",
+      "reason": "599 is the last HTTP server-error status in the external HTTP status-code domain. The classifier preserves supported 4xx/5xx errors and maps out-of-domain values to 500; this is protocol validation, not an Iridium product budget."
+    },
+    {
+      "file": "apps/server/src/collab/persistence/testing/convergence-model.ts",
+      "name": "MAX_PEERS",
+      "reason": "Six is the generated convergence fixture peer count for the PR property model. The ten-peer nightly model has its own fixture size; neither value limits a production vault, document, or collaboration connection."
+    },
+    {
+      "file": "apps/server/src/collab/persistence/testing/convergence-model.ts",
+      "name": "max",
+      "reason": "The test model samples a dimensionless position in [0, 1] and a generated deletion of at most 12 UTF-16 units. These bounds shape generated test operations and do not constrain production edits."
+    },
+    {
+      "file": "apps/server/src/collab/persistence/testing/convergence-model.ts",
+      "name": "maxLength",
+      "reason": "Eight bounds one generated test insertion. The 1980 generated operations plus 20 mandatory restarts make the specified 2000-operation nightly fixture. These are test workload sizes, not product text or queue limits."
+    },
+    {
+      "file": "apps/server/src/db/pool.ts",
+      "name": "DB_QUERY_TIMEOUT_MS_MAX",
+      "reason": "2 147 483 647 is the largest millisecond delay representable by Node timers. Above it Node clamps to 1 ms; EnvSchema and the driver adapter reject that invalid input domain. This is an external runtime representation bound, not a note, request or product budget."
     }
   ]
 }

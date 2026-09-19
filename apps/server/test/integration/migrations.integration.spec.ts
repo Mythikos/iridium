@@ -19,7 +19,18 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { sql, type Kysely } from 'kysely';
+import {
+  corruptDeliberately,
+  inspectAdvisoryLock,
+  inspectApplicationPrivileges,
+  inspectGuardedIndexes,
+  inspectRoleAuthentication,
+  inspectRoleGrants,
+  inspectSchemaColumnCount,
+  inspectSchemaColumns,
+  inspectSchemaTables,
+  inspectTablesWithoutPrimaryKey,
+} from '@iridium/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { assertFoundRows } from '../../src/db/assertFoundRows.ts';
@@ -37,7 +48,6 @@ import {
   migrationStatus,
   withMigrationLock,
 } from '../../src/db/migrator.ts';
-import type { Database } from '../../src/db/schema.ts';
 import { IRIDIUM_SCHEMA, startIridiumMysql, type IridiumMysql } from '../db-mysql-container.ts';
 
 const SCHEMA_SOURCE = fileURLToPath(new URL('../../src/db/schema.ts', import.meta.url));
@@ -81,24 +91,6 @@ function declaredSchema(): Map<string, Set<string>> {
   return tables;
 }
 
-/** `iridium_app`'s effective per-table rights, read from both privilege views, one string per right. */
-async function appPrivileges(db: Kysely<Database>, schema: string): Promise<string[]> {
-  const tableRows = await sql<{ t: string; p: string }>`
-    SELECT TABLE_NAME AS t, PRIVILEGE_TYPE AS p
-      FROM information_schema.TABLE_PRIVILEGES
-     WHERE TABLE_SCHEMA = ${schema} AND GRANTEE = "'iridium_app'@'%'"
-  `.execute(db);
-  const columnRows = await sql<{ t: string; c: string; p: string }>`
-    SELECT TABLE_NAME AS t, COLUMN_NAME AS c, PRIVILEGE_TYPE AS p
-      FROM information_schema.COLUMN_PRIVILEGES
-     WHERE TABLE_SCHEMA = ${schema} AND GRANTEE = "'iridium_app'@'%'"
-  `.execute(db);
-  return [
-    ...tableRows.rows.map((r) => `${r.t}.${r.p}`),
-    ...columnRows.rows.map((r) => `${r.t}.${r.p}(${r.c})`),
-  ].toSorted();
-}
-
 describe('migrations.integration [area:ops]', () => {
   let mysql: IridiumMysql;
   let maint: ReturnType<typeof createMaintDb>;
@@ -121,8 +113,8 @@ describe('migrations.integration [area:ops]', () => {
 
   it('applies every migration of the initial set forward, in order', () => {
     expect(MIGRATION_NAMES[0]).toBe('0001_users');
-    expect(MIGRATION_NAMES.at(-1)).toBe('0048_access_log_oauth_client');
-    expect(MIGRATION_NAMES).toHaveLength(48);
+    expect(MIGRATION_NAMES.at(-1)).toBe('0055_min_client_version');
+    expect(MIGRATION_NAMES).toHaveLength(55);
     expect(applied).toEqual(MIGRATION_NAMES);
   });
 
@@ -135,32 +127,18 @@ describe('migrations.integration [area:ops]', () => {
   });
 
   it('creates every table as InnoDB with a utf8mb4 collation and a primary key', async () => {
-    const rows = await sql<{ t: string; engine: string; collation: string }>`
-      SELECT TABLE_NAME AS t, ENGINE AS engine, TABLE_COLLATION AS collation
-        FROM information_schema.TABLES
-       WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA} AND TABLE_TYPE = 'BASE TABLE'
-    `.execute(layer.dbApp);
+    const rows = await inspectSchemaTables(layer.dbApp, IRIDIUM_SCHEMA);
     expect(rows.rows.length).toBeGreaterThan(0);
     expect(rows.rows.filter((row) => row.engine !== 'InnoDB')).toEqual([]);
     expect(rows.rows.filter((row) => !row.collation.startsWith('utf8mb4_'))).toEqual([]);
 
-    const noPrimaryKey = await sql<{ t: string }>`
-      SELECT t.TABLE_NAME AS t
-        FROM information_schema.TABLES t
-        LEFT JOIN information_schema.STATISTICS s
-          ON s.TABLE_SCHEMA = t.TABLE_SCHEMA AND s.TABLE_NAME = t.TABLE_NAME AND s.INDEX_NAME = 'PRIMARY'
-       WHERE t.TABLE_SCHEMA = ${IRIDIUM_SCHEMA} AND t.TABLE_TYPE = 'BASE TABLE' AND s.INDEX_NAME IS NULL
-    `.execute(layer.dbApp);
+    const noPrimaryKey = await inspectTablesWithoutPrimaryKey(layer.dbApp, IRIDIUM_SCHEMA);
     expect(noPrimaryKey.rows).toEqual([]);
   });
 
   it('produces a database whose tables and columns are exactly what schema.ts declares', async () => {
     const declared = declaredSchema();
-    const rows = await sql<{ t: string; c: string }>`
-      SELECT TABLE_NAME AS t, COLUMN_NAME AS c
-        FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA}
-    `.execute(layer.dbApp);
+    const rows = await inspectSchemaColumns(layer.dbApp, IRIDIUM_SCHEMA);
 
     const actual = new Map<string, Set<string>>();
     for (const row of rows.rows) {
@@ -185,10 +163,7 @@ describe('migrations.integration [area:ops]', () => {
   it('creates the three roles, each using caching_sha2_password', async () => {
     const root = createDb(parseDatabaseUrl(mysql.rootUrl('mysql')), 1);
     try {
-      const rows = await sql<{ user: string; plugin: string }>`
-        SELECT user, plugin FROM mysql.user
-         WHERE user IN ('iridium_app','iridium_migrator','iridium_backup')
-      `.execute(root.db);
+      const rows = await inspectRoleAuthentication(root.db);
       expect(rows.rows.map((r) => r.user).toSorted()).toEqual([
         'iridium_app',
         'iridium_backup',
@@ -201,13 +176,9 @@ describe('migrations.integration [area:ops]', () => {
   });
 
   it("grants iridium_app exactly the matrix's per-table privileges, and nothing else", async () => {
-    const actual = await appPrivileges(layer.dbApp, IRIDIUM_SCHEMA);
+    const actual = await inspectApplicationPrivileges(layer.dbApp, IRIDIUM_SCHEMA);
 
-    const tables = await sql<{ t: string }>`
-      SELECT TABLE_NAME AS t
-        FROM information_schema.TABLES
-       WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA} AND TABLE_TYPE = 'BASE TABLE'
-    `.execute(layer.dbApp);
+    const tables = await inspectSchemaTables(layer.dbApp, IRIDIUM_SCHEMA);
     const present = new Set(tables.rows.map((r) => r.t));
 
     // Every table that exists carries a matrix row: a forgotten grants migration is a red test here,
@@ -228,12 +199,8 @@ describe('migrations.integration [area:ops]', () => {
   it('grants the migrator and the backup role their settled schema-level and global privileges', async () => {
     const root = createDb(parseDatabaseUrl(mysql.rootUrl('mysql')), 1);
     try {
-      const show = async (role: string): Promise<string> => {
-        const rows = await sql
-          .raw<Record<string, string>>(`SHOW GRANTS FOR '${role}'@'%'`)
-          .execute(root.db);
-        return rows.rows.map((row) => Object.values(row).join(' ')).join('\n');
-      };
+      const show = (role: 'iridium_migrator' | 'iridium_backup'): Promise<string> =>
+        inspectRoleGrants(root.db, role);
 
       const migrator = await show('iridium_migrator');
       expect(SCHEMA_GRANTS.migrator.filter((privilege) => !migrator.includes(privilege))).toEqual(
@@ -256,18 +223,24 @@ describe('migrations.integration [area:ops]', () => {
   });
 
   it('seeds schema_meta with the install-state keys the boot path reads', async () => {
-    const rows = await sql<{ k: string; v: string }>`
-      SELECT \`key\` AS k, value AS v FROM schema_meta
-    `.execute(layer.dbApp);
-    expect(rows.rows.map((r) => r.k).toSorted()).toEqual([
-      'api_version',
-      'attachment_key_version',
-      'audit_key_version',
-      'cursor_key_version',
-      'iridium_version',
-      'pepper_version',
-      'pipeline_version',
-    ]);
+    const rows = await layer.dbApp
+      .selectFrom('schema_meta')
+      .select(['key as k', 'value as v'])
+      .execute();
+    expect(rows.map((entry) => entry.k).toSorted()).toEqual(
+      [
+        ...GRANT_MATRIX.map((entry) => 'acl.' + entry.table),
+        'admin_users_lock',
+        'api_version',
+        'attachment_key_version',
+        'audit_key_version',
+        'cursor_key_version',
+        'iridium_version',
+        'min_client_version',
+        'pepper_version',
+        'pipeline_version',
+      ].toSorted(),
+    );
   });
 
   it('serialises two concurrent migration runs behind GET_LOCK(iridium_migrate)', async () => {
@@ -276,17 +249,18 @@ describe('migrations.integration [area:ops]', () => {
     const probeSchema = 'iridium_lock_probe';
     const root = createDb(parseDatabaseUrl(mysql.rootUrl('mysql')), 1);
     try {
-      await sql
-        .raw(
-          `CREATE DATABASE IF NOT EXISTS \`${probeSchema}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
-        )
-        .execute(root.db);
-      await sql
-        .raw(
-          `GRANT ${SCHEMA_GRANTS.migrator.join(', ')} ON \`${probeSchema}\`.* ` +
-            `TO 'iridium_migrator'@'%' WITH GRANT OPTION`,
-        )
-        .execute(root.db);
+      await corruptDeliberately(root.db, {
+        kind: 'create-schema',
+        schema: probeSchema,
+        ifNotExists: true,
+      });
+      await corruptDeliberately(root.db, {
+        kind: 'grant-schema',
+        schema: probeSchema,
+        account: 'iridium_migrator',
+        privileges: SCHEMA_GRANTS.migrator,
+        withGrantOption: true,
+      });
     } finally {
       await root.db.destroy();
     }
@@ -320,12 +294,10 @@ describe('migrations.integration [area:ops]', () => {
     // and the tail is where the guards that have no `IF NOT EXISTS` form live: `0034_grants`,
     // `0038`'s unique key over a generated column, `0046`'s columns and foreign keys, `0047`'s
     // indexes and `0048`'s instant column.
-    const tail = MIGRATION_NAMES.slice(-15);
+    const tail = MIGRATION_NAMES.slice(MIGRATION_NAMES.indexOf('0034_grants'));
     expect(tail[0]).toBe('0034_grants');
 
-    const before = await sql<{ n: number }>`
-      SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA}
-    `.execute(maint.db);
+    const before = await inspectSchemaColumnCount(maint.db, IRIDIUM_SCHEMA);
 
     await maint.db.deleteFrom('kysely_migration').where('name', 'in', tail).execute();
 
@@ -337,19 +309,10 @@ describe('migrations.integration [area:ops]', () => {
     expect(status.applied).toEqual(MIGRATION_NAMES);
 
     // Nothing was created twice: the column count is unchanged and each guarded object exists once.
-    const after = await sql<{ n: number }>`
-      SELECT COUNT(*) AS n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA}
-    `.execute(maint.db);
+    const after = await inspectSchemaColumnCount(maint.db, IRIDIUM_SCHEMA);
     expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
 
-    const objects = await sql<{ index_name: string; n: number }>`
-      SELECT INDEX_NAME AS index_name, COUNT(DISTINCT SEQ_IN_INDEX) AS n
-        FROM information_schema.STATISTICS
-       WHERE TABLE_SCHEMA = ${IRIDIUM_SCHEMA}
-         AND INDEX_NAME IN ('uq_oauth_consents_live', 'ix_tokens_consent', 'ix_tokens_client',
-                            'uq_sibling', 'ft_note_search', 'ix_proj_fm_tags', 'ix_proj_fm_aliases')
-       GROUP BY INDEX_NAME
-    `.execute(maint.db);
+    const objects = await inspectGuardedIndexes(maint.db, IRIDIUM_SCHEMA);
     expect(objects.rows.map((r) => r.index_name).toSorted()).toEqual([
       'ft_note_search',
       'ix_proj_fm_aliases',
@@ -366,17 +329,13 @@ describe('migrations.integration [area:ops]', () => {
     const observer = createDb(parseDatabaseUrl(mysql.migratorUrl()), 1);
     try {
       const heldBy = await withMigrationLock(target, async () => {
-        const rows = await sql<{ holder: number | null }>`
-          SELECT IS_USED_LOCK('iridium_migrate') AS holder
-        `.execute(observer.db);
-        return rows.rows[0]?.holder ?? null;
+        const rows = await inspectAdvisoryLock(observer.db, 'iridium_migrate');
+        return rows.rows[0]?.owner ?? null;
       });
       expect(heldBy).not.toBeNull();
 
-      const after = await sql<{ holder: number | null }>`
-        SELECT IS_USED_LOCK('iridium_migrate') AS holder
-      `.execute(observer.db);
-      expect(after.rows[0]?.holder ?? null).toBeNull();
+      const after = await inspectAdvisoryLock(observer.db, 'iridium_migrate');
+      expect(after.rows[0]?.owner ?? null).toBeNull();
     } finally {
       await observer.db.destroy();
     }

@@ -34,11 +34,15 @@ export function cgroupQuota(): number {
   const v2 = readOrNull(CGROUP_V2_CPU_MAX);
   if (v2 !== null) {
     const [quota, period] = v2.split(/\s+/);
-    if (quota === 'max' || quota === undefined || period === undefined)
-      return Number.POSITIVE_INFINITY;
+    if (quota === 'max' || period === undefined) return Number.POSITIVE_INFINITY;
     const quotaValue = Number(quota);
     const periodValue = Number(period);
-    if (!Number.isFinite(quotaValue) || !Number.isFinite(periodValue) || periodValue <= 0) {
+    if (
+      !Number.isFinite(quotaValue) ||
+      quotaValue <= 0 ||
+      !Number.isFinite(periodValue) ||
+      periodValue <= 0
+    ) {
       return Number.POSITIVE_INFINITY;
     }
     return quotaValue / periodValue;

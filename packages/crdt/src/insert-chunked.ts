@@ -23,8 +23,17 @@ import { splitAtUtf8Bytes } from './unicode.ts';
  * transaction. A `Y.Text` that is not integrated into a `Y.Doc` is refused rather than silently
  * losing `origin`: the origin is the routing key of the whole persistence pipeline, and an update
  * with no declared provenance is never persisted (05-collaboration-and-durability.md D05-08).
+ * An outer transaction is refused before any insertion. The optional fence runs before each chunk;
+ * if it throws, earlier chunks remain applied and owned by their normal persistence pipeline, while
+ * later chunks are untouched. Callers must not announce completion or clear repair flags on failure.
  */
-export function insertChunked(ytext: Y.Text, index: number, text: string, origin: unknown): void {
+export function insertChunked(
+  ytext: Y.Text,
+  index: number,
+  text: string,
+  origin: unknown,
+  beforeChunk?: () => void,
+): void {
   if (text.length === 0) return;
   const doc = ytext.doc;
   if (doc === null) {
@@ -33,8 +42,16 @@ export function insertChunked(ytext: Y.Text, index: number, text: string, origin
       'insertChunked needs a Y.Text integrated into a Y.Doc, so each chunk carries its origin',
     );
   }
+  // eslint-disable-next-line no-underscore-dangle -- pinned Yjs exposes only this typed marker for an outer transaction
+  if (doc._transaction !== null) {
+    throw new CrdtError(
+      'nested-transaction',
+      'insertChunked must run outside an outer transaction so each chunk emits its own bounded update',
+    );
+  }
   let at = index;
   for (const chunk of splitAtUtf8Bytes(text, LIMITS.INSERT_CHUNK_MAX_BYTES)) {
+    beforeChunk?.();
     doc.transact(() => {
       ytext.insert(at, chunk);
     }, origin);

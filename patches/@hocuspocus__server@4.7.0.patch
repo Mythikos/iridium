@@ -1,0 +1,110 @@
+diff --git a/dist/hocuspocus-server.cjs b/dist/hocuspocus-server.cjs
+index 6b46aae0f7b1fa90a3e790e8f007810eab29f89f..b45b67e7c890d083adab6c34cac6b994d8670221 100644
+--- a/dist/hocuspocus-server.cjs
++++ b/dist/hocuspocus-server.cjs
+@@ -231,10 +231,18 @@ var MessageReceiver = class {
+ 				} : this.defaultTransactionOrigin ?? { source: "local" };
+ 				const scratchDoc = new yjs.Doc();
+ 				const scratch = new y_protocols_awareness.Awareness(scratchDoc);
++				// A scratch decoder has no local participant; do not pass its synthetic state to hooks.
++				scratch.setLocalState(null);
++				scratch.meta.delete(scratchDoc.clientID);
+ 				try {
+ 					(0, y_protocols_awareness.applyAwarenessUpdate)(scratch, update, null);
++					// Null entries leave metadata but no state. Retain only those original removals;
++					// a hook deleting a non-null state must still suppress that update, not remove it.
++					const removedClients = [...scratch.meta.keys()].filter(
++						clientId => !scratch.getStates().has(clientId),
++					);
+ 					await document.callbacks.beforeHandleAwareness(document, scratch.getStates(), origin);
+-					update = (0, y_protocols_awareness.encodeAwarenessUpdate)(scratch, [...scratch.getStates().keys()]);
++					update = (0, y_protocols_awareness.encodeAwarenessUpdate)(scratch, [...new Set([...removedClients, ...scratch.getStates().keys()])]);
+ 				} finally {
+ 					scratch.destroy();
+ 					scratchDoc.destroy();
+@@ -658,7 +666,7 @@ var Document = class extends yjs.Doc {
+ 		if (originConnection !== null) {
+ 			const entry = this.connections.get(originConnection);
+ 			if (entry) {
+-				added.forEach((clientId) => entry.clients.add(clientId));
++				added.concat(updated).forEach((clientId) => entry.clients.add(clientId));
+ 				removed.forEach((clientId) => entry.clients.delete(clientId));
+ 			}
+ 		}
+diff --git a/dist/hocuspocus-server.esm.js b/dist/hocuspocus-server.esm.js
+index d4acd27730f34118e315126657987a43f7c7f51c..138c522fc06f5684c13a5386ccbfd5d02a7143c5 100644
+--- a/dist/hocuspocus-server.esm.js
++++ b/dist/hocuspocus-server.esm.js
+@@ -201,10 +201,18 @@ var MessageReceiver = class {
+ 				} : this.defaultTransactionOrigin ?? { source: "local" };
+ 				const scratchDoc = new Y.Doc();
+ 				const scratch = new Awareness(scratchDoc);
++				// A scratch decoder has no local participant; do not pass its synthetic state to hooks.
++				scratch.setLocalState(null);
++				scratch.meta.delete(scratchDoc.clientID);
+ 				try {
+ 					applyAwarenessUpdate(scratch, update, null);
++					// Null entries leave metadata but no state. Retain only those original removals;
++					// a hook deleting a non-null state must still suppress that update, not remove it.
++					const removedClients = [...scratch.meta.keys()].filter(
++						clientId => !scratch.getStates().has(clientId),
++					);
+ 					await document.callbacks.beforeHandleAwareness(document, scratch.getStates(), origin);
+-					update = encodeAwarenessUpdate(scratch, [...scratch.getStates().keys()]);
++					update = encodeAwarenessUpdate(scratch, [...new Set([...removedClients, ...scratch.getStates().keys()])]);
+ 				} finally {
+ 					scratch.destroy();
+ 					scratchDoc.destroy();
+@@ -628,7 +636,7 @@ var Document = class extends Doc {
+ 		if (originConnection !== null) {
+ 			const entry = this.connections.get(originConnection);
+ 			if (entry) {
+-				added.forEach((clientId) => entry.clients.add(clientId));
++				added.concat(updated).forEach((clientId) => entry.clients.add(clientId));
+ 				removed.forEach((clientId) => entry.clients.delete(clientId));
+ 			}
+ 		}
+diff --git a/src/Document.ts b/src/Document.ts
+index 9fa5f85f392eb528ddecdefdc08ea19d5a233308..d36deee35afed38615c293ee5501da241830abe6 100644
+--- a/src/Document.ts
++++ b/src/Document.ts
+@@ -260,7 +260,8 @@ export class Document extends Doc {
+ 			const entry = this.connections.get(originConnection);
+ 
+ 			if (entry) {
+-				added.forEach((clientId: any) => entry.clients.add(clientId));
++				// A state restored after removal retains metadata and is reported as updated.
++				added.concat(updated).forEach((clientId: any) => entry.clients.add(clientId));
+ 				removed.forEach((clientId: any) => entry.clients.delete(clientId));
+ 			}
+ 		}
+diff --git a/src/MessageReceiver.ts b/src/MessageReceiver.ts
+index d6b185f516d1efe18f0f67aa6ff3bd1624f88fc1..0869f41a0b4430e6667c692da1dcd5cf9c053400 100644
+--- a/src/MessageReceiver.ts
++++ b/src/MessageReceiver.ts
+@@ -87,8 +87,16 @@ export class MessageReceiver {
+ 				// update entirely.
+ 				const scratchDoc = new Y.Doc();
+ 				const scratch = new Awareness(scratchDoc);
++				// A scratch decoder has no local participant; do not pass its synthetic state to hooks.
++				scratch.setLocalState(null);
++				scratch.meta.delete(scratchDoc.clientID);
+ 				try {
+ 					applyAwarenessUpdate(scratch, update, null);
++					// Null entries leave metadata but no state. Retain only those original removals;
++					// a hook deleting a non-null state must still suppress that update, not remove it.
++					const removedClients = [...scratch.meta.keys()].filter(
++						clientId => !scratch.getStates().has(clientId),
++					);
+ 
+ 					await document.callbacks.beforeHandleAwareness(
+ 						document,
+@@ -97,7 +105,7 @@ export class MessageReceiver {
+ 					);
+ 
+ 					update = encodeAwarenessUpdate(scratch, [
+-						...scratch.getStates().keys(),
++						...new Set([...removedClients, ...scratch.getStates().keys()]),
+ 					]);
+ 				} finally {
+ 					scratch.destroy();

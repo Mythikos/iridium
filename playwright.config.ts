@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,
-  workers: CI ? 4 : undefined,
+  ...(CI ? { workers: 4 } : {}),
   reporter: CI ? [['blob'], ['github']] : [['html', { open: 'never' }]],
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -20,20 +20,22 @@ export default defineConfig({
       'X-Iridium-Client-Version': process.env.IRIDIUM_E2E_CLIENT_VERSION ?? '0.0.0-e2e',
     },
   },
-  webServer: process.env.IRIDIUM_E2E_EXTERNAL_SERVER
-    ? undefined
+  ...(process.env.IRIDIUM_E2E_EXTERNAL_SERVER
+    ? {}
     : {
-        command: 'node apps/server/dist/main.mjs serve', // the built bundle, never the Vite dev server
-        url: 'http://127.0.0.1:4000/readyz',
-        reuseExistingServer: !CI,
-        timeout: 120_000,
-        env: {
-          NODE_ENV: 'test',
-          PUBLIC_ORIGIN: 'http://127.0.0.1:4000',
-          COLLAB_DEBOUNCE_MS: '100',
-          COLLAB_MAX_DEBOUNCE_MS: '500',
+        webServer: {
+          command: 'node apps/server/dist/main.mjs serve', // the built bundle, never the Vite dev server
+          url: 'http://127.0.0.1:4000/readyz',
+          reuseExistingServer: !CI,
+          timeout: 120_000,
+          env: {
+            NODE_ENV: 'test',
+            PUBLIC_ORIGIN: 'http://127.0.0.1:4000',
+            COLLAB_DEBOUNCE_MS: '100',
+            COLLAB_MAX_DEBOUNCE_MS: '500',
+          },
         },
-      },
+      }),
   projects: [
     { name: 'setup', testMatch: /apps\/e2e\/setup\/.*\.setup\.ts/ },
     {

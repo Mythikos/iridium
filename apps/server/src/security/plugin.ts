@@ -25,7 +25,6 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import underPressure from '@fastify/under-pressure';
-import { LIMITS } from '@iridium/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { IridiumConfig } from '../config/env.ts';
@@ -33,6 +32,7 @@ import { isOpsPath } from '../ops/paths.ts';
 import { attachClientHeaders } from './client-header.ts';
 import { HARDENING_HEADERS, HSTS_MAX_AGE_SECONDS, renderCsp, webCspDirectives } from './csp.ts';
 import { parseIpRanges, type IpRange } from './ip-range.ts';
+import { ProblemRegistry } from './problem-registry.ts';
 import {
   classifyError,
   isEnvelopeExempt,
@@ -40,6 +40,13 @@ import {
   sendProblem,
   statusOf,
 } from './problem.ts';
+import {
+  createRestRateLimitStore,
+  globalRateLimitKey,
+  globalRateLimitMax,
+  RATE_LIMIT_WINDOW,
+  rateLimitProblem,
+} from './rate-limits.ts';
 import { attachRequestId } from './request-id.ts';
 
 /** What the security plugin needs; a slice, never the whole configuration object. */
@@ -63,7 +70,6 @@ declare module 'fastify' {
   }
 }
 
-const RATE_LIMIT_WINDOW = '1 minute';
 const PRESSURE_RETRY_AFTER_SECONDS = 10;
 
 /** `Cache-Control: no-store` on every authenticated JSON response (09 section 1.2). */
@@ -93,6 +99,10 @@ export async function applySecurityPlugin(
     );
   }
   app.decorate('trustProxyRanges', trustProxyRanges);
+  // The problem-mapping registry every later area adds its own error classes to (`problem-registry.ts`).
+  // It is decorated here, in the step that owns the envelope, so a mapper can be registered from the
+  // boot step that owns the errors it maps.
+  app.decorate('problems', new ProblemRegistry());
 
   // ---- helmet: every hardening header except the CSP, plus the per-response nonce ---------------
   await app.register(helmet, {
@@ -135,14 +145,17 @@ export async function applySecurityPlugin(
   });
 
   // ---- rate limits: the three REST tiers of 09 section 1.8 --------------------------------------
+  // The two global tiers are `security/rate-limits.ts`'s, and so is the refusal: returning a
+  // `ProblemError` from `errorResponseBuilder` is what puts a `429` through the one error handler and
+  // out as `application/problem+json`, because @fastify/rate-limit *throws* whatever the builder
+  // returns. The login tier is a per-route override the `auth` stream attaches (`LOGIN_RATE_LIMIT`).
   await app.register(rateLimit, {
+    store: createRestRateLimitStore(app.clock),
     global: true,
     timeWindow: RATE_LIMIT_WINDOW,
-    max: (request: FastifyRequest) =>
-      request.principalKey === null
-        ? LIMITS.REST_UNAUTHENTICATED_PER_MINUTE
-        : LIMITS.REST_AUTHENTICATED_PER_MINUTE,
-    keyGenerator: (request: FastifyRequest) => request.principalKey ?? request.ip,
+    max: globalRateLimitMax,
+    keyGenerator: globalRateLimitKey,
+    errorResponseBuilder: rateLimitProblem,
     allowList: (request: FastifyRequest) => isOpsPath(request.url),
     enableDraftSpec: false,
     addHeadersOnExceeding: {
@@ -161,25 +174,6 @@ export async function applySecurityPlugin(
   // ---- request ids, the client header, the Host guard -------------------------------------------
   app.decorateRequest('principalKey', null);
 
-  app.addHook('onRequest', async (request, reply) => {
-    attachRequestId(request, reply, trustProxyRanges);
-    attachClientHeaders(request);
-
-    if (isOpsPath(request.url)) return undefined;
-    const host = request.headers.host;
-    if (host !== undefined && host !== config.server.publicHost) {
-      request.log.warn(
-        { event: 'authz.origin_rejected', route: request.url },
-        'host header is not PUBLIC_HOST',
-      );
-      await sendProblem(request, reply, 'host_rejected', {
-        detail: `This server answers only to ${config.server.publicHost}.`,
-      });
-      return reply;
-    }
-    return undefined;
-  });
-
   // ---- the CSP and the headers helmet does not emit ---------------------------------------------
   const csp = (styleNonce: string): string =>
     renderCsp(
@@ -191,11 +185,39 @@ export async function applySecurityPlugin(
     );
 
   app.addHook('onRequest', async (request, reply) => {
+    attachRequestId(request, reply, trustProxyRanges);
+    attachClientHeaders(request);
     reply.header('content-security-policy', csp(reply.cspNonce.style));
     for (const [name, value] of Object.entries(HARDENING_HEADERS)) {
       reply.header(name, value);
     }
     if (needsNoStore(request.url)) reply.header('cache-control', 'no-store');
+
+    const host = request.headers.host;
+    if (!isOpsPath(request.url) && host !== undefined && host !== config.server.publicHost) {
+      request.log.warn(
+        { event: 'authz.origin_rejected', route: request.url },
+        'host header is not PUBLIC_HOST',
+      );
+      await sendProblem(request, reply, 'host_rejected', {
+        detail: `This server answers only to ${config.server.publicHost}.`,
+      });
+      return reply;
+    }
+    // A known path with an unsupported method is a routing refusal, before body parsing,
+    // authentication or CSRF can mistake an absent handler for a product operation.
+    if (request.routeOptions.url === undefined) {
+      const allowed = app.supportedMethods.filter(
+        (method) => app.findRoute({ method, url: request.url }) !== null,
+      );
+      if (allowed.length > 0) {
+        await sendProblem(request, reply, 'method_not_allowed', {
+          headers: { Allow: allowed.toSorted().join(', ') },
+        });
+        return reply;
+      }
+    }
+    return undefined;
   });
 
   // ---- one shape for every failure ---------------------------------------------------------------
@@ -206,8 +228,13 @@ export async function applySecurityPlugin(
   });
 
   app.setErrorHandler(async (error, request, reply) => {
-    const { code, extensions } = classifyError(error);
-    const level = logLevelForStatus(statusOf(error));
+    // An area's own error classes first (`ProblemRegistry`), then this module's classification. The order
+    // is what lets `db/failure.ts` answer `409 name_conflict` for an `ER_DUP_ENTRY` on `uq_sibling`
+    // without every area's classes reaching into one growing `instanceof` chain.
+    const mapped = app.problems.map(error);
+    const { code, extensions } =
+      mapped === null ? classifyError(error) : { code: mapped.code, extensions: mapped.extensions };
+    const level = logLevelForStatus(mapped?.status ?? statusOf(error));
     request.log[level]({ err: error, code, route: request.routeOptions.url }, 'request failed');
 
     if (isEnvelopeExempt(request.url)) {

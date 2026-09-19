@@ -32,6 +32,10 @@ export const LIMITS = {
   YJS_MESSAGE_WINDOW_MS: 10_000,
   /** Awareness messages per connection per second; excess is dropped, never closed. */
   AWARENESS_MESSAGES_PER_SECOND: 10,
+  /** Distinct one-second awareness windows per socket; excess new names are dropped. */
+  AWARENESS_DOCUMENTS_PER_SOCKET: 100,
+  /** Optional Hocuspocus routing session suffix; ASCII identifier characters, never another NUL. */
+  COLLAB_SESSION_ID_MAX_CHARS: 64,
   /** Client to server stateless payload cap; the handler closes with `protocol-error`. 4 KiB. */
   STATELESS_PAYLOAD_MAX_BYTES: 4_096,
   /** `flush` (Ctrl/Cmd+S) budget per connection per minute; excess is answered `projected`. */
@@ -72,6 +76,12 @@ export const LIMITS = {
   COMPACTION_DEBOUNCE_MS: 2_000,
   /** Compaction maximum debounce. Env `COLLAB_MAX_DEBOUNCE_MS`. */
   COMPACTION_MAX_DEBOUNCE_MS: 10_000,
+  /**
+   * How long `enqueueCompaction`/`compactNow` await the note's FIFO before rejecting with
+   * `CompactionTimeout` (05, "Compaction"; D05-20). The integration project overrides it to 1 s
+   * through the `limits` boot option, the chaos project keeps the production value.
+   */
+  COMPACTION_AWAIT_TIMEOUT_MS: 15_000,
   /** Retention of `note_updates` rows at or below `snapshot_through_seq`. */
   UPDATE_LOG_RETENTION_DAYS: 7,
   /** Default for `vaults.auto_checkpoint_interval_min`. */
@@ -98,6 +108,8 @@ export const LIMITS = {
   REST_AUTHENTICATED_PER_MINUTE: 600,
   /** Unauthenticated REST budget per IP per minute. */
   REST_UNAUTHENTICATED_PER_MINUTE: 60,
+  /** Retained keys per REST limiter, including each independent per-route override. */
+  REST_RATE_LIMIT_CACHE_MAX_ENTRIES: 5_000,
   /** `POST /auth/sessions` budget per IP per minute. */
   LOGIN_PER_MINUTE_PER_IP: 10,
   /** Consecutive failures per `email_key|ip` before a block. */
@@ -108,6 +120,11 @@ export const LIMITS = {
   LOGIN_BLOCK_MAX_SECONDS: 86_400,
   /** Login failures per IP per day. */
   LOGIN_FAILURES_PER_IP_PER_DAY: 100,
+  /**
+   * Live sessions per user per kind (`web`, `desktop`); `SessionIssuer.issue()` revokes the oldest by
+   * `last_seen_at` with `revoked_reason='replaced'` (04, D04-01).
+   */
+  SESSIONS_PER_USER_PER_KIND: 20,
 
   // ---- MCP and integration tokens --------------------------------------------------------
   /** Burst budget per token per minute on `/mcp`. */
@@ -244,8 +261,9 @@ export const LIMIT_ENV_OVERRIDES = {
   COLLAB_MAX_DEBOUNCE_MS: 'COMPACTION_MAX_DEBOUNCE_MS',
   COLLAB_MAX_LOADED_DOCS: 'LOADED_DOCS_MAX',
   COLLAB_MAX_STATE_BYTES_TOTAL: 'LOADED_STATE_BYTES_MAX',
-  COLLAB_MAX_CONNECTIONS: 'CONNECTIONS_PER_PROCESS',
+  COLLAB_MAX_CONNECTIONS_PER_PROCESS: 'CONNECTIONS_PER_PROCESS',
   COLLAB_MAX_CONNECTIONS_PER_USER: 'CONNECTIONS_PER_USER',
+  COLLAB_MAX_CONNECTIONS_PER_IP: 'CONNECTIONS_PER_IP',
   MCP_RATE_LIMIT_PER_HOUR: 'MCP_TOKEN_PER_HOUR',
   PROJECTION_TIMEOUT_MS: 'PROJECTION_TIMEOUT_SERVER_MS',
   UPDATE_LOG_RETENTION_DAYS: 'UPDATE_LOG_RETENTION_DAYS',
@@ -256,10 +274,43 @@ export const LIMIT_ENV_OVERRIDES = {
 export type LimitEnvKey = keyof typeof LIMIT_ENV_OVERRIDES;
 
 /**
- * The two limits a client must know before it sends a request, published additively at
- * `GET /meta.limits` under these wire names (02, "The single limits policy").
+ * The limits a client must know before it sends a request, published additively at
+ * `GET /meta.limits` under these wire names (02, "The single limits policy"; ARCH-16). Wire names
+ * and constant names are two deliberately separate vocabularies, so this map is the only place the
+ * two meet and `GET /meta` builds its `limits` object from it rather than from eight hand-written
+ * field assignments. The first two are also environment-overridable (`LIMIT_ENV_OVERRIDES`), which
+ * is why 02's prose singles them out; the other six are published because a client pre-validates
+ * against them (09-api-reference.md section 2.2).
  */
 export const PUBLISHED_LIMIT_WIRE_NAMES = {
   uploadBytes: 'UPLOAD_MAX_BYTES',
   importBytes: 'IMPORT_MAX_BYTES',
+  importFiles: 'IMPORT_MAX_FILES',
+  importDepth: 'IMPORT_MAX_DEPTH',
+  noteSoftChars: 'NOTE_SOFT_MAX_UTF16',
+  noteHardChars: 'NOTE_HARD_MAX_UTF16',
+  bodyBytes: 'BODY_MAX_BYTES_JSON',
+  wsMaxPayloadBytes: 'WS_MAX_PAYLOAD_BYTES',
 } as const;
+
+/** A member of `GET /meta.limits`. */
+export type PublishedLimitWireName = keyof typeof PUBLISHED_LIMIT_WIRE_NAMES;
+
+/**
+ * The `GET /meta.limits` object. Spelled out rather than folded out of the map above so that no
+ * cast is needed to type it; `rest.dtos.unit` asserts that its key set is exactly
+ * `PUBLISHED_LIMIT_WIRE_NAMES` and that each value is the constant that map pairs with the name, so
+ * the two cannot disagree.
+ */
+export function publishedLimits(): Readonly<Record<PublishedLimitWireName, number>> {
+  return {
+    uploadBytes: LIMITS.UPLOAD_MAX_BYTES,
+    importBytes: LIMITS.IMPORT_MAX_BYTES,
+    importFiles: LIMITS.IMPORT_MAX_FILES,
+    importDepth: LIMITS.IMPORT_MAX_DEPTH,
+    noteSoftChars: LIMITS.NOTE_SOFT_MAX_UTF16,
+    noteHardChars: LIMITS.NOTE_HARD_MAX_UTF16,
+    bodyBytes: LIMITS.BODY_MAX_BYTES_JSON,
+    wsMaxPayloadBytes: LIMITS.WS_MAX_PAYLOAD_BYTES,
+  };
+}

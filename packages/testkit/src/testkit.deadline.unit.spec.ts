@@ -1,5 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -94,11 +92,13 @@ describe('testkit.deadline.unit [area:testkit]', () => {
   });
 
   it('rejects a promise that misses the budget, and leaves no unhandled rejection behind', async () => {
+    const late = createDeferred<string>();
     await expect(
-      withDeadline(delay(5000, 'slow'), { timeoutMs: 10, description: 'a slow operation' }),
+      withDeadline(late.promise, { timeoutMs: 10, description: 'a slow operation' }),
     ).rejects.toThrow(/timed out after 10 ms waiting for a slow operation/);
-    // The winning branch aborts the timer; if that abort rejected unhandled, this tick would report it.
-    await delay(20);
+    // Reject the losing operation after the deadline. Vitest reports unhandled rejections.
+    late.reject(new Error('late failure after deadline'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
   });
 
   it('reserves a distinct free loopback port each time', async () => {

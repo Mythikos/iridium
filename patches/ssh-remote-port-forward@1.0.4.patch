@@ -1,0 +1,21 @@
+diff --git a/dist/createSshConnection.js b/dist/createSshConnection.js
+index b1120bc76afb82c34fc140b13c4fd654f9732e13..63ba39bd8f81f6cdf49c5fc5436797cfcb24b744 100644
+--- a/dist/createSshConnection.js
++++ b/dist/createSshConnection.js
+@@ -29,6 +29,16 @@ const createSshConnection = (connectConfig) => __awaiter(void 0, void 0, void 0,
+                 socket.pipe(stream);
+                 stream.resume();
+             });
++            // A refused/reset forwarded TCP leg must close its SSH channel, never crash the host.
++            // pipe() forwards data/end but deliberately does not forward stream errors.
++            const closePair = () => {
++                socket.destroy();
++                stream.destroy();
++            };
++            socket.on("error", closePair);
++            stream.on("error", closePair);
++            socket.once("close", () => stream.destroy());
++            stream.once("close", () => socket.destroy());
+         })
+             .connect(connectConfig);
+     });

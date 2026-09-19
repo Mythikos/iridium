@@ -225,6 +225,7 @@ describe('config.env.unit [area:ops]', () => {
       expect(config.db.poolApp).toBe(20);
       expect(config.db.poolPersist).toBe(4);
       expect(config.db.connectTimeoutMs).toBe(10_000);
+      expect(config.db.queryTimeoutMs).toBe(10_000);
       expect(config.db.migrateUrl).toBeNull();
       expect(config.db.backupUrl).toBeNull();
       expect(config.lifecycle.migrateOnBoot).toBe(false);
@@ -474,6 +475,48 @@ describe('config.env.unit [area:ops]', () => {
       const loaded = loadConfigDetailed({ ...MINIMAL, UV_THREADPOOL_SIZE: '4' });
       expect(loaded.diagnostics.warnings.join('\n')).toContain('UV_THREADPOOL_SIZE');
     });
+  });
+
+  describe('the WebSocket receiver representable range', () => {
+    it.each(['0', '-1', '2GiB', '2147483648', '4294967296'])(
+      'rejects %s instead of allowing ws to disable its payload cap',
+      (raw) => {
+        expect(expectConfigError({ ...MINIMAL, WS_MAX_PAYLOAD_BYTES: raw }).code).toBe(
+          'config.invalid',
+        );
+      },
+    );
+
+    it('preserves the policy default and accepts both positive representable endpoints', () => {
+      expect(loadConfig(MINIMAL).collab.wsMaxPayloadBytes).toBe(LIMITS.WS_MAX_PAYLOAD_BYTES);
+      expect(loadConfig({ ...MINIMAL, WS_MAX_PAYLOAD_BYTES: '1' }).collab.wsMaxPayloadBytes).toBe(
+        1,
+      );
+      expect(
+        loadConfig({ ...MINIMAL, WS_MAX_PAYLOAD_BYTES: '2147483647' }).collab.wsMaxPayloadBytes,
+      ).toBe(2 ** 31 - 1);
+    });
+  });
+
+  describe('database query deadlines', () => {
+    it.each(['0', '-1', '1', '1999', '1.5', 'NaN', '2147483648'])(
+      'rejects an unrepresentable deadline %s instead of clamping a timer',
+      (value) => {
+        const error = expectConfigError({ ...MINIMAL, DB_QUERY_TIMEOUT_MS: value });
+        expect(error.code).toBe('config.invalid');
+        expect(error.message).toContain('DB_QUERY_TIMEOUT_MS');
+      },
+    );
+
+    it.each(['2000', '2500', '2147483647'])(
+      'preserves the configured query deadline %s independently of connect timeout',
+      (value) => {
+        const loaded = loadConfigDetailed({ ...MINIMAL, DB_QUERY_TIMEOUT_MS: value });
+        expect(loaded.config.db.queryTimeoutMs).toBe(Number(value));
+        expect(loaded.config.db.connectTimeoutMs).toBe(10_000);
+        expect(loaded.redacted['DB_QUERY_TIMEOUT_MS']).toBe(value);
+      },
+    );
   });
 
   describe('the key table itself', () => {

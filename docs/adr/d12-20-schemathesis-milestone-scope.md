@@ -1,0 +1,13 @@
+# D12-20: Schemathesis milestone scope
+
+Status: Accepted, 2026-09-17.
+
+At commit `492d870`, `12-milestones.md` §5.4 explicitly requires a clean Schemathesis light run at M1. The same document's §6.2 Codegen row and §13.3 M2 row instead introduce the light lane at M2. `10-testing-and-quality.md`, under "REST — Schemathesis black-box fuzzing", defines the light profile as authenticated and stateful, with all checks and 50 examples; it defines no separate unauthenticated M1 profile. Section 1 of the milestone plan forbids later work from becoming an earlier gate.
+
+Retain the explicit M1 exit requirement over the shipped M1 routes. The pinned light runner uses all checks and phases at 50 examples per operation against a disposable production deployment. Its principal is the seeded non-admin editor with membership in the fixture vault. Administrator credentials are used only for fixture setup and schema export; admin and test-only paths are excluded from light fuzzing. M2 extends the existing gate to its new route set rather than introducing it.
+
+The full 500-example administrator and outsider profiles remain separate nightly coverage. Implementing those profiles early does not add their results to M1's required exit evidence. Moving light coverage to M2 would remove an explicit M1 gate; substituting an unauthenticated smoke would not exercise the authenticated API contract originally specified.
+
+`testkit.schemathesis.unit` proves profile selection, required budgets, administrator/schema separation, rejection of an elevated light fixture, and cleanup. `schemathesis.light.contract` supplies the actual light-run evidence on both required MySQL lines. Adapter unit tests are not evidence that the authenticated run passed.
+
+References: [milestone plan](../plan/12-milestones.md), [test plan](../plan/10-testing-and-quality.md), [decision log](../plan/13-decision-log.md#d12-20-schemathesis-milestone-scope-2026-09-17).

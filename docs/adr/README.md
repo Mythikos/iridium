@@ -124,3 +124,17 @@ skeleton ids `A1`–`A57` in the order the log accepted them (grouped by area wi
 but not sequential by file number within an area — see each area's table above), `0058` is the
 single limits policy (`A.1`), and `0059`–`0061` are the three ADRs the project owner's answers of
 2026-09-12 to `docs/plan/14-risks-and-open-questions.md` §G produced (`A59`, `AG1`, `AG6`).
+
+## Section decision amendments
+
+- [D10-33: collaboration owner lease scope](./d10-33-collaboration-owner-lease.md), amended 2026-09-17. Section decision IDs keep their original names rather than consuming an A-series number.
+
+- [OPS-12: serving SQL deadlines](./ops-12-serving-sql-deadlines.md), amended 2026-09-17.
+
+- [D04-14: owner-executed session revocation](./d04-14-owner-executed-session-revocation.md), amended 2026-09-17.
+
+- [D05-06: transient collaboration dependency failures](./d05-06-transient-collaboration-failures.md), amended 2026-09-17.
+
+- [D12-20: Schemathesis milestone scope](./d12-20-schemathesis-milestone-scope.md), accepted 2026-09-17.
+
+- [A54: live client compatibility](./0054-client-server-compatibility.md), [A51: test resources and milestone selection](./0051-testing-harnesses.md), and [A2: mutation report isolation](./0002-mutation-lane.md), amended 2026-09-18 after the independent M1 review.

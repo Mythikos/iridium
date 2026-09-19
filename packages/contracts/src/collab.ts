@@ -15,6 +15,9 @@ import { z } from 'zod';
 
 import { Role } from './authz.ts';
 import { NodeId, NoteId, UserId } from './ids.ts';
+import { LIMITS } from './limits.ts';
+import { utf8ByteLength } from './paths.ts';
+import { Sha256Hex } from './rest/common.ts';
 import type { EnumOf } from './schema.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -100,9 +103,15 @@ export function vaultDocName(vaultId: string): string {
  * and sent to a single connection as the reply to `baseline`.
  */
 export const PersistedMsg: z.ZodObject<
-  { v: typeof V; t: z.ZodLiteral<'persisted'>; seq: typeof Seq; sv: typeof Base64Sv },
+  {
+    v: typeof V;
+    t: z.ZodLiteral<'persisted'>;
+    seq: typeof Seq;
+    sv: typeof Base64Sv;
+    ds: typeof Sha256Hex;
+  },
   z.core.$strict
-> = z.strictObject({ v: V, t: z.literal('persisted'), seq: Seq, sv: Base64Sv });
+> = z.strictObject({ v: V, t: z.literal('persisted'), seq: Seq, sv: Base64Sv, ds: Sha256Hex });
 
 /** Why a writer transaction did not commit. */
 export const PERSIST_FAILED_REASONS = [
@@ -151,11 +160,21 @@ export const ProjectedMsg: z.ZodObject<
   z.core.$strict
 > = z.strictObject({ v: V, t: z.literal('projected'), seq: Seq });
 
-/** The caller's new effective role on this document, after a membership change while connected. */
+/** Effective role; recovered marks a resolved write barrier after every independent latch clears. */
 export const RoleMsg: z.ZodObject<
-  { v: typeof V; t: z.ZodLiteral<'role'>; role: typeof Role },
+  {
+    v: typeof V;
+    t: z.ZodLiteral<'role'>;
+    role: typeof Role;
+    recovered: z.ZodOptional<z.ZodLiteral<true>>;
+  },
   z.core.$strict
-> = z.strictObject({ v: V, t: z.literal('role'), role: Role });
+> = z.strictObject({
+  v: V,
+  t: z.literal('role'),
+  role: Role,
+  recovered: z.literal(true).optional(),
+});
 
 /**
  * The complete, server-authoritative participant list. Names and colours come only from here;
@@ -558,6 +577,10 @@ export const COLLAB_CLOSE_REASONS = [
   'awareness-spoof',
   'protocol-error',
   'shutdown',
+  /** Dependency or pool availability failed; re-attach with backoff. */
+  'unavailable',
+  /** The process exposes only operational endpoints until it holds the schema owner lease. */
+  'no-owner-lease',
 ] as const;
 
 /** A per-document close reason. */
@@ -584,6 +607,8 @@ export const COLLAB_CLOSE_CODES: Readonly<Record<CollabCloseReason, number>> = {
   'awareness-spoof': 4403,
   'protocol-error': 4403,
   shutdown: 4205,
+  'no-owner-lease': 4503,
+  unavailable: 4503,
 };
 
 /**
@@ -592,3 +617,255 @@ export const COLLAB_CLOSE_CODES: Readonly<Record<CollabCloseReason, number>> = {
  * the per-user document-connection cap and must not re-attach (D05-25).
  */
 export type CollabCloseVia = 'close-frame' | 'auth-denied' | null;
+
+// ---------------------------------------------------------------------------------------------
+// The stateless codec
+// ---------------------------------------------------------------------------------------------
+
+/** Every `t` the server sends on `note:<uuid>`, in the order the union declares them. */
+export const SERVER_NOTE_MESSAGE_TYPES = [
+  'persisted',
+  'persist-failed',
+  'projected',
+  'role',
+  'participants',
+  'closing',
+  'checkpoint',
+  'content-invalid',
+  'size-exceeded',
+] as const;
+
+/** Every `t` the server sends on `vault:<uuid>`. */
+export const SERVER_VAULT_MESSAGE_TYPES = [
+  'tree-changed',
+  'member-changed',
+  'vault-updated',
+] as const;
+
+/** Every `t` a client may send. Clients send nothing on `vault:<uuid>`. */
+export const CLIENT_NOTE_MESSAGE_TYPES = ['baseline', 'flush'] as const;
+
+/**
+ * Why a stateless payload was refused. The server maps every one of them to a `protocol-error`
+ * close; a client logs and ignores `unknown_type` and `unknown_version` so a newer server can add a
+ * message without breaking an older client (09-api-reference.md section 7.2), and treats the rest as
+ * a bug in its peer.
+ */
+export const STATELESS_DECODE_FAILURES = [
+  'too_large',
+  'not_json',
+  'not_an_object',
+  'unknown_version',
+  'unknown_type',
+  'invalid_payload',
+] as const;
+
+/** Why a stateless payload was refused. */
+export type StatelessDecodeFailure = (typeof STATELESS_DECODE_FAILURES)[number];
+
+/** Why a stateless payload was refused. */
+export const StatelessDecodeFailure: EnumOf<typeof STATELESS_DECODE_FAILURES> =
+  z.enum(STATELESS_DECODE_FAILURES);
+
+/**
+ * The outcome of decoding one stateless payload. A failure is a returned value, never a throw: an
+ * unparseable frame is an expected condition on a public socket, and the caller decides between
+ * closing the connection and ignoring the frame.
+ */
+export type StatelessDecoded<TMessage> =
+  | { readonly ok: true; readonly message: TMessage }
+  | {
+      readonly ok: false;
+      readonly reason: StatelessDecodeFailure;
+      /** Safe to log: it names the shape that was wrong and never echoes the payload. */
+      readonly detail: string;
+    };
+
+function decodeWith<TMessage>(
+  schema: z.ZodType<TMessage>,
+  knownTypes: readonly string[],
+  payload: string,
+  maxBytes: number | null,
+): StatelessDecoded<TMessage> {
+  if (maxBytes !== null && utf8ByteLength(payload) > maxBytes) {
+    return {
+      ok: false,
+      reason: 'too_large',
+      detail: `stateless payload above ${String(maxBytes)} bytes`,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return { ok: false, reason: 'not_json', detail: 'payload is not JSON' };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, reason: 'not_an_object', detail: 'payload is not a JSON object' };
+  }
+
+  // `v` and `t` are checked before the union so the reason is the one the plan names: a missing or
+  // unknown envelope version and an unknown message type are forward-compatibility cases a client
+  // ignores, while a malformed body of a *known* message is a bug in the peer.
+  const envelope: Record<string, unknown> = { ...parsed };
+  if (envelope['v'] !== 1) {
+    return { ok: false, reason: 'unknown_version', detail: 'v is absent or not 1' };
+  }
+  const type = envelope['t'];
+  if (typeof type !== 'string' || !knownTypes.includes(type)) {
+    return { ok: false, reason: 'unknown_type', detail: 't is absent or not a known message type' };
+  }
+
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `${issue.path.join('.')} ${issue.code}`)
+      .join('; ');
+    return { ok: false, reason: 'invalid_payload', detail: `${type}: ${issues}` };
+  }
+  return { ok: true, message: result.data };
+}
+
+/**
+ * The payload of a stateless frame: `JSON.stringify(msg)`. Both ends encode through this function so
+ * that no call site hand-builds a frame and forgets `v`.
+ */
+export function encodeStateless(
+  message: ServerNoteMessage | ServerVaultMessage | ClientNoteMessage,
+): string {
+  return JSON.stringify(message);
+}
+
+/**
+ * Decodes a client frame on `note:<uuid>`. This is the only direction the 4 KiB cap of
+ * 09-api-reference.md section 3.10 applies to; a `persisted.sv` on the way out is bounded by
+ * `Base64Sv` instead.
+ */
+export function decodeClientNoteMessage(payload: string): StatelessDecoded<ClientNoteMessage> {
+  return decodeWith(
+    ClientNoteMessage,
+    CLIENT_NOTE_MESSAGE_TYPES,
+    payload,
+    LIMITS.STATELESS_PAYLOAD_MAX_BYTES,
+  );
+}
+
+/** Decodes a server frame on `note:<uuid>`. */
+export function decodeServerNoteMessage(payload: string): StatelessDecoded<ServerNoteMessage> {
+  return decodeWith(ServerNoteMessage, SERVER_NOTE_MESSAGE_TYPES, payload, null);
+}
+
+/** Decodes a server frame on `vault:<uuid>`. */
+export function decodeServerVaultMessage(payload: string): StatelessDecoded<ServerVaultMessage> {
+  return decodeWith(ServerVaultMessage, SERVER_VAULT_MESSAGE_TYPES, payload, null);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Save-state inputs (09-api-reference.md section 3.9)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A Yjs V1 state vector as bytes. `@iridium/contracts` never imports yjs (A14), so the type is the
+ * byte array `Y.encodeStateVector` returns and `dominates()` in `@iridium/crdt` compares.
+ */
+export type StateVector = Uint8Array;
+
+/**
+ * The inputs the client save state is a pure function of (05-collaboration-and-durability.md,
+ * "Client state machine"; 09-api-reference.md section 3.9 fills each field from a wire or provider
+ * signal). The rules over these inputs, their order and the `SaveState` union they produce live in
+ * `@iridium/collab-client`'s `save-state.ts` and nowhere else.
+ *
+ * The snapshot lives here rather than beside those rules because `contracts.collab.unit` asserts
+ * that section 3.9's mapping covers every field of it, and a `core` package's test cannot import an
+ * `iso` package to find the field list (02-system-architecture.md, boundary tags). 05's block shows
+ * the interface in `collab-client`; the field set is identical and the rules stay there.
+ */
+export interface SaveStateInput {
+  readonly socket: 'connecting' | 'connected' | 'disconnected';
+  /** The provider's `authenticated` event seen since the last open. */
+  readonly authenticated: boolean;
+  /** `provider.synced`: the initial SyncStep1/SyncStep2 exchange completed. */
+  readonly synced: boolean;
+  /** `provider.unsyncedChanges`. */
+  readonly unsynced: number;
+  /** `Y.encodeStateVector(ydoc)`, recomputed on every local update. */
+  readonly localSv: StateVector;
+  /** SHA-256 of the canonical current Yjs delete set; vectors alone omit delete-only edits. */
+  readonly localDs: string;
+  /** The last committed vector and delete-set witness — the only "Saved" signal. */
+  readonly persisted: {
+    readonly seq: number;
+    readonly sv: StateVector;
+    readonly ds: string;
+  } | null;
+  readonly persistFailed: {
+    readonly seq?: number;
+    readonly reason: PersistFailedReason;
+    readonly at: number;
+  } | null;
+  readonly projectedSeq: number | null;
+  readonly role: Role;
+  readonly contentInvalid: boolean;
+  readonly oversize: boolean;
+  /** The re-attach delta exceeded `YJS_UPDATE_MAX_BYTES` (05, "Reconnection semantics"). */
+  readonly oversizeDelta: boolean;
+  readonly closeReason: CollabCloseReason | null;
+  readonly closeVia: CollabCloseVia;
+  readonly lastLocalEditAt: number | null;
+  /** Enters only through a `tick` event, so no timer lives in the state module (D05-26). */
+  readonly now: number;
+}
+
+/** Where one `SaveStateInput` field comes from (09-api-reference.md section 3.9). */
+export type SaveStateInputSource =
+  /** A `HocuspocusProvider` / `HocuspocusProviderWebsocket` event or property. */
+  | { readonly from: 'provider'; readonly signal: string }
+  /** A stateless message of section 3.4. */
+  | { readonly from: 'stateless'; readonly t: (typeof SERVER_NOTE_MESSAGE_TYPES)[number] }
+  /** A call on the local `Y.Doc`. */
+  | { readonly from: 'ydoc'; readonly call: string }
+  /** The per-document close reason, and how it arrived. */
+  | { readonly from: 'close'; readonly signal: 'reason' | 'via' }
+  /** The local clock, delivered as a `tick` event. */
+  | { readonly from: 'tick' }
+  /** The client's own bookkeeping over its local edits. */
+  | { readonly from: 'local'; readonly signal: string };
+
+/**
+ * The section 3.9 mapping, as data. `contracts.collab.unit` asserts it covers every field of
+ * `SaveStateInput` — the compiler does that too, through `Record<keyof SaveStateInput, …>` — and
+ * that no entry claims `SyncStatus(applied=false)`, which produces no input at all (D09-24): the
+ * provider raises no per-update rejection event, so a refused viewer write is observable only as a
+ * viewer role with a non-zero unsynced count.
+ */
+export const SAVE_STATE_INPUT_SOURCES: Readonly<
+  Record<keyof SaveStateInput, SaveStateInputSource>
+> = {
+  socket: { from: 'provider', signal: 'HocuspocusProviderWebsocket status' },
+  authenticated: { from: 'provider', signal: 'authenticated' },
+  synced: { from: 'provider', signal: 'synced' },
+  unsynced: { from: 'provider', signal: 'unsyncedChanges' },
+  localSv: { from: 'ydoc', call: 'Y.encodeStateVector(ydoc)' },
+  localDs: { from: 'ydoc', call: 'deleteSetFingerprint(ydoc)' },
+  persisted: { from: 'stateless', t: 'persisted' },
+  persistFailed: { from: 'stateless', t: 'persist-failed' },
+  projectedSeq: { from: 'stateless', t: 'projected' },
+  role: { from: 'stateless', t: 'role' },
+  contentInvalid: { from: 'stateless', t: 'content-invalid' },
+  oversize: { from: 'stateless', t: 'size-exceeded' },
+  oversizeDelta: { from: 'local', signal: 'the re-attach delta measured before it was sent' },
+  closeReason: { from: 'close', signal: 'reason' },
+  closeVia: { from: 'close', signal: 'via' },
+  lastLocalEditAt: { from: 'local', signal: 'the last local update' },
+  now: { from: 'tick' },
+};
+
+/**
+ * Provider signals that deliberately fill **no** `SaveStateInput` field. `SyncStatus(applied=false)`
+ * is the whole list: the provider emits no event for it and does not decrement `unsyncedChanges`, so
+ * a client must not be written against a rejection event, because there is none to listen for
+ * (09-api-reference.md section 3.9, D09-24).
+ */
+export const UNMAPPED_PROVIDER_SIGNALS = ['SyncStatus(applied=false)'] as const;

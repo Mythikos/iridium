@@ -1,3 +1,4 @@
+import { mintToken } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -209,6 +210,31 @@ describe('testkit.openapi-matcher.unit [area:testkit]', () => {
     expect(result.message).toMatch(/format/);
   });
 
+  it.each([
+    { format: 'iridium-node-name', good: 'Café', bad: 'Cafe\u0301' },
+    { format: 'iridium-node-name', good: 'a%20b', bad: 'a%252fb' },
+    { format: 'iridium-node-name', good: 'x'.repeat(255), bad: 'x'.repeat(256) },
+    { format: 'iridium-strong-etag', good: '"9007199254740991"', bad: '"9007199254740992"' },
+    { format: 'iridium-line-range', good: '1-9007199254740991', bad: '2-1' },
+    { format: 'iridium-line-range', good: '1-1', bad: '0-1' },
+    { format: 'iridium-credential-spl', good: mintToken('spl').raw, bad: mintToken('ses').raw },
+  ])('asserts the runtime refinement for $format ($bad)', async ({ format, good, bad }) => {
+    const custom = createOpenApiOracle({
+      source: {
+        ...DOCUMENT,
+        components: {
+          schemas: { ...DOCUMENT.components.schemas, Vault: { type: 'string', format } },
+        },
+      },
+    });
+    await expect(
+      custom.check(subject(200, 'application/json', good), 'vaults.get', 200),
+    ).resolves.toMatchObject({ pass: true });
+    await expect(
+      custom.check(subject(200, 'application/json', bad), 'vaults.get', 200),
+    ).resolves.toMatchObject({ pass: false });
+  });
+
   it('asserts the numeric formats OpenAPI adds to JSON Schema', async () => {
     await expect(
       oracle.check(
@@ -297,5 +323,59 @@ describe('testkit.openapi-matcher.unit [area:testkit]', () => {
       source: 'packages/contracts/openapi/does-not-exist.json',
     });
     await expect(missing.operationIds()).rejects.toThrow(/Run `pnpm gen`/);
+  });
+});
+
+describe('OpenAPI fallback response precedence', () => {
+  const oracle = createOpenApiOracle({
+    source: {
+      openapi: '3.1.0',
+      info: { title: 'response precedence', version: '1' },
+      paths: {
+        '/probe': {
+          get: {
+            operationId: 'probe.get',
+            responses: {
+              '503': {
+                description: 'exact',
+                content: { 'application/json': { schema: { const: 'exact' } } },
+              },
+              '5XX': {
+                description: 'range',
+                content: { 'application/json': { schema: { const: 'range' } } },
+              },
+              default: {
+                description: 'fallback',
+                content: { 'application/json': { schema: { const: 'fallback' } } },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  it.each([
+    [503, 'exact'],
+    [502, 'range'],
+    [418, 'fallback'],
+  ] as const)(
+    'validates %i against its selected schema, never accepting a different fallback',
+    async (status, body) => {
+      expect(
+        (await oracle.check(subject(status, 'application/json', body), 'probe.get', status)).pass,
+      ).toBe(true);
+      expect(
+        (await oracle.check(subject(status, 'application/json', 'wrong'), 'probe.get', status))
+          .pass,
+      ).toBe(false);
+    },
+  );
+  it('does not use a broader response to forgive an exact-status schema violation', async () => {
+    expect(
+      (await oracle.check(subject(503, 'application/json', 'range'), 'probe.get', 503)).pass,
+    ).toBe(false);
+    expect(
+      (await oracle.check(subject(502, 'application/json', 'fallback'), 'probe.get', 502)).pass,
+    ).toBe(false);
   });
 });

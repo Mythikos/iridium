@@ -36,6 +36,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { IridiumConfig } from '../config/env.ts';
+import { AppGrantVerifier } from '../db/grants-readiness.ts';
 import {
   assertFoundRows,
   createDatabaseLayer,
@@ -43,6 +44,9 @@ import {
   type Database,
   type DatabaseLayer,
   type MysqlServerVersion,
+  type PoolsInUse,
+  type PendingAcquisitions,
+  type QueryCounts,
 } from '../db/index.ts';
 import {
   createMaintDb,
@@ -67,6 +71,12 @@ export interface DatabaseHandle {
   readonly serverVersion: MysqlServerVersion | null;
   /** The most recent `migrations` evaluation, so `/readyz` and `/metrics` agree. */
   migrations(): MigrationStatus | null;
+  /** Connections checked out of each pool, for `iridium_db_pool_in_use{pool}`; zeros when absent. */
+  poolsInUse(): PoolsInUse;
+  /** Serving-pool borrowers still waiting within their acquisition deadline. */
+  pendingAcquisitions(): PendingAcquisitions;
+  /** Completed SQL attempts per serving pool, including failures; contains no query data. */
+  queryCounts(): QueryCounts;
   /** Why the database is not connected, or `null` when it is. */
   connectionError(): string | null;
   destroy(): Promise<void>;
@@ -92,7 +102,6 @@ const PING_WARN_MS = 500;
 const PING_TIMEOUT_MS = 2_000;
 const CLOCK_SKEW_WARN_MS = 5_000;
 const CLOCK_SKEW_FAIL_MS = 30_000;
-const GRANTS_MIGRATION_PREFIX = '0034';
 const NOT_CONNECTED_MODE = 'no database in this boot (mode: none — the OpenAPI export path)';
 
 /** Thrown when the durability setting is wrong and `READYZ_STRICT_DURABILITY` makes that fatal. */
@@ -161,6 +170,18 @@ class DatabaseAdapter implements DatabaseHandle {
     return this.#migrations;
   }
 
+  poolsInUse(): PoolsInUse {
+    return this.#layer?.poolsInUse() ?? { app: 0, persist: 0 };
+  }
+
+  pendingAcquisitions(): PendingAcquisitions {
+    return this.#layer?.pendingAcquisitions() ?? { app: 0, persist: 0 };
+  }
+
+  queryCounts(): QueryCounts {
+    return this.#layer?.queryCounts() ?? { app: 0, persist: 0 };
+  }
+
   connectionError(): string | null {
     return this.#error;
   }
@@ -203,6 +224,8 @@ class DatabaseAdapter implements DatabaseHandle {
         poolApp: config.db.poolApp,
         poolPersist: config.db.poolPersist,
         connectTimeoutMs: config.db.connectTimeoutMs,
+        queryTimeoutMs: config.db.queryTimeoutMs,
+        clock,
         allowUntestedMysql: config.lifecycle.allowUntestedMysql,
         logger,
       });
@@ -256,6 +279,7 @@ class DatabaseAdapter implements DatabaseHandle {
 export async function applyDbPlugin(options: DbPluginOptions): Promise<DatabaseHandle> {
   const { config, logger, readiness, clock } = options;
   const adapter = new DatabaseAdapter(options);
+  const grants = new AppGrantVerifier();
 
   if (options.mode === 'connect' && config.lifecycle.migrateOnBoot) {
     // Before the pools, because on a pristine schema the app role cannot connect until 0034_grants.
@@ -325,17 +349,15 @@ export async function applyDbPlugin(options: DbPluginOptions): Promise<DatabaseH
     return { status: 'fail', detail: `pending: ${status.pending.join(', ')}` };
   });
 
-  readiness.register('grants', () => {
+  readiness.register('grants', async () => {
     const status = adapter.migrations();
     if (status === null) return absent();
-    return status.applied.some((name) => name.startsWith(GRANTS_MIGRATION_PREFIX))
-      ? { status: 'ok', detail: 'the grants migration is applied' }
-      : {
-          status: 'warn',
-          detail:
-            'the grants migration is not applied yet; `iridium doctor --db-roles` is the check that ' +
-            'proves the app role cannot alter audit rows',
-        };
+    const db = adapter.dbApp;
+    if (db === null) return absent();
+    if (status.status === 'pending') {
+      return { status: 'warn', detail: 'grants unverified: migrations pending' };
+    }
+    return grants.check(db);
   });
 
   readiness.register('durability', async () => {
@@ -384,8 +406,8 @@ export async function applyDbPlugin(options: DbPluginOptions): Promise<DatabaseH
   readiness.register('access_log_partitions', () => ({
     status: 'warn',
     detail:
-      'the access_log partitions arrive with M1; this check can never fail, because the p_overflow ' +
-      'catch-all keeps inserts working (D03-03, invariant I-20)',
+      'scheduled access_log partition maintenance arrives with M2; the p_overflow catch-all ' +
+      'keeps inserts working (D03-03, invariant I-20)',
   }));
 
   return adapter;

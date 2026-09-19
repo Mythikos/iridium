@@ -29,6 +29,15 @@ export const DB_POOL_SIZE = Object.freeze({
 /** The mysql2 connect timeout the `db` plugin overrides from `DB_CONNECT_TIMEOUT_MS`. */
 export const DB_CONNECT_TIMEOUT_MS_DEFAULT = 10_000;
 
+/** Request/persistence statement and pool-acquisition deadline; migration DDL has its own policy. */
+export const DB_QUERY_TIMEOUT_MS_DEFAULT = 10_000;
+
+/** MySQL lock waits have one-second resolution; preserve a second for the refusal to arrive. */
+export const DB_QUERY_TIMEOUT_MS_MIN = 2_000;
+
+/** Node and mysql2 timers clamp larger delays to 1 ms; reject those values rather than invert policy. */
+export const DB_QUERY_TIMEOUT_MS_MAX = 2_147_483_647;
+
 /**
  * `TINYINT(1)` is Iridium's boolean (03-data-model.md section 1.2). mysql2 hands a driver-level
  * `TINY` field with `length === 1` for exactly those columns; every other type falls through to the

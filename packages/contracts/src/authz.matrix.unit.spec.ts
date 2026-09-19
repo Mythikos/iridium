@@ -62,6 +62,7 @@ function input(overrides: Partial<DecideInput> = {}): DecideInput {
     vaultAllowed: true,
     mcpEnabled: true,
     stepUpOk: true,
+    allowArchived: false,
     ...overrides,
   };
 }
@@ -218,6 +219,29 @@ describe('authz.matrix.unit [spec:viewer-enforcement]', () => {
           isReadPermission(permission) ? 'allow' : { deny: 'forbidden' },
         ),
       );
+      // The members of `ALLOW_ARCHIVED_ROUTES` lift the freeze (section 5.6): a manager may then
+      // do everything the matrix grants, and the matrix still refuses a viewer the same write.
+      const lifted = vaultPermissions.map((permission) =>
+        decide(
+          input({
+            vaultStatus: archived,
+            explicitRole: 'manager',
+            permission,
+            allowArchived: true,
+          }),
+        ),
+      );
+      expect(lifted).toStrictEqual(vaultPermissions.map(() => 'allow'));
+      expect(
+        decide(
+          input({
+            vaultStatus: archived,
+            explicitRole: 'viewer',
+            permission: 'vault:archive',
+            allowArchived: true,
+          }),
+        ),
+      ).toStrictEqual({ deny: 'forbidden' });
     });
 
     it('intersects a token with its scopes, its allowlist and the MCP switches', () => {

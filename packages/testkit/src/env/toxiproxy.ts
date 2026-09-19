@@ -86,6 +86,8 @@ function isProxyBody(value: unknown): value is ProxyBody {
     'name' in value &&
     'listen' in value &&
     'upstream' in value &&
+    'enabled' in value &&
+    typeof value.enabled === 'boolean' &&
     typeof value.name === 'string' &&
     typeof value.listen === 'string' &&
     typeof value.upstream === 'string'
@@ -115,6 +117,10 @@ export class ToxiproxyApi {
 
   async version(): Promise<string> {
     const response = await fetch(`${this.controlUrl}/version`);
+    if (!response.ok)
+      throw new Error(
+        `@iridium/testkit: toxiproxy GET /version answered ${String(response.status)}: ${await response.text()}`,
+      );
     return response.text();
   }
 
@@ -169,7 +175,7 @@ export class ToxiproxyApi {
   async listToxicNames(proxy: string): Promise<readonly string[]> {
     const body = await this.#request(`/proxies/${encodeURIComponent(proxy)}/toxics`);
     if (!Array.isArray(body)) {
-      return [];
+      throw new Error(`@iridium/testkit: toxiproxy returned no usable toxic list for "${proxy}"`);
     }
     return body.flatMap((entry: unknown) =>
       typeof entry === 'object' &&

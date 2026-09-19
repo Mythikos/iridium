@@ -1,10 +1,13 @@
 // Root Vitest configuration (10-testing-and-quality.md, "Vitest 5.0.0 root configuration").
 // Every project is declared inline; per-package scripts pass `--config ../../vitest.config.ts`.
 import { readFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
+
+import { workspaceSourceAliases } from './tooling/mutation/workspace-source-aliases.ts';
 
 const seed = Number(process.env.IRIDIUM_TEST_SEED ?? Date.now());
 
@@ -18,15 +21,28 @@ const exitedMilestone = readFileSync(
   'utf8',
 ).trim();
 const enforceCoverageThresholds =
-  process.env.IRIDIUM_COVERAGE_GATE === '1' && exitedMilestone !== 'M0';
+  process.env.IRIDIUM_COVERAGE_GATE === '1' &&
+  (process.env.IRIDIUM_TEST_TARGET_MILESTONE ?? exitedMilestone) !== 'M0';
 console.info(`[vitest] sequence seed ${seed}`); // printed so order-coupling failures replay
 
 export default defineConfig({
   // The repository root is the Vitest root wherever the command runs from, so a package script's
   // `--config ../../vitest.config.ts --dir .` scopes the same projects to that package.
   root: import.meta.dirname,
+  resolve: {
+    // One first-party module identity per test process. Mixing source-relative unit imports with
+    // compiled workspace exports duplicates both state and V8 source-map function records.
+    // Child, container and Electron suites still run the unmodified built product.
+    alias: workspaceSourceAliases(import.meta.dirname),
+  },
   test: {
+    // Each worker boots native hashing and multiple server fixtures. Bound process fan-out
+    // independently of the host's advertised CPU count; explicit CLI overrides remain available.
+    maxWorkers: Math.min(4, availableParallelism()),
     retry: 0,
+    // Forks receive this environment before Node starts, so native argon2 and I/O share the
+    // documented production-sized libuv pool rather than an already-initialized pool of four.
+    env: { UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE ?? '8' },
     clearMocks: true, // Vitest 5 default, stated explicitly
     sequence: { shuffle: true, seed },
     // The blob reporter is a property of the lane command, not of the config: every ci.yml lane that
@@ -81,7 +97,7 @@ export default defineConfig({
           environment: 'node',
           pool: 'forks',
           isolate: true,
-          testTimeout: 10_000,
+          testTimeout: Number(process.env.IRIDIUM_PROP_RUNS ?? 200) > 200 ? 90_000 : 10_000,
           include: [
             'packages/*/src/**/*.{unit,prop}.spec.ts',
             'apps/*/src/**/*.{unit,prop}.spec.ts',
@@ -137,7 +153,7 @@ export default defineConfig({
           name: 'property',
           environment: 'node',
           pool: 'forks',
-          testTimeout: 900_000,
+          testTimeout: Number(process.env.IRIDIUM_PROP_DB_RUNS ?? 200) > 200 ? 4_200_000 : 900_000,
           hookTimeout: 120_000,
           globalSetup: ['packages/testkit/src/global/mysql.global.ts'],
           setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
@@ -156,6 +172,7 @@ export default defineConfig({
             'packages/testkit/src/global/mysql.global.ts',
             'packages/testkit/src/global/toxiproxy.global.ts',
           ],
+          setupFiles: ['packages/testkit/src/global/worker-schema.setup.ts'],
           include: ['apps/server/test/chaos/**/*.{chaos,drill}.spec.ts'], // `drill` is a layer of this project
         },
       },

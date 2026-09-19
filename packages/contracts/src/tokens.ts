@@ -205,20 +205,38 @@ export function mintToken(
   };
 }
 
+/** What `parseTokenDetailed` answers: the parsed credential, or why the string is not one. */
+export type TokenParseResult =
+  | { readonly ok: true; readonly token: ParsedToken }
+  | { readonly ok: false; readonly reason: TokenParseFailure };
+
 /**
- * Parses a credential. Total: it returns `null` for anything that is not a well-formed credential
- * of a live kind whose CRC verifies, and never throws, so a credential flood costs one regex and
- * one CRC and never a database read.
+ * Parses a credential, naming the failure when it is not one. Total: it never throws, and a
+ * credential flood costs one regex and one CRC and never a database read. `parseToken` and
+ * `tokenParseFailure` are the two projections of this one answer, so a caller that needs both the
+ * token and the reason never reconciles two functions.
  */
-export function parseToken(raw: string): ParsedToken | null {
+export function parseTokenDetailed(raw: string): TokenParseResult {
+  if (!raw.startsWith(CREDENTIAL_PREFIX)) return { ok: false, reason: 'not_a_credential' };
   const kind = kindOf(raw);
-  if (kind === null) return null;
-  if (!TOKEN_REGEX.test(raw)) return null;
+  if (kind === null) return { ok: false, reason: 'unknown_kind' };
+  if (!TOKEN_REGEX.test(raw)) return { ok: false, reason: 'malformed' };
   const body = raw.slice(0, raw.length - TOKEN_CRC_LENGTH);
-  if (crc6(body) !== raw.slice(raw.length - TOKEN_CRC_LENGTH)) return null;
+  if (crc6(body) !== raw.slice(raw.length - TOKEN_CRC_LENGTH)) {
+    return { ok: false, reason: 'crc_mismatch' };
+  }
   const tokenId = raw.slice(DISPLAY_PREFIX_LENGTH - TOKEN_ID_LENGTH - 1, DISPLAY_PREFIX_LENGTH - 1);
   const secret = body.slice(DISPLAY_PREFIX_LENGTH);
-  return { kind, tokenId, secret };
+  return { ok: true, token: { kind, tokenId, secret } };
+}
+
+/**
+ * Parses a credential. Total: it returns `null` for anything that is not a well-formed credential
+ * of a live kind whose CRC verifies, and never throws.
+ */
+export function parseToken(raw: string): ParsedToken | null {
+  const result = parseTokenDetailed(raw);
+  return result.ok ? result.token : null;
 }
 
 /**
@@ -241,11 +259,8 @@ export type TokenParseFailure = 'not_a_credential' | 'unknown_kind' | 'malformed
  * and why no variant can contain input.
  */
 export function tokenParseFailure(raw: string): TokenParseFailure | null {
-  if (!raw.startsWith(CREDENTIAL_PREFIX)) return 'not_a_credential';
-  if (kindOf(raw) === null) return 'unknown_kind';
-  if (!TOKEN_REGEX.test(raw)) return 'malformed';
-  const body = raw.slice(0, raw.length - TOKEN_CRC_LENGTH);
-  return crc6(body) === raw.slice(raw.length - TOKEN_CRC_LENGTH) ? null : 'crc_mismatch';
+  const result = parseTokenDetailed(raw);
+  return result.ok ? null : result.reason;
 }
 
 /**
@@ -403,4 +418,33 @@ export const SCOPE_BUNDLES: Readonly<Record<GrantableBundle, typeof READ_SCOPES>
  */
 export function toEffectivePermissions(scopes: readonly string[]): readonly Permission[] {
   return READ_SCOPES.filter((scope) => scopes.includes(scope));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Per-kind wire schemas
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The anchored pattern a credential of one kind matches. The REST DTOs that carry a credential on
+ * the wire — the set-password link of `POST /auth/set-password`, the batch of
+ * `POST /auth/collab-tickets`, the desktop session of `POST /auth/sessions` — validate against
+ * this rather than against a regex written at the call site, so the format lives in exactly one
+ * module (09-api-reference.md sections 2.1, 2.3).
+ */
+export function credentialRegex(kind: TokenKind): RegExp {
+  return new RegExp(
+    `^${CREDENTIAL_PREFIX}${kind}_[0-9A-Za-z]{${String(TOKEN_ID_LENGTH)}}_[0-9A-Za-z]{${String(TOKEN_SECRET_LENGTH + TOKEN_CRC_LENGTH)}}$`,
+  );
+}
+
+/** A credential of one kind as a wire schema, with the CRC checked as well as the shape. */
+export function credentialSchema(kind: TokenKind): z.ZodString {
+  return z
+    .string()
+    .length(CREDENTIAL_LENGTH)
+    .regex(credentialRegex(kind))
+    .refine((raw) => parseToken(raw)?.kind === kind, {
+      error: 'credential check digits do not verify',
+      params: { code: 'crc_mismatch' },
+    });
 }

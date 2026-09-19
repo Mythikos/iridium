@@ -35,6 +35,7 @@ describe('testkit.fault-registry.unit [area:testkit]', () => {
   it('carries the points the fault table of 10-testing-and-quality.md specifies', () => {
     expect(FAULT_POINTS.map((d) => d.point)).toStrictEqual([
       'store.throw',
+      'store.throw-after-commit-before-ack',
       'store.crash-before-commit',
       'store.crash-after-commit-before-ack',
       'store.slow',
@@ -44,6 +45,7 @@ describe('testkit.fault-registry.unit [area:testkit]', () => {
       'sv.not-recorded',
       'ws.drop-after-ack',
       'auth.slow',
+      'auth.command-after-commit',
       'mcp.skip-ignore-cookies',
     ]);
   });

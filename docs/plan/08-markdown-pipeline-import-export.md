@@ -6,7 +6,7 @@ This section is the build specification for everything that touches Markdown tex
 
 | # | Invariant | Where it is enforced | Test |
 |---|---|---|---|
-| I1 | The note text of record (the Y.Text `content`) is LF-only, BOM-free, contains no U+0000, and is never rewritten by parsing, previewing, projecting, importing or exporting | `normalizeSource` at create/import/restore/repair; client `\r` guard; compaction scan (`05-collaboration-and-durability.md`) | `markdown.no-rewrite.prop`, `collab.lf-invariant`, `markdown.roundtrip.prop` |
+| I1 | The note text of record (the Y.Text `content`) is LF-only, has one leading encoding BOM removed (any subsequent U+FEFF is content), contains no U+0000, and is never rewritten by parsing, previewing, projecting, importing or exporting | `normalizeSource` at create/import/restore/repair; client `\r` guard; compaction scan (`05-collaboration-and-durability.md`) | `markdown.no-rewrite.prop`, `collab.lf-invariant`, `markdown.roundtrip.prop` |
 | I2 | No AST→Markdown serializer exists anywhere in the codebase; every mutation of note text is a text edit driven by mdast offsets | oxlint `no-restricted-imports` bans `remark-stringify`, `mdast-util-to-markdown`, `gray-matter` repo-wide | `deps.banned-imports` |
 | I3 | `rehype-sanitize` with `iridiumSanitizeSchema` is the single security boundary for rendered Markdown and runs identically in the browser worker and in the server worker; nothing runs after it except the hast→React mapping | `toPreviewTree` is the only exported renderer entry point and its last stage is the sanitizer | `markdown.sanitize-schema.snapshot`, `markdown.xss.spec` |
 | I4 | Untrusted Markdown is never parsed on the Node main thread or on the browser UI thread | server piscina pool, browser Web Worker; lint rule bans `@iridium/markdown` parse imports outside worker entry files | `projection.worker-isolation.unit` |
@@ -551,7 +551,7 @@ After initialization the live text can only change through CRDT updates, and thr
 type Eol = 'lf' | 'crlf' | 'cr' | 'mixed';
 
 interface NormalizedSource {
-  text: string;               // LF-only, BOM-free, no U+0000, no lone surrogates
+  text: string;               // LF-only, one encoding BOM removed; content U+FEFF preserved; no NUL/lone surrogate
   hadBom: boolean;
   originalEol: Eol;
   encoding: 'utf-8' | 'utf-16le' | 'utf-16be';

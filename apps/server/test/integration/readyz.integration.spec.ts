@@ -23,8 +23,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  corruptMysqlDeliberately,
   createSchema,
-  DB_ROLES,
   DEFAULT_DATABASE_NAME,
   dropSchema,
   keepSchema,
@@ -40,7 +40,13 @@ import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { mysqlVersionOutcome } from '../../src/boot/db.ts';
 import type { MysqlServerVersion } from '../../src/db/index.ts';
-import { READYZ_CHECK_NAMES, type ReadyzBody } from '../../src/ops/readiness.ts';
+import {
+  docBudgetOutcome,
+  FAIL_CLOSED_CHECKS,
+  persistBacklogOutcome,
+  READYZ_CHECK_NAMES,
+  type ReadyzBody,
+} from '../../src/ops/readiness.ts';
 
 /** ≥ 32 characters and obviously fake, so `/metrics` is both reachable and actually protected. */
 const METRICS_TOKEN = 'readyz-integration-metrics-not-a-secret';
@@ -71,9 +77,11 @@ async function provisionReachableSchema(name: string): Promise<void> {
   await dropSchema(admin, name);
   await createSchema(admin, name);
   await replicateSchemaGrants(admin, DEFAULT_DATABASE_NAME, name);
-  await admin.run(
-    `GRANT SELECT ON \`${name}\`.* TO '${DB_ROLES[0] ?? 'iridium_app'}'@'%'; FLUSH PRIVILEGES`,
-  );
+  await corruptMysqlDeliberately(admin, {
+    kind: 'grant-app-schema-read',
+    schema: name,
+    flushPrivileges: true,
+  });
 }
 
 async function startAgainst(schema: string, label: string): Promise<TestServer> {
@@ -208,7 +216,39 @@ describe('readyz.integration [area:ops]', () => {
         READYZ_CHECK_NAMES.toSorted((a, b) => a.localeCompare(b)),
       );
       expect(new Set(served).size).toBe(served.length);
-      expect(served).toHaveLength(15);
+      expect(served).toHaveLength(16);
+    });
+
+    it('serves collab_owner_lease, the sixteenth check M1 adds', () => {
+      // 12-milestones.md section 5.2's `ops` row adds it; 09 section 2.17's enum and 11's readiness table
+      // predate that row and need the name (the platform stream's report asks for the amendment).
+      expect(READYZ_CHECK_NAMES).toContain('collab_owner_lease');
+      expect(body.checks.map((check) => check.name)).toContain('collab_owner_lease');
+    });
+
+    it('refuses product traffic for pending migrations or absent serving ownership', () => {
+      // A standby serves operations only; this prevents authorization mutation on a process whose
+      // in-memory collaboration epochs cannot synchronously fence the active owner's connections.
+      expect([...FAIL_CLOSED_CHECKS]).toEqual(['migrations', 'collab_owner_lease']);
+    });
+
+    it('reports the registered kernel probes from their owning subsystems', () => {
+      for (const name of [
+        'collab_owner_lease',
+        'persist_backlog',
+        'doc_budget',
+        'projection_workers',
+      ]) {
+        const check = checkNamed(body, name);
+        expect(check.status).toBe('ok');
+        expect(check.detail).not.toContain('not registered');
+      }
+      expect(checkNamed(body, 'projection_workers').detail).toContain('M1 projection runs inline');
+    });
+    it('reports key_versions as ok once the audit plugin has compared them with schema_meta', () => {
+      const keyVersions = checkNamed(body, 'key_versions');
+      expect(keyVersions.status).toBe('ok');
+      expect(keyVersions.detail).toContain('signing audit rows with v1');
     });
 
     it('reports innodb_flush_log_at_trx_commit in the durability check', () => {
@@ -269,7 +309,7 @@ describe('readyz.integration [area:ops]', () => {
       expect(skew.detail).toMatch(/^\d+ms$/);
     });
 
-    it('reports grants as ok once the grants migration is applied', () => {
+    it('reports grants as ok after recorded application and effective privilege probes', () => {
       expect(checkNamed(body, 'grants').status).toBe('ok');
     });
 
@@ -281,6 +321,36 @@ describe('readyz.integration [area:ops]', () => {
 
     it('reports shutdown as ok while the process is not draining', () => {
       expect(checkNamed(body, 'shutdown').status).toBe('ok');
+    });
+  });
+
+  describe('the thresholds the wave-2 probes report against', () => {
+    it('warns at 80 % of either admission budget and fails at 100 % (A49, A50)', () => {
+      const budget = { maxLoadedDocs: 10, maxStateBytes: 1_000 };
+      expect(docBudgetOutcome({ ...budget, loadedDocs: 7, stateBytes: 700 }).status).toBe('ok');
+      expect(docBudgetOutcome({ ...budget, loadedDocs: 8, stateBytes: 0 }).status).toBe('warn');
+      expect(docBudgetOutcome({ ...budget, loadedDocs: 0, stateBytes: 800 }).status).toBe('warn');
+      // A server that can admit no new document is not ready for new traffic, even though already-open
+      // documents are never evicted (A50 refuses rather than evicting).
+      expect(docBudgetOutcome({ ...budget, loadedDocs: 10, stateBytes: 0 }).status).toBe('fail');
+      expect(docBudgetOutcome({ ...budget, loadedDocs: 0, stateBytes: 1_000 }).status).toBe('fail');
+    });
+
+    it('warns from a 10 s backlog and fails past 30 s, or on a writer failed for over 60 s', () => {
+      const none = { failedWriters: 0, longestFailedMs: 0 };
+      expect(persistBacklogOutcome({ ...none, oldestPendingMs: 0 }).status).toBe('ok');
+      expect(persistBacklogOutcome({ ...none, oldestPendingMs: 9_999 }).status).toBe('ok');
+      expect(persistBacklogOutcome({ ...none, oldestPendingMs: 10_000 }).status).toBe('warn');
+      expect(persistBacklogOutcome({ ...none, oldestPendingMs: 30_001 }).status).toBe('fail');
+      // A failed writer warns immediately and fails once it has been failed for more than a minute.
+      expect(
+        persistBacklogOutcome({ oldestPendingMs: 0, failedWriters: 1, longestFailedMs: 1_000 })
+          .status,
+      ).toBe('warn');
+      expect(
+        persistBacklogOutcome({ oldestPendingMs: 0, failedWriters: 1, longestFailedMs: 60_001 })
+          .status,
+      ).toBe('fail');
     });
   });
 

@@ -6,13 +6,24 @@
  * `global/worker-schema.setup.ts` writes this state; suites read it.
  */
 
-let schema: string | undefined;
-let keep = false;
+/** One per worker realm, shared by setup's source import and package consumers of dist. */
+interface WorkerState {
+  schema: string | undefined;
+  keep: boolean;
+}
+const STATE = Symbol.for('@iridium/testkit.worker-schema');
+const shared = globalThis as typeof globalThis & { [STATE]?: WorkerState };
+const state: WorkerState = (shared[STATE] ??= { schema: undefined, keep: false });
+
+/** Clear the preceding file before this file is collected and can call keepSchema(). */
+export function resetWorkerSchema(): void {
+  state.schema = undefined;
+  state.keep = false;
+}
 
 /** Called by the setup file once the worker's schema exists. */
 export function setWorkerSchema(name: string): void {
-  schema = name;
-  keep = false;
+  state.schema = name;
 }
 
 /**
@@ -20,12 +31,12 @@ export function setWorkerSchema(name: string): void {
  * (10-testing-and-quality.md, "Environment: `startTestEnv`").
  */
 export function workerSchema(): string {
-  if (schema === undefined) {
+  if (state.schema === undefined) {
     throw new Error(
       '@iridium/testkit: no worker schema. packages/testkit/src/global/worker-schema.setup.ts must be in this project’s `setupFiles` (root vitest.config.ts).',
     );
   }
-  return schema;
+  return state.schema;
 }
 
 /**
@@ -35,10 +46,10 @@ export function workerSchema(): string {
  * on another test's leftovers is a suite whose failures cannot be attributed.
  */
 export function keepSchema(): void {
-  keep = true;
+  state.keep = true;
 }
 
 /** Whether the current file opted out. Read by the setup file's `afterEach`. */
 export function isSchemaKept(): boolean {
-  return keep;
+  return state.keep;
 }

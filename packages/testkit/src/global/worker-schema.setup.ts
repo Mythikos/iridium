@@ -23,7 +23,9 @@ import {
 } from '../env/mysql.ts';
 import { migrateSchema } from '../server/cli.ts';
 import { DEFAULT_DATABASE_NAME, workerSchemaName } from '../server/env.ts';
-import { isSchemaKept, setWorkerSchema } from './worker-state.ts';
+import { isSchemaKept, resetWorkerSchema, setWorkerSchema } from './worker-state.ts';
+
+resetWorkerSchema();
 
 let admin: MysqlAdmin | undefined;
 let schema: string | undefined;

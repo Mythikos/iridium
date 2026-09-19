@@ -32,7 +32,13 @@ if (forwarded[0] === '--') {
 const { status, error } = spawnSync(
   process.execPath,
   [strykerCli, 'run', 'tooling/mutation/stryker.config.mjs', ...forwarded],
-  { cwd: repositoryRoot, stdio: 'inherit' },
+  {
+    cwd: repositoryRoot,
+    stdio: 'inherit',
+    // Stryker forces Vitest worker threads, which share the runner process libuv pool.
+    // Set its default before Node starts; a config env applied inside a worker is too late.
+    env: { ...process.env, UV_THREADPOOL_SIZE: process.env.UV_THREADPOOL_SIZE ?? '8' },
+  },
 );
 
 if (error) {

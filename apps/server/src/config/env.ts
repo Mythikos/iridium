@@ -31,6 +31,11 @@ import { getHeapStatistics } from 'node:v8';
 import { LIMITS } from '@iridium/contracts';
 import { z } from 'zod';
 
+import {
+  DB_QUERY_TIMEOUT_MS_DEFAULT,
+  DB_QUERY_TIMEOUT_MS_MIN,
+  DB_QUERY_TIMEOUT_MS_MAX,
+} from '../db/pool.ts';
 import { formatBytes, InvalidByteSizeError, parseBytes } from './bytes.ts';
 import { defaultProjectionWorkers, resolveCpuCeiling, type CpuCeiling } from './cgroup-cpu.ts';
 import { ConfigError } from './config-error.ts';
@@ -56,6 +61,8 @@ const HEAP_PRESSURE_FRACTION = 0.9;
 const UV_THREADPOOL_FLOOR = 8;
 const KEY_MATERIAL_BYTES = 32;
 const PORT_MAX = 65_535;
+// ws stores maxPayload in a signed 32-bit integer; zero or overflow disables its cap.
+const WS_RECEIVER_CEILING = 2 ** 31 - 1;
 const PASSWORD_LENGTH_FLOOR = 8;
 const PASSWORD_LENGTH_CEILING = 128;
 const ZSTD_LEVEL_MIN = 1;
@@ -178,11 +185,18 @@ function boolField(fallback: boolean) {
   });
 }
 
-function bytesField(fallback: number) {
+function bytesField(
+  fallback: number,
+  { min = 0, max = Number.MAX_SAFE_INTEGER }: { min?: number; max?: number } = {},
+) {
   return rawField.transform((value, ctx) => {
     if (!present(value)) return fallback;
     try {
-      return parseBytes(value);
+      const bytes = parseBytes(value);
+      if (bytes < min || bytes > max) {
+        return fail(ctx, `must be between ${String(min)} and ${String(max)} bytes`);
+      }
+      return bytes;
     } catch (error) {
       if (error instanceof InvalidByteSizeError) return fail(ctx, error.message);
       throw error;
@@ -314,6 +328,10 @@ export function envShape(measurements: BootMeasurements) {
     DB_POOL_APP: intField(DEFAULT_POOL_APP, { min: POOL_APP_FLOOR }),
     DB_POOL_PERSIST: intField(DEFAULT_POOL_PERSIST, { min: POOL_PERSIST_FLOOR }),
     DB_CONNECT_TIMEOUT_MS: intField(10_000, { min: 1 }),
+    DB_QUERY_TIMEOUT_MS: intField(DB_QUERY_TIMEOUT_MS_DEFAULT, {
+      min: DB_QUERY_TIMEOUT_MS_MIN,
+      max: DB_QUERY_TIMEOUT_MS_MAX,
+    }),
     IRIDIUM_MIGRATE_ON_BOOT: boolField(false),
     IRIDIUM_ALLOW_NEWER_SCHEMA: boolField(false),
     IRIDIUM_ALLOW_UNTESTED_MYSQL: boolField(false),
@@ -370,7 +388,10 @@ export function envShape(measurements: BootMeasurements) {
     COLLAB_MAX_CONNECTIONS_PER_IP: intField(LIMITS.CONNECTIONS_PER_IP, { min: 1 }),
     COLLAB_MAX_CONNECTIONS_PER_PROCESS: intField(LIMITS.CONNECTIONS_PER_PROCESS, { min: 1 }),
     COLLAB_TICKET_TTL_S: intField(LIMITS.TICKET_TTL_S, { min: 1 }),
-    WS_MAX_PAYLOAD_BYTES: bytesField(LIMITS.WS_MAX_PAYLOAD_BYTES),
+    WS_MAX_PAYLOAD_BYTES: bytesField(LIMITS.WS_MAX_PAYLOAD_BYTES, {
+      min: 1,
+      max: WS_RECEIVER_CEILING,
+    }),
     UPDATE_LOG_RETENTION_DAYS: intField(LIMITS.UPDATE_LOG_RETENTION_DAYS, { min: 1 }),
     PROJECTION_WORKERS: intField(measurements.defaultProjectionWorkers, { min: 1 }),
     PROJECTION_TIMEOUT_MS: intField(LIMITS.PROJECTION_TIMEOUT_SERVER_MS, { min: 1 }),
@@ -445,6 +466,7 @@ export const ENV_SCHEMA_KEYS: readonly string[] = Object.freeze([
   'DB_POOL_APP',
   'DB_POOL_PERSIST',
   'DB_CONNECT_TIMEOUT_MS',
+  'DB_QUERY_TIMEOUT_MS',
   'IRIDIUM_MIGRATE_ON_BOOT',
   'IRIDIUM_ALLOW_NEWER_SCHEMA',
   'IRIDIUM_ALLOW_UNTESTED_MYSQL',
@@ -571,6 +593,7 @@ export interface IridiumConfig {
     readonly poolApp: number;
     readonly poolPersist: number;
     readonly connectTimeoutMs: number;
+    readonly queryTimeoutMs: number;
   };
   readonly keys: {
     readonly pepper: Keyring;
@@ -1008,6 +1031,7 @@ function toConfig(parsed: ParsedEnv, secrets: SecretMaterial): IridiumConfig {
       poolApp: parsed.DB_POOL_APP,
       poolPersist: parsed.DB_POOL_PERSIST,
       connectTimeoutMs: parsed.DB_CONNECT_TIMEOUT_MS,
+      queryTimeoutMs: parsed.DB_QUERY_TIMEOUT_MS,
     }),
     keys: Object.freeze({
       pepper: ring('AUTH_PASSWORD_PEPPER'),
@@ -1226,6 +1250,7 @@ export function redactConfig(
     DB_POOL_APP: String(config.db.poolApp),
     DB_POOL_PERSIST: String(config.db.poolPersist),
     DB_CONNECT_TIMEOUT_MS: String(config.db.connectTimeoutMs),
+    DB_QUERY_TIMEOUT_MS: String(config.db.queryTimeoutMs),
     AUTH_PASSWORD_PEPPER: ring('AUTH_PASSWORD_PEPPER'),
     AUDIT_HMAC_KEY: ring('AUDIT_HMAC_KEY'),
     MCP_CURSOR_KEY: ring('MCP_CURSOR_KEY'),

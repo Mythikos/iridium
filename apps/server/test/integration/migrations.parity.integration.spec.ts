@@ -19,7 +19,7 @@
  * be reviewed as a diff to a committed file. A divergence turns exactly one matrix entry red and the
  * failure names the differing rows.
  *
- * Regenerate the fingerprint deliberately, never as a side effect: `IRIDIUM_WRITE_SCHEMA_FINGERPRINT=1`
+ * Regenerate the fingerprint deliberately, never as a side effect: `IRIDIUM_TEST_WRITE_SCHEMA_FINGERPRINT=1`
  * rewrites the file from the engine the run selected, and the diff is then reviewed like any other.
  *
  * The fingerprint deliberately excludes `information_schema.STATISTICS.CARDINALITY`, which is a
@@ -33,7 +33,8 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import expectedFingerprint from '@iridium/sql-policy/schema-fingerprint.json' with { type: 'json' };
-import { sql, type Kysely } from 'kysely';
+import { inspectSchemaFingerprint, type DatabaseProbeCell } from '@iridium/testkit';
+import type { Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDb, parseDatabaseUrl } from '../../src/db/index.ts';
@@ -43,7 +44,7 @@ import { IRIDIUM_SCHEMA, startIridiumMysql, type IridiumMysql } from '../db-mysq
 
 /**
  * The regeneration path, resolved through the same package export the comparison reads, so
- * `IRIDIUM_WRITE_SCHEMA_FINGERPRINT=1` can never write to a different file than the one asserted
+ * `IRIDIUM_TEST_WRITE_SCHEMA_FINGERPRINT=1` can never write to a different file than the one asserted
  * against. The workspace link makes this the real `tooling/sql/schema-fingerprint.json`.
  */
 const FINGERPRINT_PATH = fileURLToPath(
@@ -88,68 +89,14 @@ interface SchemaFingerprint {
 }
 
 /** One `information_schema` cell: the views return only strings, numbers and NULLs. */
-type Cell = string | number | null;
-type InfoRow = Record<string, Cell>;
+type Cell = DatabaseProbeCell;
 
 const n = (value: Cell | undefined): string =>
   value === null || value === undefined ? '~' : String(value);
 
 async function fingerprint(db: Kysely<Database>, schema: string): Promise<SchemaFingerprint> {
-  const tables = await sql<InfoRow>`
-    SELECT TABLE_NAME, ENGINE, TABLE_COLLATION, ROW_FORMAT, CREATE_OPTIONS
-      FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = ${schema} AND TABLE_TYPE = 'BASE TABLE'
-  `.execute(db);
-
-  const columns = await sql<InfoRow>`
-    SELECT TABLE_NAME, ORDINAL_POSITION, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE,
-           COLUMN_DEFAULT, EXTRA, COLLATION_NAME, GENERATION_EXPRESSION, COLUMN_KEY
-      FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = ${schema}
-  `.execute(db);
-
-  const statistics = await sql<InfoRow>`
-    SELECT TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME, COLLATION, SUB_PART, PACKED,
-           NULLABLE, INDEX_TYPE, NON_UNIQUE, EXPRESSION, IS_VISIBLE
-      FROM information_schema.STATISTICS
-     WHERE TABLE_SCHEMA = ${schema}
-  `.execute(db);
-
-  const foreignKeys = await sql<InfoRow>`
-    SELECT rc.CONSTRAINT_NAME, rc.TABLE_NAME, rc.REFERENCED_TABLE_NAME, rc.UPDATE_RULE,
-           rc.DELETE_RULE, kcu.COLUMN_NAME, kcu.REFERENCED_COLUMN_NAME, kcu.ORDINAL_POSITION
-      FROM information_schema.REFERENTIAL_CONSTRAINTS rc
-      JOIN information_schema.KEY_COLUMN_USAGE kcu
-        ON kcu.CONSTRAINT_SCHEMA = rc.CONSTRAINT_SCHEMA
-       AND kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
-       AND kcu.TABLE_NAME = rc.TABLE_NAME
-     WHERE rc.CONSTRAINT_SCHEMA = ${schema}
-  `.execute(db);
-
-  const triggers = await sql<InfoRow>`
-    SELECT TRIGGER_NAME, EVENT_MANIPULATION, EVENT_OBJECT_TABLE, ACTION_TIMING,
-           ACTION_ORIENTATION, ACTION_STATEMENT
-      FROM information_schema.TRIGGERS
-     WHERE TRIGGER_SCHEMA = ${schema}
-  `.execute(db);
-
-  const partitions = await sql<InfoRow>`
-    SELECT TABLE_NAME, PARTITION_NAME, PARTITION_ORDINAL_POSITION, PARTITION_METHOD,
-           PARTITION_EXPRESSION, PARTITION_DESCRIPTION
-      FROM information_schema.PARTITIONS
-     WHERE TABLE_SCHEMA = ${schema} AND PARTITION_NAME IS NOT NULL
-  `.execute(db);
-
-  const variables = await sql<{ name: string; value: string }>`
-    SELECT VARIABLE_NAME AS name, VARIABLE_VALUE AS value
-      FROM performance_schema.global_variables
-     WHERE VARIABLE_NAME IN (${sql.join(SCHEMA_PREREQUISITE_VARIABLES)})
-  `.execute(db);
-
-  const collation = await sql<{ c: number }>`
-    SELECT COUNT(*) AS c FROM information_schema.COLLATIONS
-     WHERE COLLATION_NAME = 'utf8mb4_0900_as_ci'
-  `.execute(db);
+  const { tables, columns, statistics, foreignKeys, triggers, partitions, variables, collation } =
+    await inspectSchemaFingerprint(db, schema, SCHEMA_PREREQUISITE_VARIABLES);
 
   const row = (values: ReadonlyArray<Cell | undefined>): string => values.map(n).join('|');
 
@@ -254,7 +201,7 @@ describe('migrations.parity.integration [area:ops]', () => {
     await migrateToLatest({ db: maint.db, target: maint.target });
     app = createDb(parseDatabaseUrl(mysql.rootUrl()), 2);
     actual = await fingerprint(app.db, IRIDIUM_SCHEMA);
-    if (process.env['IRIDIUM_WRITE_SCHEMA_FINGERPRINT'] === '1') {
+    if (process.env['IRIDIUM_TEST_WRITE_SCHEMA_FINGERPRINT'] === '1') {
       writeFileSync(FINGERPRINT_PATH, `${JSON.stringify(actual, null, 2)}\n`, 'utf8');
     }
   }, 600_000);

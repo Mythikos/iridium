@@ -6,10 +6,13 @@
  * It creates the `mysql` proxy in front of `mysql:3306`. The `collab` proxy is created per test, after
  * a child-process server has a port to proxy (10-testing-and-quality.md, "Environment: `startTestEnv`").
  */
+import { TestContainers } from 'testcontainers';
 import type { TestProject } from 'vitest/node';
 
 import { MYSQL_NETWORK_ALIAS } from '../env/mysql.ts';
-import { MYSQL_PROXY_NAME, startToxiproxy } from '../env/toxiproxy.ts';
+import { COLLAB_PROXY_NAME, MYSQL_PROXY_NAME, startToxiproxy } from '../env/toxiproxy.ts';
+import { withDeadline } from '../harness/deadline.ts';
+import { reserveLoopbackPort } from '../harness/free-port.ts';
 import { requireSharedTestEnv } from './shared-env.ts';
 
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
@@ -20,11 +23,27 @@ export default async function setup(project: TestProject): Promise<() => Promise
     );
   }
 
+  // Create the portable SSH host-port forwarder before Toxiproxy joins its network.
+  // The sequential chaos files bind their child to this reserved port when exercising WS toxics.
+  const collabServerPort = await reserveLoopbackPort();
+  // Testcontainers unrefs its SSH socket before requesting the forwarding rule. This referenced
+  // deadline keeps global setup alive until that rule is acknowledged and fails a stuck setup.
+  await withDeadline(TestContainers.exposeHostPorts(collabServerPort), {
+    timeoutMs: 60_000,
+    description: 'the chaos host-port forwarding rule',
+  });
   const toxiproxy = await startToxiproxy({ network: env.network });
   const mysqlProxy = await toxiproxy.createProxy(MYSQL_PROXY_NAME, `${MYSQL_NETWORK_ALIAS}:3306`);
 
+  const collabProxy = await toxiproxy.createProxy(
+    COLLAB_PROXY_NAME,
+    `host.testcontainers.internal:${String(collabServerPort)}`,
+  );
+
   project.provide('iridiumToxiproxy', {
     controlUrl: toxiproxy.controlUrl,
+    collabServerPort,
+    collabProxy: { host: collabProxy.host, port: collabProxy.port },
     mysqlProxy: { host: mysqlProxy.host, port: mysqlProxy.port },
   });
   console.info(

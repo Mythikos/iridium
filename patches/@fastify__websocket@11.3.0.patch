@@ -1,0 +1,57 @@
+diff --git a/index.js b/index.js
+--- a/index.js
++++ b/index.js
+@@ -9,6 +9,7 @@
+ 
+ const kWs = Symbol('ws-socket')
+ const kWsHead = Symbol('ws-head')
++const kWsRelease = Symbol('ws-socket-release')
+ const statusCodeReg = /HTTP\/1.1 (\d+)/u
+ 
+ function fastifyWebsocket (fastify, opts, next) {
+@@ -110,6 +111,19 @@
+   fastify.decorate('injectWS', injectWS)
+ 
+   function onUpgrade (rawRequest, socket, head) {
++    // Node has relinquished this raw socket; ws cannot own it until asynchronous hooks finish.
++    const onSocketError = (err) => {
++      fastify.log.warn({ err }, 'websocket upgrade failed')
++      socket.destroy()
++    }
++    const release = () => {
++      socket.removeListener('error', onSocketError)
++      socket.removeListener('close', release)
++      delete rawRequest[kWsRelease]
++    }
++    socket.on('error', onSocketError)
++    socket.once('close', release)
++    rawRequest[kWsRelease] = release
+     // Save a reference to the socket and then dispatch the request through the normal fastify router so that it will invoke hooks and then eventually a route handler that might upgrade the socket.
+     rawRequest[kWs] = socket
+     rawRequest[kWsHead] = head
+@@ -119,12 +133,15 @@
+       fastify.routing(rawRequest, rawResponse)
+     } catch (err) {
+       fastify.log.warn({ err }, 'websocket upgrade failed')
++      socket.destroy()
+     }
+   }
+   websocketListenServer.on('upgrade', onUpgrade)
+ 
+   const handleUpgrade = (rawRequest, callback) => {
+     wss.handleUpgrade(rawRequest, rawRequest[kWs], rawRequest[kWsHead], (socket) => {
++      // ws.setSocket installed its error handler before this callback: transfer ownership now.
++      rawRequest[kWsRelease]?.()
+       wss.emit('connection', socket, rawRequest)
+ 
+       socket.on('error', (error) => {
+@@ -145,7 +162,8 @@
+   })
+ 
+   fastify.addHook('onResponse', (request, _reply, done) => {
+-    if (request.ws) {
++    // An earlier onRequest hook can respond before request.ws has been initialized.
++    if (request.raw[kWs]) {
+       request.raw[kWs].destroy()
+     }
+     done()

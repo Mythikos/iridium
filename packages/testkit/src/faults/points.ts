@@ -15,6 +15,7 @@
  */
 export const FAULT = {
   storeThrow: 'store.throw',
+  storeThrowAfterCommitBeforeAck: 'store.throw-after-commit-before-ack',
   storeCrashBeforeCommit: 'store.crash-before-commit',
   storeCrashAfterCommitBeforeAck: 'store.crash-after-commit-before-ack',
   storeSlow: 'store.slow',
@@ -24,6 +25,7 @@ export const FAULT = {
   svNotRecorded: 'sv.not-recorded',
   wsDropAfterAck: 'ws.drop-after-ack',
   authSlow: 'auth.slow',
+  authCommandAfterCommit: 'auth.command-after-commit',
   mcpSkipIgnoreCookies: 'mcp.skip-ignore-cookies',
 } as const;
 
@@ -66,6 +68,15 @@ export const FAULT_POINTS: readonly FaultPointDescriptor[] = [
     lifetime: 'counted',
     firesIn: 'NoteWriter.flush() before BEGIN',
     specifiedIn: '10-testing-and-quality.md, Fault injection',
+  },
+  {
+    point: 'store.throw-after-commit-before-ack',
+    constant: 'storeThrowAfterCommitBeforeAck',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn:
+      'discard the successful COMMIT result before the writer acknowledges it, without exiting',
+    specifiedIn: '05-collaboration-and-durability.md, Failure handling, retry and persist-failed',
   },
   {
     point: 'store.crash-before-commit',
@@ -138,6 +149,14 @@ export const FAULT_POINTS: readonly FaultPointDescriptor[] = [
     lifetime: 'until-disarmed',
     firesIn: 'onAuthenticate',
     specifiedIn: '10-testing-and-quality.md, Fault injection',
+  },
+  {
+    point: 'auth.command-after-commit',
+    constant: 'authCommandAfterCommit',
+    argument: 'milliseconds',
+    lifetime: 'one-shot',
+    firesIn: 'the owner session command relay after COMMIT, before live revocation delivery',
+    specifiedIn: '04-auth-and-access-control.md, Owner-executed CLI session commands',
   },
   {
     point: 'mcp.skip-ignore-cookies',

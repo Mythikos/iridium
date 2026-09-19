@@ -8,7 +8,7 @@
     "oxlint.config.ts",
     "pnpm-workspace.yaml"
   ],
-  "globalPassThroughEnv": ["CI", "GITHUB_ACTIONS", "NODE_OPTIONS"],
+  "globalPassThroughEnv": ["CI", "GITHUB_ACTIONS", "NODE_OPTIONS", "UV_THREADPOOL_SIZE"],
   "boundaries": {
     "tags": {
       "core": {

@@ -12,7 +12,7 @@
 
 /** Liveness. Performs no database work, which is why the container `HEALTHCHECK` uses it (OPS-23). */
 export const HEALTHZ_PATH = '/healthz';
-/** Readiness: the fifteen checks, fail-closed on `migrations`. */
+/** Readiness: the sixteen checks, fail-closed on `migrations`. */
 const READYZ_PATH = '/readyz';
 /** The Prometheus exposition, protected by `METRICS_TOKEN` or `METRICS_ALLOW_CIDR`. */
 const METRICS_PATH = '/metrics';

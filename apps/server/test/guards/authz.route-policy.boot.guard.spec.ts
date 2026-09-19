@@ -26,6 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from '../../src/app.ts';
 import {
+  API_PREFIX,
   assertRoutePolicies,
   PENDING_ASSERTIONS,
   RoutePolicyError,
@@ -68,7 +69,7 @@ afterAll(() => {
 });
 
 describe('authz.route-policy.boot.guard [area:authz]', () => {
-  describe('the assertion runs and passes on the M0 route set', () => {
+  describe('the assertion runs and passes on the registered route set', () => {
     let app: FastifyInstance;
 
     beforeAll(async () => {
@@ -82,11 +83,22 @@ describe('authz.route-policy.boot.guard [area:authz]', () => {
       await app.close();
     });
 
-    it('registers the three operational routes and nothing else at M0', () => {
-      const paths = [...new Set(app.routes().map((route) => route.url))].toSorted((a, b) =>
-        a.localeCompare(b),
-      );
-      expect(paths).toEqual(['/healthz', '/metrics', '/readyz']);
+    it('registers only the documented surfaces, and any other route is the test-only namespace', () => {
+      // Outside `/api/v1` the boot registers exactly what 09-api-reference.md §2.17 and §2.18's
+      // second table name: the three operational routes and the `/collab` upgrade. Everything else a
+      // milestone adds lives under the API prefix, and — under `NODE_ENV=test` — the `/__test__`
+      // control namespace, whose every route must declare `test-only`.
+      const routes = app.routes();
+      const outsideTheApi = [...new Set(routes.map((route) => route.url))]
+        .filter(
+          (url) => !url.startsWith(TEST_NAMESPACE_PREFIX) && !url.startsWith(`${API_PREFIX}/`),
+        )
+        .toSorted((a, b) => a.localeCompare(b));
+      expect(outsideTheApi).toEqual(['/collab', '/healthz', '/metrics', '/readyz']);
+      const testRoutePolicies = routes
+        .filter((route) => route.url.startsWith(TEST_NAMESPACE_PREFIX))
+        .map((route) => route.auth);
+      expect(testRoutePolicies.every((auth) => auth === 'test-only')).toBe(true);
     });
 
     it('gives every registered route a config.auth, HEAD twins included', () => {
@@ -122,11 +134,13 @@ describe('authz.route-policy.boot.guard [area:authz]', () => {
       }).toThrow(RoutePolicyError);
     });
 
-    it('accepts public, self, serverAdmin and vault-scoped policies', () => {
+    it('accepts public, self, session, serverAdmin and vault-scoped policies', () => {
       expect(() => {
         assertRoutePolicies([
           { method: 'GET', url: '/healthz', auth: { public: true } },
           { method: 'GET', url: '/api/v1/me', auth: { self: true } },
+          { method: 'POST', url: '/api/v1/me/password', auth: { self: true, stepUp: true } },
+          { method: 'DELETE', url: '/api/v1/auth/sessions/current', auth: { session: true } },
           {
             method: 'GET',
             url: '/api/v1/admin/users',
@@ -137,6 +151,16 @@ describe('authz.route-policy.boot.guard [area:authz]', () => {
             url: '/api/v1/vaults/:vaultId/nodes',
             auth: { permission: 'vault:read', vaultFrom: 'params.vaultId' },
           },
+        ]);
+      }).not.toThrow();
+    });
+
+    it('accepts the two flag-only administrator documentation routes', () => {
+      expect(() => {
+        assertRoutePolicies([
+          { method: 'GET', url: '/healthz', auth: { public: true } },
+          { method: 'GET', url: '/openapi.json', auth: { serverAdmin: true } },
+          { method: 'GET', url: '/docs', auth: { serverAdmin: true } },
         ]);
       }).not.toThrow();
     });
@@ -235,6 +259,31 @@ describe('authz.route-policy.boot.guard [area:authz]', () => {
       }).toThrow(/bearerOnly/);
     });
 
+    it('refuses a bearerOnly mount that does not admit exactly token principals', () => {
+      expect(() => {
+        assertRoutePolicies(
+          tableWith({
+            method: 'GET',
+            url: '/api/v1/vaults/:vaultId/nodes',
+            auth: {
+              permission: 'note:read',
+              vaultFrom: 'params.vaultId',
+              bearerOnly: true,
+              mcpAudience: 'pat',
+            },
+          }),
+        );
+      }).toThrow(/principalKinds/);
+    });
+
+    it('refuses a serverAdmin flag-only route that is not a documentation route', () => {
+      expect(() => {
+        assertRoutePolicies(
+          tableWith({ method: 'GET', url: '/api/v1/admin/secret', auth: { serverAdmin: true } }),
+        );
+      }).toThrow(/ADMIN_FLAG_ONLY_ROUTES/);
+    });
+
     it('refuses a mutating /admin/* route without step-up', () => {
       expect(() => {
         assertRoutePolicies(
@@ -289,9 +338,11 @@ describe('authz.route-policy.boot.guard [area:authz]', () => {
     it('records each pending assertion with the milestone that registers its routes', () => {
       expect(PENDING_ASSERTIONS.length).toBeGreaterThan(0);
       const recorded = PENDING_ASSERTIONS.join('\n');
-      expect(recorded).toContain('CSRF');
+      // The CSRF-exemption enumeration and `allowArchived` membership are asserted now (the
+      // negative cases below cover them), so they have left the pending list. What remains is M3's:
+      // the MCP-audience-per-mount match, the `/oauth/*` routes, and the deliberate `.well-known` 404s.
       expect(recorded).toContain('mcpAudience');
-      expect(recorded).toContain('allowArchived');
+      expect(recorded).toContain('/oauth');
       expect(recorded).toContain('.well-known');
       for (const entry of PENDING_ASSERTIONS) {
         expect(entry, 'every pending assertion names its milestone').toMatch(/^M\d:/);

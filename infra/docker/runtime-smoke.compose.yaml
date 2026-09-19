@@ -1,0 +1,58 @@
+# M0's docker-image runtime gate (12-milestones.md §4.6; 11, "Image hygiene checks").
+# runtime-smoke.ts layers this over infra/compose.yaml under a unique project name, so the tuned
+# MySQL configuration and role bootstrap are the same ones development and integration use.
+configs:
+  dev_mysql_root_password:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/mysql_root_password
+  dev_db_app_password:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/db_app_password
+  dev_db_migrator_password:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/db_migrator_password
+  dev_db_backup_password:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/db_backup_password
+  dev_auth_password_pepper_v1:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/auth_password_pepper_v1
+  dev_audit_hmac_key_v1:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/audit_hmac_key_v1
+  dev_mcp_cursor_key_v1:
+    content: !reset null
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/mcp_cursor_key_v1
+  smoke_metrics_token:
+    file: ${IRIDIUM_SMOKE_SECRET_DIR:?set by runtime-smoke.ts}/metrics_token
+
+services:
+  mysql-config:
+    image: ${IRIDIUM_MYSQL_IMAGE:?set the required MySQL image}
+  mysql:
+    image: ${IRIDIUM_MYSQL_IMAGE:?set the required MySQL image}
+    ports: !reset []
+
+  # Fresh named data volumes inherit ownership from the image. Do not repair their
+  # permissions here: the gate must catch an image that cannot boot as its default user.
+  server:
+    image: ${IRIDIUM_SMOKE_IMAGE:?set the already-built server image}
+    build: !reset null
+    pull_policy: never
+    develop: !reset null
+    environment:
+      NODE_ENV: production
+      PUBLIC_ORIGIN: https://iridium.invalid
+      METRICS_ENABLED: 'true'
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
+    configs:
+      - source: smoke_metrics_token
+        target: /run/secrets/metrics_token
+        mode: 0444
+    # No user override: an accidental root USER in the image must fail the gate.
+    read_only: true
+    tmpfs: ['/tmp:size=512m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: !override ['127.0.0.1::4000']
+    stop_grace_period: 45s

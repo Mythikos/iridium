@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import type { StartedMySqlContainer } from '@testcontainers/mysql';
 /**
  * `startTestEnv()` — the once-per-run environment (10-testing-and-quality.md, "Environment:
@@ -12,7 +14,8 @@ import { Network } from 'testcontainers';
 import type { StartedNetwork } from 'testcontainers';
 
 import { migrateSchema } from '../server/cli.ts';
-import { DEFAULT_DATABASE_NAME, TEMPLATE_SCHEMA } from '../server/env.ts';
+import type { DatabasePasswords } from '../server/env.ts';
+import { DEFAULT_DATABASE_NAME, TEMPLATE_SCHEMA, TEST_DB_PASSWORDS } from '../server/env.ts';
 import type { MysqlAdmin } from './mysql.ts';
 import {
   MYSQL_NETWORK_ALIAS,
@@ -26,6 +29,8 @@ import type { ProxyHandle, ToxiproxyFixture } from './toxiproxy.ts';
 import { MYSQL_PROXY_NAME, startToxiproxy } from './toxiproxy.ts';
 
 export interface TestEnvOptions {
+  /** Generate disposable database passwords and signing keys accepted by production validation. */
+  readonly productionCredentials?: boolean;
   /** Defaults to `IRIDIUM_MYSQL_IMAGE`, then to the floor `mysql:8.4.11`. */
   readonly mysqlImage?: string;
   /** The `chaos` project only: start Toxiproxy on a shared network and proxy MySQL through it. */
@@ -37,6 +42,7 @@ export interface TestEnvOptions {
 }
 
 export interface TestEnvMysql {
+  readonly passwords: DatabasePasswords;
   /** `mysql://root:…@host:port/iridium` — the harness's own admin connection string. */
   readonly rootUri: string;
   readonly host: string;
@@ -53,6 +59,8 @@ export interface TestEnvMysql {
 }
 
 export interface TestEnv {
+  /** Pass to startServer({extraEnv}) so migration and runtime audit chains share their keys. */
+  readonly serverEnv: Readonly<Record<string, string>>;
   readonly mysql: TestEnvMysql;
   /** The same MySQL, reached through Toxiproxy. Present only when `toxiproxy: true`. */
   readonly mysqlViaToxiproxy?: ProxyHandle;
@@ -65,20 +73,36 @@ export interface TestEnv {
   stop(): Promise<void>;
 }
 
+const fresh = (): string => randomBytes(32).toString('base64url');
+
 /**
  * Start MySQL (and, for the chaos project, Toxiproxy), then migrate the template schema through
  * `iridium migrate up` under the migrator role — the product's own path, never a SQL file.
  */
 export async function startTestEnv(options: TestEnvOptions = {}): Promise<TestEnv> {
   const image = resolveMysqlImage(options.mysqlImage);
+  const passwords: DatabasePasswords =
+    options.productionCredentials === true
+      ? { root: fresh(), app: fresh(), migrator: fresh(), backup: fresh() }
+      : TEST_DB_PASSWORDS;
+  const serverEnv: Record<string, string> =
+    options.productionCredentials === true
+      ? {
+          AUTH_PASSWORD_PEPPER: fresh(),
+          AUDIT_HMAC_KEY: fresh(),
+          MCP_CURSOR_KEY: fresh(),
+          METRICS_TOKEN: fresh(),
+        }
+      : {};
   const wantsNetwork = options.toxiproxy === true;
   const network = options.network ?? (wantsNetwork ? await new Network().start() : undefined);
 
   const container = await startMysql({
     image,
+    passwords,
     ...(network === undefined ? {} : { network }),
   });
-  const admin = mysqlAdmin(container);
+  const admin = mysqlAdmin(container, passwords.root);
 
   let toxiproxy: ToxiproxyFixture | undefined;
   let mysqlViaToxiproxy: ProxyHandle | undefined;
@@ -99,11 +123,13 @@ export async function startTestEnv(options: TestEnvOptions = {}): Promise<TestEn
   if (options.skipTemplate !== true) {
     await createSchema(admin, TEMPLATE_SCHEMA);
     await replicateSchemaGrants(admin, DEFAULT_DATABASE_NAME, TEMPLATE_SCHEMA);
-    await migrateSchema({ host, port, schema: TEMPLATE_SCHEMA });
+    await migrateSchema({ host, port, schema: TEMPLATE_SCHEMA, passwords, extraEnv: serverEnv });
   }
 
   const env: TestEnv = {
+    serverEnv,
     mysql: {
+      passwords,
       rootUri: container.getConnectionUri(true),
       host,
       port,

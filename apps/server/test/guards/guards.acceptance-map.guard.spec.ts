@@ -52,15 +52,18 @@
  * belongs to no project of the root `vitest.config.ts` and is deleted when M1 absorbs it (D12-5).
  * Rule 4 is therefore applied to files whose basename ends in one of the ten legal layers.
  *
- * Every check is a file read and a string match, so the guard needs no Docker, no network and no
+ * Checks read source and runner configuration through a root-owned tool, needing no Docker, network or
  * build, and it walks the workspace exactly once — which is what keeps it in the first
  * `vitest --project guard` step of `ci.yml › static`.
  */
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { isAbsolute, join, matchesGlob, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+
+import { sourceOf } from './source-scan.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const MAP_FILE = join(REPO_ROOT, 'docs', 'acceptance-map.json');
@@ -109,12 +112,14 @@ interface MapEntry {
 /** What the map records about one test name. `null` is "the inventory does not resolve this". */
 interface TestRecord {
   readonly sinceMilestone: string | null;
+  readonly project: string | null;
   readonly file: string | null;
   readonly tag: string | null;
 }
 
 interface AcceptanceMap {
   readonly milestones: readonly string[];
+  readonly exitCriteria: ReadonlyMap<string, readonly string[]>;
   readonly entries: readonly MapEntry[];
   readonly rowIds: ReadonlySet<string>;
   readonly hpIds: ReadonlySet<string>;
@@ -122,6 +127,10 @@ interface AcceptanceMap {
   readonly ruleTags: ReadonlyMap<string, string>;
   readonly hostContractHarnesses: readonly string[];
   readonly tests: ReadonlyMap<string, TestRecord>;
+  readonly postOnePointZero: ReadonlyMap<
+    string,
+    { readonly epic: string; readonly reason: string }
+  >;
 }
 
 function mapError(what: string): never {
@@ -221,14 +230,38 @@ function readAcceptanceMap(text: string): AcceptanceMap {
   });
   if (milestones.length === 0) mapError(': `milestones` is empty, so nothing can be due');
 
+  const exitCriteriaRoot = objectAt(root['exitCriteria'], 'the map.exitCriteria');
+  const exitCriteria = new Map<string, readonly string[]>();
+  for (const milestone of milestones) {
+    const names = arrayAt(exitCriteriaRoot, milestone, 'exitCriteria').map((name) => {
+      if (typeof name !== 'string' || name === '')
+        mapError(`: ${milestone} has an invalid exit test`);
+      return name;
+    });
+    if (names.length === 0) mapError(`: ${milestone} names no exit tests`);
+    exitCriteria.set(milestone, names);
+  }
+
   const tests = new Map<string, TestRecord>();
   const testsRoot = objectAt(root['tests'], 'the map.tests');
   for (const [name, value] of Object.entries(testsRoot)) {
     const record = objectAt(value, `tests[${JSON.stringify(name)}]`);
     tests.set(name, {
       sinceMilestone: stringOrNullAt(record, 'sinceMilestone', `tests[${JSON.stringify(name)}]`),
+      project: stringOrNullAt(record, 'project', `tests[${JSON.stringify(name)}]`),
       file: stringOrNullAt(record, 'file', `tests[${JSON.stringify(name)}]`),
       tag: stringOrNullAt(record, 'tag', `tests[${JSON.stringify(name)}]`),
+    });
+  }
+
+  const postOnePointZero = new Map<string, { readonly epic: string; readonly reason: string }>();
+  for (const value of arrayAt(root, 'postOnePointZero', 'the map')) {
+    const exclusion = objectAt(value, 'postOnePointZero');
+    const name = stringAt(exclusion, 'name', 'postOnePointZero');
+    if (postOnePointZero.has(name)) mapError(`duplicates the post-1.0 exclusion for ${name}`);
+    postOnePointZero.set(name, {
+      epic: stringAt(exclusion, 'epic', 'postOnePointZero'),
+      reason: stringAt(exclusion, 'asserts', 'postOnePointZero'),
     });
   }
 
@@ -246,6 +279,7 @@ function readAcceptanceMap(text: string): AcceptanceMap {
 
   return {
     milestones,
+    exitCriteria,
     entries,
     rowIds: readIdSet(root, 'rows', 'rowId'),
     hpIds: readIdSet(root, 'hardProperties', 'hpId'),
@@ -258,6 +292,7 @@ function readAcceptanceMap(text: string): AcceptanceMap {
       ),
     ),
     tests,
+    postOnePointZero,
   };
 }
 
@@ -292,11 +327,41 @@ interface SpecFile {
 }
 
 /**
- * The top-level `describe` is the one at column zero. Reading the *first* `describe(` instead would
- * pick up a nested block in a file whose outer call is written differently, and the requirement tag
- * the whole convention rests on lives on the outer one.
+ * Only a column-zero suite declares the file's name. A parameterized suite evaluates a table before
+ * its title call; balance that argument list using the masked source, so nested callbacks and
+ * parentheses inside comments or strings cannot move the title boundary.
  */
-const TOP_LEVEL_DESCRIBE = /(?:^|\n)(?:test\.)?describe\(\s*(['"`])([^'"`\n]*)\1/;
+const TOP_LEVEL_DESCRIBE = /(?:^|\n)(?:test\.)?describe(?:\.each)?\s*\(/;
+
+function describeTitle(source: string): { title: string; titleEnd: number } | null {
+  const scanned = sourceOf('suite.ts', source);
+  const match = TOP_LEVEL_DESCRIBE.exec(scanned.code);
+  if (match === null) return null;
+  let open = match.index + match[0].lastIndexOf('(');
+  if (match[0].includes('.each')) {
+    let depth = 1;
+    let position = open + 1;
+    while (position < scanned.code.length && depth > 0) {
+      if (scanned.code[position] === '(') depth += 1;
+      else if (scanned.code[position] === ')') depth -= 1;
+      position += 1;
+    }
+    if (depth !== 0) return null;
+    while (/\s/.test(scanned.code[position] ?? '') && position < scanned.code.length) position += 1;
+    if (scanned.code[position] !== '(') return null;
+    open = position;
+  }
+  const argumentsSource = scanned.noComments.slice(open + 1);
+  const literal = /^\s*(['"`])((?:\\[\s\S]|(?!\1)[^\\])*)\1\s*(?=,|\))/.exec(argumentsSource);
+  if (literal?.[2] === undefined) return null;
+  // Dynamic template titles and concatenated strings cannot statically declare a named test.
+  if (literal[1] === '`' && literal[2].includes('${')) return null;
+  if (literal[1] !== '`' && /[\r\n]/.test(literal[2])) return null;
+  return {
+    title: literal[2].replaceAll(/\\(['"`\\])/g, '$1'),
+    titleEnd: open + 1 + literal[0].length,
+  };
+}
 const SPEC_TAG = /\[spec:([a-z\d-]+)\]/g;
 const HP_TAG = /\[hp:(HP-\d+)\]/g;
 const AREA_TAG = /\[area:([a-z\d-]+)\]/g;
@@ -322,12 +387,9 @@ function playwrightTagsOf(source: string, describeAt: number): string[] {
   return array?.[1] === undefined ? [] : [...array[1].matchAll(PLAYWRIGHT_TAG)].map(([tag]) => tag);
 }
 
-function readSpecFile(absolute: string): SpecFile {
-  const source = readFileSync(absolute, 'utf8');
-  const match = TOP_LEVEL_DESCRIBE.exec(source);
-  const title = match?.[2] ?? null;
-  const path = relative(REPO_ROOT, absolute).replaceAll('\\', '/');
-  if (match === null || title === null) {
+function readSpecSource(path: string, source: string): SpecFile {
+  const suite = describeTitle(source);
+  if (suite === null) {
     return {
       path,
       title: null,
@@ -340,15 +402,21 @@ function readSpecFile(absolute: string): SpecFile {
   }
   return {
     path,
-    title,
-    name: title.split(/\s+/)[0] ?? null,
-    specTags: tagsOf(title, SPEC_TAG),
-    hpTags: tagsOf(title, HP_TAG),
-    areaTags: tagsOf(title, AREA_TAG),
-    playwrightTags: playwrightTagsOf(source, match.index),
+    title: suite.title,
+    name: suite.title.split(/\s+/)[0] ?? null,
+    specTags: tagsOf(suite.title, SPEC_TAG),
+    hpTags: tagsOf(suite.title, HP_TAG),
+    areaTags: tagsOf(suite.title, AREA_TAG),
+    playwrightTags: playwrightTagsOf(sourceOf(path, source).noComments, suite.titleEnd),
   };
 }
 
+function readSpecFile(absolute: string): SpecFile {
+  return readSpecSource(
+    relative(REPO_ROOT, absolute).replaceAll('\\', '/'),
+    readFileSync(absolute, 'utf8'),
+  );
+}
 function walk(dir: string, found: string[]): string[] {
   let entries: string[];
   try {
@@ -428,6 +496,254 @@ function whereItBelongs(map: AcceptanceMap, test: string): string {
 // ---------------------------------------------------------------------------------------------
 // Rules 1, 3 and 6 — a due layer has the tests it names
 // ---------------------------------------------------------------------------------------------
+
+/** A project's real file selector, read through the repository-owned runner-config tool. */
+interface ConfiguredProject {
+  readonly name: string;
+  readonly selects: (path: string) => boolean;
+}
+
+function pathWithin(directory: string, path: string): string | null {
+  const candidate = relative(directory, resolve(REPO_ROOT, path)).replaceAll('\\', '/');
+  return isAbsolute(candidate) || candidate === '..' || candidate.startsWith('../')
+    ? null
+    : candidate;
+}
+
+type PlaywrightPattern = string | RegExp;
+
+function playwrightMatches(patterns: readonly PlaywrightPattern[], absolutePath: string): boolean {
+  return patterns.some((pattern) => {
+    if (typeof pattern !== 'string') {
+      // A fresh expression keeps global/sticky expressions independent of earlier candidates.
+      return (
+        new RegExp(pattern.source, pattern.flags).test(absolutePath) ||
+        new RegExp(pattern.source, pattern.flags).test(absolutePath.replaceAll('\\', '/'))
+      );
+    }
+    const glob = pattern.startsWith('**/') ? pattern : '**/' + pattern;
+    return matchesGlob(absolutePath.replaceAll('\\', '/').toLowerCase(), glob.toLowerCase());
+  });
+}
+
+function selectorError(reason: string): never {
+  throw new Error('scripts/read-test-projects.ts returned malformed project selectors: ' + reason);
+}
+
+function selectorPatterns(value: unknown): PlaywrightPattern[] {
+  if (!Array.isArray(value)) selectorError('patterns must be an array');
+  return value.map((item) => {
+    const kind = fieldOf(item, 'kind');
+    const pattern = fieldOf(item, 'value');
+    const flags = fieldOf(item, 'flags');
+    if (typeof pattern !== 'string' || typeof flags !== 'string') {
+      selectorError('each pattern needs a string value and flags');
+    }
+    if (kind === 'glob' && flags === '') return pattern;
+    if (kind === 'regex') return new RegExp(pattern, flags);
+    return selectorError('pattern kind must be glob (without flags) or regex');
+  });
+}
+
+/** The child result is untrusted JSON; validate the protocol before it can satisfy an exit. */
+function readProjectSelectors(value: unknown): ConfiguredProject[] {
+  if (fieldOf(value, 'version') !== 1) selectorError('unsupported protocol version');
+  const projects = fieldOf(value, 'projects');
+  if (!Array.isArray(projects) || projects.length === 0) selectorError('no project array');
+  return projects.map((project) => {
+    const runner = fieldOf(project, 'runner');
+    const name = fieldOf(project, 'name');
+    const directory = fieldOf(project, 'directory');
+    if (
+      (runner !== 'vitest' && runner !== 'playwright') ||
+      typeof name !== 'string' ||
+      name === '' ||
+      typeof directory !== 'string' ||
+      !isAbsolute(directory)
+    ) {
+      selectorError('each project needs a runner, name, and absolute directory');
+    }
+    const include = selectorPatterns(fieldOf(project, 'include'));
+    const exclude = selectorPatterns(fieldOf(project, 'exclude'));
+    if (runner === 'vitest' && [...include, ...exclude].some((item) => typeof item !== 'string')) {
+      selectorError('Vitest file patterns must be globs');
+    }
+    return {
+      name,
+      selects: (path) => {
+        const candidate = pathWithin(directory, path);
+        if (candidate === null) return false;
+        if (runner === 'vitest') {
+          return (
+            include.some(
+              (pattern) => typeof pattern === 'string' && matchesGlob(candidate, pattern),
+            ) &&
+            !exclude.some(
+              (pattern) => typeof pattern === 'string' && matchesGlob(candidate, pattern),
+            )
+          );
+        }
+        const absolutePath = resolve(REPO_ROOT, path);
+        return (
+          playwrightMatches(include, absolutePath) && !playwrightMatches(exclude, absolutePath)
+        );
+      },
+    };
+  });
+}
+
+function configuredProjects(fixture?: {
+  readonly runner: 'vitest' | 'playwright';
+  readonly config: unknown;
+}): ConfiguredProject[] {
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(REPO_ROOT, 'scripts', 'read-test-projects.ts'),
+      ...(fixture === undefined ? [] : [JSON.stringify(fixture)]),
+    ],
+    {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (result.error !== undefined) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      'Runner selector tool failed (' +
+        String(result.status) +
+        '):\n' +
+        result.stdout +
+        '\n' +
+        result.stderr,
+    );
+  }
+  // Runner configs may print diagnostics, such as Vitest's seed. A single explicit record keeps
+  // that output visible on a failure without treating arbitrary output as a successful report.
+  const prefix = 'IRIDIUM_TEST_PROJECTS ';
+  const records = result.stdout.split(/\r?\n/).filter((line) => line.startsWith(prefix));
+  const record = records[0];
+  if (records.length !== 1 || record === undefined) {
+    throw new Error(
+      'Runner selector tool must emit exactly one JSON record:\n' +
+        result.stdout +
+        '\n' +
+        result.stderr,
+    );
+  }
+  return readProjectSelectors(JSON.parse(record.slice(prefix.length)));
+}
+
+const CONFIGURED_PROJECTS: readonly ConfiguredProject[] = configuredProjects();
+
+/** Exit tables also name standalone guards that belong to no acceptance row. */
+function missingExitTests(
+  map: AcceptanceMap,
+  current: string,
+  declared: ReadonlyMap<string, readonly SpecFile[]>,
+  projects: readonly ConfiguredProject[] = CONFIGURED_PROJECTS,
+): string[] {
+  return [...map.exitCriteria].flatMap(([milestone, tests]) =>
+    isDue(map, current, milestone)
+      ? tests.flatMap((name) => {
+          const declarations = declared.get(name) ?? [];
+          if (declarations.length === 0) {
+            return [
+              `${milestone} exit requires ${name}, but no spec declares it. ` +
+                'Implement the named exit test before advancing docs/milestones/CURRENT.',
+            ];
+          }
+          const owner = map.tests.get(name)?.project ?? null;
+          if (
+            declarations.some((file) =>
+              projects.some(
+                (project) =>
+                  (owner === null || project.name === owner) && project.selects(file.path),
+              ),
+            )
+          ) {
+            return [];
+          }
+          return [
+            `${milestone} exit requires ${name}, but its declarations in ` +
+              declarations.map((file) => file.path).join(', ') +
+              ` are not selected by ${owner === null ? 'any configured project' : `the ${owner} project`}. ` +
+              'Correct the spec location or its owning runner include/exclude configuration; ' +
+              'a declaration that no due runner executes cannot satisfy an exit test.',
+          ];
+        })
+      : [],
+  );
+}
+
+/** An unassigned deadline is never an implicit deferral. Only an explained post-1.0 epic is exempt. */
+function schedulingFailures(map: AcceptanceMap): string[] {
+  const failures: string[] = [];
+  for (const [name, record] of map.tests) {
+    if (record.sinceMilestone !== null) {
+      if (!map.milestones.includes(record.sinceMilestone))
+        failures.push(`${name} has unknown milestone ${record.sinceMilestone}.`);
+      continue;
+    }
+    const exclusion = map.postOnePointZero.get(name);
+    if (exclusion === undefined || exclusion.epic.trim() === '' || exclusion.reason.trim() === '') {
+      failures.push(`${name} has no milestone and no explained post-1.0 exclusion.`);
+    }
+  }
+  for (const name of map.postOnePointZero.keys()) {
+    const record = map.tests.get(name);
+    if (record === undefined || record.sinceMilestone !== null) {
+      failures.push(`${name} has a post-1.0 exclusion without an unscheduled inventory record.`);
+    }
+  }
+  return failures;
+}
+
+/** Every inventory promise is enforced, including names outside acceptance rows and exit tables. */
+function inventoryFailures(
+  map: AcceptanceMap,
+  current: string,
+  declared: ReadonlyMap<string, readonly SpecFile[]>,
+  projects: readonly ConfiguredProject[] = CONFIGURED_PROJECTS,
+): string[] {
+  const problems: string[] = [];
+  for (const [name, record] of map.tests) {
+    // Unexplained null schedules fail schedulingFailures; explained post-1.0 epics have no MVP deadline.
+    if (record.sinceMilestone === null || !isDue(map, current, record.sinceMilestone)) continue;
+    const declarations = declared.get(name) ?? [];
+    if (declarations.length === 0) {
+      problems.push(`${name} is due at ${record.sinceMilestone}, but no spec declares it.`);
+      continue;
+    }
+    const selected = declarations.filter((file) =>
+      projects.some(
+        (project) =>
+          (record.project === null || project.name === record.project) &&
+          project.selects(file.path),
+      ),
+    );
+    if (selected.length === 0) {
+      problems.push(`${name} is not selected by ${record.project ?? 'any configured project'}.`);
+      continue;
+    }
+    if (record.tag !== null && !selected.some((file) => carriesTag(file, record.tag ?? ''))) {
+      problems.push(`${name} is due but no selected declaration carries ${record.tag}.`);
+    }
+  }
+  return problems;
+}
+
+function carriesTag(file: SpecFile, tag: string): boolean {
+  if (file.title?.includes(tag) === true) return true;
+  const match = /^\[(spec|hp|area):([^\]]+)\]$/.exec(tag);
+  if (match === null) return false;
+  const value = match[1] === 'hp' ? match[2]?.replace(/^HP-/, '') : match[2];
+  return file.playwrightTags.includes(`@${match[1]}-${value}`);
+}
 
 function missingDueTests(
   map: AcceptanceMap,
@@ -656,7 +972,15 @@ function hostContractGaps(
 // ---------------------------------------------------------------------------------------------
 
 const MAP = readAcceptanceMap(readFileSync(MAP_FILE, 'utf8'));
-const CURRENT = readCurrentMilestone(readFileSync(CURRENT_MILESTONE_FILE, 'utf8'));
+
+it('keeps explicit test milestones when an acceptance row starts earlier', () => {
+  expect(MAP.tests.get('search.acl.integration')?.sinceMilestone).toBe('M2');
+  expect(MAP.tests.get('transfer.isolation.integration')?.sinceMilestone).toBe('M6');
+});
+// An exit rehearsal may enforce a future milestone without falsely recording it as exited.
+const CURRENT = readCurrentMilestone(
+  process.env['IRIDIUM_TEST_TARGET_MILESTONE'] ?? readFileSync(CURRENT_MILESTONE_FILE, 'utf8'),
+);
 const SPEC_FILES = readSpecFiles();
 const DECLARED = declaredTests(SPEC_FILES);
 const DUE_ENTRIES = MAP.entries.filter((entry) => isDue(MAP, CURRENT, entry.sinceMilestone));
@@ -675,12 +999,14 @@ function problemList(problems: readonly string[]): string {
 function syntheticMap(overrides: Partial<AcceptanceMap> = {}): AcceptanceMap {
   return {
     milestones: ['M0', 'M1', 'M2'],
+    exitCriteria: new Map(),
     entries: [],
     rowIds: new Set(['concurrent-editing']),
     hpIds: new Set(['HP-1']),
     ruleTags: new Map([['vault-settings', '[area:vaults]']]),
     hostContractHarnesses: [],
     tests: new Map(),
+    postOnePointZero: new Map(),
     ...overrides,
   };
 }
@@ -711,6 +1037,371 @@ function syntheticFile(overrides: Partial<SpecFile> = {}): SpecFile {
 }
 
 describe('guards.acceptance-map.guard [area:docs]', () => {
+  describe('every scheduled inventory name is an executable, accurately tagged test', () => {
+    it('requires an explicit milestone or an explained post-1.0 epic for every inventory name', () => {
+      expect(problemList(schedulingFailures(MAP))).toBe('');
+    });
+
+    it('refuses unexplained, invalid and orphaned schedules while preserving documented future work', () => {
+      const name = 'synthetic.future.integration';
+      const record = { sinceMilestone: null, project: 'integration', file: null, tag: null };
+      const unscheduled = syntheticMap({ tests: new Map([[name, record]]) });
+      expect(schedulingFailures(unscheduled)).toEqual([
+        `${name} has no milestone and no explained post-1.0 exclusion.`,
+      ]);
+      const excluded = syntheticMap({
+        ...unscheduled,
+        postOnePointZero: new Map([
+          [name, { epic: '14', reason: 'Requires a post-1.0 signing identity.' }],
+        ]),
+      });
+      expect(schedulingFailures(excluded)).toEqual([]);
+      expect(
+        schedulingFailures(
+          syntheticMap({
+            ...excluded,
+            postOnePointZero: new Map([[name, { epic: '14', reason: ' ' }]]),
+          }),
+        ),
+      ).toHaveLength(1);
+      expect(
+        schedulingFailures(
+          syntheticMap({
+            ...excluded,
+            postOnePointZero: new Map([
+              [name, { epic: ' ', reason: 'A reason without an owner.' }],
+            ]),
+          }),
+        ),
+      ).toHaveLength(1);
+      expect(schedulingFailures(syntheticMap({ ...excluded, tests: new Map() }))).toEqual([
+        `${name} has a post-1.0 exclusion without an unscheduled inventory record.`,
+      ]);
+      const future = syntheticMap({
+        tests: new Map([[name, { ...record, sinceMilestone: 'M2' }]]),
+      });
+      expect(schedulingFailures(future)).toEqual([]);
+      expect(inventoryFailures(future, 'M1', new Map())).toEqual([]);
+      expect(inventoryFailures(future, 'M2', new Map())).toHaveLength(1);
+      expect(
+        schedulingFailures(
+          syntheticMap({ tests: new Map([[name, { ...record, sinceMilestone: 'M9' }]]) }),
+        ),
+      ).toEqual([`${name} has unknown milestone M9.`]);
+      expect(schedulingFailures(syntheticMap({ ...excluded, tests: future.tests }))).toHaveLength(
+        1,
+      );
+    });
+
+    it('reads legitimate inventory milestone styles and rejects unsupported deadlines in the generator', () => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `
+        import { inventoryMilestone } from './scripts/lib/test-names.ts';
+        const inputs = JSON.parse(process.argv[1]);
+        console.log(JSON.stringify(inputs.map((input) => {
+          try { return inventoryMilestone(input) ?? null; }
+          catch (error) { return error.message; }
+        })));
+      `,
+          JSON.stringify([
+            '**M1** — first delivery',
+            'Since M1',
+            'since M2',
+            '**M0 exit** — bootstrap',
+            'M3 — parsed guard assertion',
+            'Extends a mechanism described in M1.',
+            '**M9** — invalid',
+            'Since M10',
+          ]),
+        ],
+        {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+          windowsHide: true,
+          shell: false,
+          timeout: 30_000,
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual([
+        'M1',
+        'M1',
+        'M2',
+        'M0',
+        'M3',
+        null,
+        'Unsupported inventory milestone: M9',
+        'Unsupported inventory milestone: M10',
+      ]);
+    });
+
+    it('enforces the entire tests inventory, including names outside entries and exit criteria', () => {
+      expect(problemList(inventoryFailures(MAP, CURRENT, DECLARED))).toBe('');
+    });
+
+    it('refuses missing due names while preserving explicitly scheduled future work', () => {
+      const map = syntheticMap({
+        tests: new Map([
+          [
+            'synthetic.present.integration',
+            { sinceMilestone: 'M1', project: 'integration', file: null, tag: '[hp:HP-1]' },
+          ],
+          [
+            'synthetic.future.integration',
+            { sinceMilestone: 'M2', project: 'integration', file: null, tag: null },
+          ],
+        ]),
+      });
+      expect(inventoryFailures(map, 'M0', new Map())).toEqual([]);
+      expect(inventoryFailures(map, 'M1', new Map())).toEqual([
+        expect.stringContaining('synthetic.present.integration is due at M1'),
+      ]);
+      const wrongTag = declaredTests([
+        syntheticFile({ title: 'synthetic.present.integration [hp:HP-2]' }),
+      ]);
+      expect(inventoryFailures(map, 'M1', wrongTag)).toEqual([
+        expect.stringContaining('no selected declaration carries [hp:HP-1]'),
+      ]);
+      const valid = declaredTests([
+        syntheticFile({ title: 'synthetic.present.integration [hp:HP-1]' }),
+      ]);
+      expect(inventoryFailures(map, 'M1', valid)).toEqual([]);
+      expect(inventoryFailures(map, 'M2', valid)).toEqual([
+        expect.stringContaining('synthetic.future.integration is due at M2'),
+      ]);
+    });
+
+    it('refuses an unselected declaration without inventing a deadline for an unresolved name', () => {
+      const name = 'synthetic.present.integration';
+      const record = { sinceMilestone: 'M1', project: 'integration', file: null, tag: null };
+      const map = syntheticMap({ tests: new Map([[name, record]]) });
+      const unsupported = declaredTests([
+        syntheticFile({ path: 'apps/server/test/support/synthetic.present.integration.spec.ts' }),
+      ]);
+      expect(inventoryFailures(map, 'M1', unsupported)).toEqual([
+        expect.stringContaining('not selected by integration'),
+      ]);
+      expect(
+        inventoryFailures(
+          syntheticMap({ tests: new Map([[name, { ...record, sinceMilestone: null }]]) }),
+          'M1',
+          unsupported,
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe('every named milestone exit test exists when due', () => {
+    it('covers standalone exit tests as well as acceptance-map rows', () => {
+      expect(MAP.exitCriteria.get('M1')).toContain('collab.lf-invariant.guard');
+      expect(problemList(missingExitTests(MAP, CURRENT, DECLARED))).toBe('');
+    });
+
+    it('refuses a missing standalone guard at its exit and defers future tests', () => {
+      const map = syntheticMap({
+        exitCriteria: new Map([
+          ['M1', ['synthetic.absent.guard']],
+          ['M2', ['synthetic.future.integration']],
+        ]),
+      });
+      expect(missingExitTests(map, 'M0', new Map())).toEqual([]);
+      expect(missingExitTests(map, 'M1', new Map())).toHaveLength(1);
+      expect(missingExitTests(map, 'M1', new Map())[0]).toContain('synthetic.absent.guard');
+      const declared = declaredTests([syntheticFile({ name: 'synthetic.absent.guard' })]);
+      expect(missingExitTests(map, 'M1', declared)).toEqual([]);
+      expect(missingExitTests(map, 'M2', declared)[0]).toContain('synthetic.future.integration');
+    });
+
+    it('rejects an unselected support-path declaration without pulling it into an earlier exit', () => {
+      const name = 'synthetic.present.guard';
+      const map = syntheticMap({
+        exitCriteria: new Map([['M1', [name]]]),
+        tests: new Map([[name, { sinceMilestone: 'M1', project: 'guard', file: null, tag: null }]]),
+      });
+      const unselected = declaredTests([
+        syntheticFile({ name, path: 'apps/server/test/support/lf.proof.guard.spec.ts' }),
+      ]);
+      expect(missingExitTests(map, 'M0', unselected)).toEqual([]);
+      expect(missingExitTests(map, 'M1', unselected)).toHaveLength(1);
+      expect(missingExitTests(map, 'M1', unselected)[0]).toContain(
+        'not selected by the guard project',
+      );
+      const selected = declaredTests([
+        syntheticFile({ name, path: 'apps/server/test/guards/lf.proof.guard.spec.ts' }),
+      ]);
+      expect(missingExitTests(map, 'M1', selected)).toEqual([]);
+    });
+
+    it('requires the documented owner even when a different project selects the declaration', () => {
+      const name = 'synthetic.present.guard';
+      const map = syntheticMap({
+        exitCriteria: new Map([['M1', [name]]]),
+        tests: new Map([[name, { sinceMilestone: 'M1', project: 'guard', file: null, tag: null }]]),
+      });
+      const wrongProject = declaredTests([syntheticFile({ name })]);
+      expect(missingExitTests(map, 'M1', wrongProject)[0]).toContain(
+        'not selected by the guard project',
+      );
+    });
+
+    it.each([
+      ['unit', 'packages/crdt/src/dominates.prop.spec.ts', true],
+      ['property', 'packages/crdt/src/dominates.prop.spec.ts', false],
+      ['property', 'apps/server/test/property/convergence.model.prop.spec.ts', true],
+      ['electron', 'apps/e2e/electron/desktop.launch.e2e.spec.ts', true],
+      ['electron', 'apps/e2e/support/desktop.launch.e2e.spec.ts', false],
+    ])('uses the actual %s project selector for %s', (name, path, selected) => {
+      const project = CONFIGURED_PROJECTS.find((candidate) => candidate.name === name);
+      expect(project).toBeDefined();
+      expect(project?.selects(path)).toBe(selected);
+    });
+
+    it('rejects malformed tool output before it can satisfy an exit test', () => {
+      const project = {
+        runner: 'vitest',
+        name: 'guard',
+        directory: REPO_ROOT,
+        include: [{ kind: 'glob', value: '**/*.spec.ts', flags: '' }],
+        exclude: [],
+      };
+      for (const output of [
+        { version: 2, projects: [project] },
+        { version: 1, projects: [] },
+        { version: 1, projects: [{ ...project, runner: 'unknown' }] },
+        { version: 1, projects: [{ ...project, directory: '.' }] },
+        {
+          version: 1,
+          projects: [{ ...project, include: [{ kind: 'glob', value: '**', flags: 'i' }] }],
+        },
+        {
+          version: 1,
+          projects: [{ ...project, include: [{ kind: 'regex', value: '.*', flags: '' }] }],
+        },
+      ]) {
+        expect(() => readProjectSelectors(output)).toThrow('malformed project selectors');
+      }
+    });
+
+    it('surfaces a failed config reader instead of accepting an empty selector report', () => {
+      expect(() =>
+        configuredProjects({ runner: 'vitest', config: { test: { projects: [] } } }),
+      ).toThrow('vitest.config.ts must declare the inline projects');
+    });
+
+    it('merges Vitest inherited and project exclusions while retaining package property selection', () => {
+      const projects = configuredProjects({
+        runner: 'vitest',
+        config: {
+          root: REPO_ROOT,
+          test: {
+            include: ['packages/*/src/**/*.prop.spec.ts'],
+            exclude: ['**/support/**'],
+            projects: [
+              {
+                test: {
+                  name: 'fixture',
+                  include: ['apps/server/test/**/*.guard.spec.ts'],
+                  exclude: ['**/ignored/**'],
+                },
+              },
+            ],
+          },
+        },
+      });
+      const project = projects[0];
+      expect(project?.selects('packages/crdt/src/dominates.prop.spec.ts')).toBe(true);
+      expect(project?.selects('apps/server/test/guards/valid.guard.spec.ts')).toBe(true);
+      expect(project?.selects('apps/server/test/support/invalid.guard.spec.ts')).toBe(false);
+      expect(project?.selects('apps/server/test/ignored/invalid.guard.spec.ts')).toBe(false);
+    });
+
+    it('keeps Playwright globs and inherited ignores inside the configured test directory', () => {
+      const projects = configuredProjects({
+        runner: 'playwright',
+        config: {
+          testDir: 'apps/e2e',
+          testMatch: '*.e2e.spec.ts',
+          testIgnore: '**/ignored/**',
+          projects: [{ name: 'fixture' }],
+        },
+      });
+      const project = projects[0];
+      expect(project?.selects('apps/e2e/electron/valid.e2e.spec.ts')).toBe(true);
+      expect(project?.selects('apps/e2e/ignored/invalid.e2e.spec.ts')).toBe(false);
+      expect(project?.selects('apps/server/test/valid.e2e.spec.ts')).toBe(false);
+    });
+  });
+
+  describe('the top-level suite reader', () => {
+    const path = 'apps/server/test/chaos/synthetic.chaos.spec.ts';
+
+    it('reads a multiline plain title and its requirement tags', () => {
+      const suite = readSpecSource(
+        path,
+        "describe(\n  'synthetic.chaos [spec:concurrent-editing] [hp:HP-5] [area:collab]',\n  () => {},\n);",
+      );
+      expect(suite.name).toBe('synthetic.chaos');
+      expect(suite.specTags).toEqual(['concurrent-editing']);
+      expect(suite.hpTags).toEqual(['HP-5']);
+      expect(suite.areaTags).toEqual(['collab']);
+    });
+
+    it('balances parameter tables with nested calls, callbacks and misleading string punctuation', () => {
+      const suite = readSpecSource(
+        path,
+        [
+          '/* describe("comment.fake [hp:HP-9]", () => {}); */',
+          'describe.each(',
+          '  Array.from({ length: 3 }, (_, index) => ({ index, label: ")((" })),',
+          ')( /* table complete */',
+          '  "synthetic.chaos [hp:HP-5] iteration %i",',
+          '  () => {',
+          '    describe("nested.fake [hp:HP-9]", () => {});',
+          '  },',
+          ');',
+        ].join('\n'),
+      );
+      expect(suite.name).toBe('synthetic.chaos');
+      expect(suite.hpTags).toEqual(['HP-5']);
+      expect(untaggedSpecFiles([suite])).toEqual([]);
+    });
+
+    it('reads Playwright annotations after the title and not from fixtures or the callback', () => {
+      const suite = readSpecSource(
+        path,
+        [
+          "const fixture = { tag: ['@hp-9'] };",
+          'test.describe(',
+          "  'synthetic.chaos',",
+          "  { tag: ['@smoke', '@area-collab'] },",
+          "  () => { const nested = { tag: ['@hp-8'] }; },",
+          ');',
+        ].join('\n'),
+      );
+      expect(suite.playwrightTags).toEqual(['@smoke', '@area-collab']);
+    });
+
+    it('does not invent a declaration from comments, nested suites, or nonliteral titles', () => {
+      for (const fixture of [
+        '/*\ndescribe("comment.fake [hp:HP-9]", () => {});\n*/',
+        'function helper() {\n  describe("nested.fake [hp:HP-9]", () => {});\n}',
+        'describe.each(makeTable(() => [1, 2])(',
+        'describe.each([1, 2]);',
+        'describe("synthetic." + kind, () => {});',
+        'describe(`synthetic.${kind} [hp:HP-5]`, () => {});',
+      ]) {
+        const suite = readSpecSource(path, fixture);
+        expect(suite.name).toBeNull();
+        expect(suite.hpTags).toEqual([]);
+        expect(untaggedSpecFiles([suite])).toHaveLength(1);
+      }
+    });
+  });
   describe('the map and the milestone axis', () => {
     it(`reads ${MAP_REFERENCE} against the milestone ${CURRENT_REFERENCE} names`, () => {
       expect(MAP.entries.length).toBeGreaterThan(0);
@@ -801,8 +1492,11 @@ describe('guards.acceptance-map.guard [area:docs]', () => {
           syntheticEntry({ tests: ['synthetic.present.integration', 'synthetic.later.prop'] }),
         ],
         tests: new Map([
-          ['synthetic.present.integration', { sinceMilestone: 'M0', file: null, tag: null }],
-          ['synthetic.later.prop', { sinceMilestone: 'M2', file: null, tag: null }],
+          [
+            'synthetic.present.integration',
+            { sinceMilestone: 'M0', project: null, file: null, tag: null },
+          ],
+          ['synthetic.later.prop', { sinceMilestone: 'M2', project: null, file: null, tag: null }],
         ]),
       });
       expect(missingDueTests(map, 'M0', declaredTests([syntheticFile()]))).toEqual([]);
@@ -813,7 +1507,9 @@ describe('guards.acceptance-map.guard [area:docs]', () => {
     it('refuses a due layer that is proven by nothing, and one that names no test at all', () => {
       const nothingExists = syntheticMap({
         entries: [syntheticEntry({ tests: ['synthetic.later.prop'] })],
-        tests: new Map([['synthetic.later.prop', { sinceMilestone: 'M2', file: null, tag: null }]]),
+        tests: new Map([
+          ['synthetic.later.prop', { sinceMilestone: 'M2', project: null, file: null, tag: null }],
+        ]),
       });
       expect(missingDueTests(nothingExists, 'M0', declaredTests([]))[0]).toContain(
         'is due and none of its tests exists',
@@ -953,8 +1649,14 @@ describe('guards.acceptance-map.guard [area:docs]', () => {
       const map = syntheticMap({
         hostContractHarnesses: ['host.contract.component', 'desktop.host-contract.e2e'],
         tests: new Map([
-          ['host.contract.component', { sinceMilestone: 'M0', file: null, tag: null }],
-          ['desktop.host-contract.e2e', { sinceMilestone: 'M0', file: null, tag: null }],
+          [
+            'host.contract.component',
+            { sinceMilestone: 'M0', project: null, file: null, tag: null },
+          ],
+          [
+            'desktop.host-contract.e2e',
+            { sinceMilestone: 'M0', project: null, file: null, tag: null },
+          ],
         ]),
       });
       const reports: Record<string, readonly string[] | null> = {
@@ -973,7 +1675,10 @@ describe('guards.acceptance-map.guard [area:docs]', () => {
       const map = syntheticMap({
         hostContractHarnesses: ['host.contract.component'],
         tests: new Map([
-          ['host.contract.component', { sinceMilestone: 'M2', file: null, tag: null }],
+          [
+            'host.contract.component',
+            { sinceMilestone: 'M2', project: null, file: null, tag: null },
+          ],
         ]),
       });
       expect(hostContractGaps(map, 'M0', 'reports/host-contract', () => null)).toEqual([]);

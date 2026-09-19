@@ -137,11 +137,14 @@ const FASTIFY_CODE_MAP: Readonly<Record<string, ErrorCode>> = Object.freeze({
   FST_ERR_CTP_INVALID_MEDIA_TYPE: 'unsupported_media',
   FST_ERR_CTP_EMPTY_JSON_BODY: 'validation_failed',
   FST_ERR_CTP_INVALID_JSON_BODY: 'validation_failed',
+  FST_ERR_CTP_INVALID_CONTENT_LENGTH: 'validation_failed',
   FST_ERR_NOT_FOUND: 'not_found',
   FST_ERR_VALIDATION: 'validation_failed',
 });
 
+const HTTP_CLIENT_ERROR = 400;
 const HTTP_SERVER_ERROR = 500;
+const HTTP_MAX_ERROR = 599;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
 /**
@@ -157,53 +160,103 @@ export function classifyError(error: unknown): { code: ErrorCode; extensions: Pr
   // throw anything. Narrowing here rather than at the call site keeps one classifier.
   const thrown = asErrorLike(error);
 
-  if (thrown.validation !== undefined && thrown.validation.length > 0) {
+  const validation = validationIssues(thrown.validation);
+  const message = optionalString(thrown.message);
+  if (validation !== undefined && validation.length > 0) {
     return {
       code: 'validation_failed',
       extensions: {
-        detail: thrown.message ?? 'the request did not match its schema',
-        errors: thrown.validation.map((issue) => ({
-          path: `${thrown.validationContext ?? 'body'}${issue.instancePath ?? ''}`,
-          message: issue.message ?? 'invalid',
-          code: issue.keyword ?? 'invalid',
+        detail: message ?? 'the request did not match its schema',
+        errors: validation.map((issue) => ({
+          path: `${optionalString(thrown.validationContext) ?? 'body'}${optionalString(issue.instancePath) ?? ''}`,
+          message: optionalString(issue.message) ?? 'invalid',
+          code: policyCodeOf(issue) ?? optionalString(issue.keyword) ?? 'invalid',
         })),
       },
     };
   }
-  const mapped = thrown.code === undefined ? undefined : FASTIFY_CODE_MAP[thrown.code];
+  const mapped =
+    typeof thrown.code === 'string' && Object.hasOwn(FASTIFY_CODE_MAP, thrown.code)
+      ? FASTIFY_CODE_MAP[thrown.code]
+      : undefined;
   if (mapped !== undefined) {
     return mapped === 'not_found'
       ? { code: mapped, extensions: {} }
-      : { code: mapped, extensions: { detail: thrown.message ?? '' } };
+      : { code: mapped, extensions: { detail: message ?? '' } };
   }
   if (thrown.statusCode === HTTP_TOO_MANY_REQUESTS) {
-    return { code: 'rate_limited', extensions: { detail: thrown.message ?? 'rate limited' } };
+    return { code: 'rate_limited', extensions: { detail: message ?? 'rate limited' } };
   }
   return { code: 'server_error', extensions: {} };
 }
 
-/** The subset of a thrown value the classifier reads. Everything is optional; nothing is trusted. */
+/**
+ * The **policy** code a refinement declared, when it declared one.
+ *
+ * 09-api-reference.md §1.4 says `errors[].code` is "a zod issue code or a policy code", and the
+ * schemas that have one say so through zod's `params` (`NodeName` and `VaultName` carry
+ * `{ code: 'invalid_name' }`). Without this the refusal reports `custom`, which tells a client that a
+ * rule was broken but never which — and `custom` is the same answer for every refinement in the
+ * package. `fastify-type-provider-zod` copies the issue's remaining members into `params`, so the
+ * declared object arrives one level down; both spellings are read so a change there is not a silent
+ * regression to `custom`.
+ */
+function policyCodeOf(issue: { readonly params?: unknown }): string | undefined {
+  const params = issue.params;
+  if (typeof params !== 'object' || params === null) return undefined;
+  const direct: unknown = Reflect.get(params, 'code');
+  if (typeof direct === 'string') return direct;
+  const nested: unknown = Reflect.get(params, 'params');
+  if (typeof nested !== 'object' || nested === null) return undefined;
+  const declared: unknown = Reflect.get(nested, 'code');
+  return typeof declared === 'string' ? declared : undefined;
+}
+
+/** The subset of a thrown value the classifier reads. Each field remains unknown until checked. */
 interface ErrorLike {
-  readonly code?: string;
-  readonly statusCode?: number;
-  readonly message?: string;
-  readonly validationContext?: string;
-  readonly validation?: readonly {
-    readonly instancePath?: string;
-    readonly message?: string;
-    readonly keyword?: string;
-  }[];
+  readonly code?: unknown;
+  readonly statusCode?: unknown;
+  readonly message?: unknown;
+  readonly validationContext?: unknown;
+  readonly validation?: unknown;
+}
+
+interface ValidationIssue {
+  readonly instancePath?: unknown;
+  readonly message?: unknown;
+  readonly keyword?: unknown;
+  readonly params?: unknown;
 }
 
 function asErrorLike(error: unknown): ErrorLike {
   return typeof error === 'object' && error !== null ? error : {};
 }
 
-/** The status a thrown value claims, or `500`. */
-export function statusOf(error: unknown): number {
-  return asErrorLike(error).statusCode ?? HTTP_SERVER_ERROR;
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
+function isValidationIssue(value: unknown): value is ValidationIssue {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function validationIssues(value: unknown): readonly ValidationIssue[] | undefined {
+  // An arbitrary thrown object's length/map properties are not evidence that it is a validator
+  // result. A malformed issue list is an internal failure, not a client schema refusal.
+  return Array.isArray(value) && value.every(isValidationIssue) ? value : undefined;
+}
+
+/** The deliberate problem status, a valid claimed HTTP error status, or `500`. */
+export function statusOf(error: unknown): number {
+  if (error instanceof ProblemError) return error.status;
+  const status = asErrorLike(error).statusCode;
+  return typeof status === 'number' &&
+    Number.isInteger(status) &&
+    status >= HTTP_CLIENT_ERROR &&
+    status <= HTTP_MAX_ERROR
+    ? status
+    : HTTP_SERVER_ERROR;
+}
 /** The `onError`-equivalent status a failure is logged at: 5xx is an error, 4xx a warning. */
 export function logLevelForStatus(status: number): 'error' | 'warn' {
   return status >= HTTP_SERVER_ERROR ? 'error' : 'warn';

@@ -7,7 +7,7 @@ This section is the definitive specification of everything between a keystroke a
 | Guarantee | Meaning in Iridium | Where enforced |
 |---|---|---|
 | Convergence | Every client and the persisted state of a note agree after synchronization; no whole-document replacement ever happens through REST | Yjs CRDT + Hocuspocus sync protocol; no REST body write path exists for note content |
-| Truthful *Saved* | *Saved* is shown only when a MySQL transaction containing the user's updates has COMMITted (`innodb_flush_log_at_trx_commit=1`) and the server has broadcast a state vector that dominates the client's whole local state vector | `NoteWriter` + `persisted` stateless message + `SaveStateMachine` |
+| Truthful *Saved* | *Saved* is shown only when a MySQL transaction containing the user's updates has COMMITted (`innodb_flush_log_at_trx_commit=1`) and the server has broadcast a state vector that dominates the client's whole local state vector and a canonical delete-set fingerprint equal to the client's | `NoteWriter` + `persisted` stateless message + `SaveStateMachine` |
 | Single history | A note's Y.Doc is built from Markdown exactly once (`NoteService.initialize`) and reloaded from persisted binary state thereafter; Markdown projections are output, never input | `initialized_at` guard, CI grep tests `collab.initial-state-only-path` and `no-reinit` |
 | Ordered persistence | At most one in-flight transaction per note; an older save can never overwrite a newer state | `NoteWriter` strict FIFO, `note_docs FOR UPDATE` + `head_seq` CAS |
 | Authorization on the socket | Every connection is authenticated with a single-use ticket, authorized per document, re-validated periodically, and closed on revocation | `IridiumAuth` hooks + `CollabGateway` (see 04-auth-and-access-control.md) |
@@ -77,12 +77,14 @@ export function applyV1(doc: Y.Doc, update: V1Update, origin: unknown): void;
 export function mergeV1(updates: V1Update[]): V1Update;         // Y.mergeUpdates
 export function stateVector(doc: Y.Doc): StateVector;           // Y.encodeStateVector
 export function decodeStateVector(sv: StateVector): Map<number, number>;
+export function deleteSetFingerprint(doc: Y.Doc): string;        // SHA-256 of canonical delete-set encoding, lowercase hex64
+export const EMPTY_DELETE_SET_FINGERPRINT: string;
 export const SV_STORED_MAX_BYTES = 4096;                        // the VARBINARY(4096) width of note_updates.sv_after / note_docs.snapshot_sv
 export function storedSv(sv: StateVector): StateVector;         // sv when byteLength <= SV_STORED_MAX_BYTES, else a zero-length StateVector ("not recorded", 03-data-model.md D03-01)
 export function recordedSv(recorded: Uint8Array | null | undefined, doc: Y.Doc): StateVector;   // zero length or NULL → stateVector(doc)
 export function dominates(persisted: StateVector | Map<number, number>, local: StateVector | Map<number, number>): boolean;
 export function prefixSuffixDiff(current: string, target: string): { start: number; deleteLength: number; insert: string };
-export function insertChunked(ytext: Y.Text, index: number, text: string, origin: unknown): void;   // splits at code-point boundaries into ≤ INSERT_CHUNK_MAX_BYTES UTF-8 pieces, one Y.Text.insert transaction each
+export function insertChunked(ytext: Y.Text, index: number, text: string, origin: unknown, beforeChunk?: () => void): void;   // splits at code-point boundaries into ≤ INSERT_CHUNK_MAX_BYTES UTF-8 pieces, one Y.Text.insert transaction each
 export function projectMarkdown(doc: Y.Doc): string;            // getContent(doc).toString(); asserts the LF invariant in tests
 export function scanHostileContent(doc: Y.Doc): { ok: true } | { ok: false; reason: 'cr' | 'attributes' };   // toDelta() must contain only {insert: string}; no '\r'
 export function initialNoteState(markdownLf: string): { update: V1Update; snapshot: V2State; sv: StateVector; sizeChars: number };   // throwaway Y.Doc, destroyed before return
@@ -94,7 +96,7 @@ export function decodeAwarenessStates(update: Uint8Array): Array<{ clientId: num
 
 `prefixSuffixDiff(current, target)` computes the longest common prefix and suffix (in UTF-16 units, never splitting a surrogate pair) and returns the single middle edit that turns `current` into `target`; applying `delete(start, deleteLength)` then `insert(start, insert)` on a `Y.Text` whose `toString()` equals `current` yields exactly `target` (property `crdt.prefixSuffixDiff.prop`).
 
-`insertChunked(ytext, index, text, origin)` is the **only** way first-party code inserts a large string into a `Y.Text`. It splits `text` at code-point boundaries — never inside a surrogate pair, or a chunk seam would manufacture lone surrogates and trip `scanHostileContent`/`normalizeSource` — into pieces of at most `INSERT_CHUNK_MAX_BYTES` (256 KiB) of UTF-8 and applies each in its own transaction, so every update the pipeline produces stays below `YJS_UPDATE_MAX_BYTES` (1 MiB). `crdt.insert-chunking.prop` asserts that every emitted update is within the cap, that the concatenation equals the input and that no chunk boundary splits a surrogate pair, over random astral-plane and CJK text. Call sites: `@iridium/editor` paste and drop handling (07-client-applications.md §5.7), the tree-item-drop link insert, import fix-ups, and the server's `DirectConnection` restore and repair paths below.
+`insertChunked(ytext, index, text, origin)` is the **only** way first-party code inserts a large string into a `Y.Text`. It splits `text` at code-point boundaries — never inside a surrogate pair, or a chunk seam would manufacture lone surrogates and trip `scanHostileContent`/`normalizeSource` — into pieces of at most `INSERT_CHUNK_MAX_BYTES` (256 KiB) of UTF-8 and applies each in its own transaction, so every update the pipeline produces stays below `YJS_UPDATE_MAX_BYTES` (1 MiB). `crdt.insert-chunking.prop` asserts that every emitted update is within the cap, that the concatenation equals the input and that no chunk boundary splits a surrogate pair, over random astral-plane and CJK text. Call sites: `@iridium/editor` paste and drop handling (07-client-applications.md §5.7), the tree-item-drop link insert, import fix-ups, and the server's fenced `ServerEdit.insertChunked` restore and repair paths below. The helper refuses an active enclosing Yjs transaction with `nested-transaction` before mutating; otherwise Yjs would combine all chunks into one update and discard their origins. Server edits perform deletion/format cleanup in a separate transaction, then call `ServerEdit.insertChunked` outside `DirectConnection.transact`. The gateway checks ownership before each chunk and supplies the captured trusted actor/origin context. A failed partial repair keeps `content_invalid` set.
 
 `storedSv`/`recordedSv` are where D03-01's degradation lives, so the writer, the compactor and the loader share one definition of "not recorded" instead of repeating an inline ternary. The package stays side-effect-free (it is isomorphic, no `node:*`): the `iridium_state_vector_oversize_total` counter and the `collab.state_vector.oversize` log line belong to the two call sites, not to the codec.
 
@@ -201,7 +203,7 @@ export interface CollabPersistence {
   attach(document: HocuspocusDocument, loaded: LoadedState): NoteWriter; // registers the update listener; returns the writer
   compactNow(noteId: NoteId, opts: CompactOptions): Promise<CompactResult>;   // enqueues a compaction job in the FIFO and awaits it, bounded by COMPACTION_AWAIT_TIMEOUT_MS
   writerOf(noteId: NoteId): NoteWriter | undefined;
-  baselineOf(noteId: NoteId): Promise<{ seq: number; sv: StateVector }>;      // the same read afterLoadDocument performs, for a baseline with no attached writer
+  baselineOf(noteId: NoteId): Promise<{ seq: number; sv: StateVector; ds: string }>;      // the same read afterLoadDocument performs, for a baseline with no attached writer
 }
 
 export interface CollabGateway {                                          // called by REST services after COMMIT (never inside a transaction)
@@ -231,8 +233,8 @@ Extension order is fixed: `IridiumAuth` → `IridiumLimits` → `IridiumPersiste
 |---|---|
 | `onAuthenticate` | Consumes the ticket from the auth message (`TicketStore.consume(token)` → `{sessionId, userId}` or throw `unauthorized`); re-loads the session **by primary key** with `loadLiveSession(ticket.sessionId)` (04-auth-and-access-control.md §4.2 — the ticket carries no secret, so the raw-token `verifySession` is not the entry point here) and splits the outcome the way 09-api-reference.md §3.6 requires: `null` or `{dead:'expired'}` → throw `unauthorized` (4401), `{dead:'revoked'｜'user_inactive'}` → throw `revoked` (4403), and a loaded `userId` that differs from `ticket.userId` → throw `unauthorized` plus the SIEM event `authz.denied {reason:'ticket_session_mismatch'}`; parses the document name (`note:<uuid>` → resolve `nodes` + `notes` + `vaults` in one query; `vault:<uuid>` → `vaults`); refuses unknown/foreign/trashed notes and `importing\|deleting` vaults with `note-not-found`, archived vaults with `vault-archived`; loads `vault_members` (server admins are treated as `manager`); sets `connection.readOnly = role === 'viewer'` for `note:*` and `connection.readOnly = true` for every `vault:*` connection; consults the closing set (`CollabGateway.isClosing(noteId)` → throw `note-closing`); enforces the cap of **20 concurrent document attachments per user**, counted over the live `note:*` + `vault:*` connections whose `context.userId` matches (throw `rate-limited`, which refuses this document only — the upgrade carries no credential, so the per-user leg cannot be checked in `preValidation`); returns the `IridiumCollabContext` below (`{sessionId, userId, vaultId, noteId, role, isServerAdmin, authzEpoch:{userAuthzVersion, memberVersion}, ip, requestId, connectedAt, clientName, clientVersion}`). Throwing sends `PermissionDenied(reason)` for that document only; the socket stays open for the provider's other documents. Every rejection is audited as `collab.connection.rejected` |
 | `onTokenSync` | Runs when the connection answers a `connection.requestToken()` issued by the re-validation timer (every 15 min ± 3 min jitter per connection; 5 min grace before an unanswered request closes the connection). Consumes the fresh ticket, re-runs `loadLiveSession(ticket.sessionId)` and the membership checks with the **same reason split as `onAuthenticate`** — an unknown or idle/absolute-expired session closes `unauthorized` (4401) so the client fetches fresh tickets and re-attaches once, while a revoked session, a disabled user or a removed membership closes `revoked` (4403) and is terminal — then updates `context.authzEpoch` and `connection.readOnly`; a downgrade or upgrade sends `{t:'role'}` (see "Role change on a live connection"). Any other failure closes the document connection with `revoked` |
-| `beforeHandleMessage` | Before any inbound frame for a document: compares the connection's `authzEpoch` tuple with the in-process epoch table (`{userAuthzVersion, memberVersion}` — a tuple, never a sum); on mismatch re-evaluates from the DB (`users.authz_version`, `vault_members.version`, `vault_members.role`) and applies the result (close `revoked`, or flip `readOnly` + `{t:'role'}`); rejects frames for a note in the closing set with close reason `note-closing` |
-| `beforeHandleAwareness` | Decodes every awareness update with `decodeAwarenessStates` and closes the connection with `awareness-spoof` if any non-null state's `user.id !== context.userId` or the state does not match the schema `{user:{id}, cursor?:{anchor, head}, mode?}` (`note:*`) / `{user:{id}, activeNoteId?}` (`vault:*`). Audited as `collab.write.rejected {reason:'awareness-spoof'}` |
+| `beforeHandleMessage` | Before any inbound frame for a document: compares the connection's `authzEpoch` tuple with the in-process epoch table (`{userAuthzVersion, memberVersion}` — a tuple, never a sum); on mismatch re-evaluates from the DB (`users.authz_version`, `vault_members.version`, `vault_members.role`) and applies the result (close `revoked`, or flip `readOnly` + `{t:'role'}`); rejects frames for a note in the closing set with close reason `note-closing`; validates every raw awareness entry, identity and removal ownership before Hocuspocus can collapse duplicate ids or discard nulls (presence rules below) |
+| `beforeHandleAwareness` | Rechecks every non-null awareness state passed by Hocuspocus and closes the connection with `awareness-spoof` if any non-null state's `user.id !== context.userId` or the state does not match the schema `{user:{id}, cursor?:{anchor, head}, mode?}` (`note:*`) / `{user:{id}, activeNoteId?}` (`vault:*`). Audited as `collab.write.rejected {reason:'awareness-spoof'}` |
 | `connected` | Fires after `onAuthenticate` and document load for that connection — and, spike S2 measured, **after the connection's first queued message has been handled**, so a client's `SyncStep1` is replayed before this hook runs and the broadcast below must not assume the first sync has not happened: records the participant (`connection.context`) in the gateway's per-document participant table and broadcasts `{t:'participants'}` to every connection of the document |
 | `onDisconnect` | Removes the participant and broadcasts `{t:'participants'}`; cancels the re-validation timer of that connection |
 
@@ -250,9 +252,9 @@ Extension order is fixed: `IridiumAuth` → `IridiumLimits` → `IridiumPersiste
 
 | Hook | What it does |
 |---|---|
-| `onLoadDocument` | `note:*` only. `loader.load(noteId)` reads `note_docs` (snapshot, `snapshot_format`, `snapshot_through_seq`, `head_seq`) and `note_updates WHERE seq > snapshot_through_seq ORDER BY seq`; applies `loadState(document, snapshot, snapshot_format, LOAD_ORIGIN)` then `applyV1(document, row.update_v1, LOAD_ORIGIN)` for each row; verifies `yjs_major === 13`; **returns `undefined`** (returning bytes would make Hocuspocus `applyUpdate` them as V1). Throws `note-not-found` for a note without a `note_docs` row (an uninitialised note is a bug, never an empty document) — Hocuspocus 4.7 then destroys the phantom document and closes its connections |
-| `afterLoadDocument` | `persistence.attach(document, loaded)`: creates the `NoteWriter`, registers `document.on('update', listener)` — the listener ignores `LOAD_ORIGIN` and accepts `{source:'connection'}` and `{source:'local'}` origins — initialises `lastPersisted = {seq: head_seq, sv: recordedSv(last note_updates.sv_after ?? snapshot_sv, document)}`, i.e. from the recorded vector, or from `stateVector(document)` when the recorded value is zero length or `NULL` (state vector wider than `VARBINARY(4096)`; 03-data-model.md, D03-01), and asserts (in test builds) that it dominates `stateVector(document)`; runs `scanHostileContent` once and, if the note is already flagged `content_invalid`/`oversize`, sets every connection read-only and broadcasts `{t:'content-invalid'}` / `{t:'size-exceeded'}` |
-| `onStateless` | `note:*` only. Parses the payload with the client-message schema; `baseline {}` → `connection.sendStateless(persisted{seq, sv})` from `lastPersisted`, or from `persistence.baselineOf(noteId)` when no writer is attached; `flush {}` → `compactNow(noteId, {trigger:'flush'})` then `connection.sendStateless(projected{seq})`, rate-limited to 6 per minute per connection (excess answered with the current `projected {seq}` without work — never `persist-failed`, never a close) and answered `persist-failed {reason:'db_unavailable', retryInMs}` only when the compaction genuinely cannot reach the FIFO head; anything else → the handler closes that document connection itself with `protocol-error` (it never throws) |
+| `onLoadDocument` | `note:*` only. `loader.load(noteId)` reads `note_docs` (snapshot, `snapshot_format`, `snapshot_through_seq`, `head_seq`) and `note_updates WHERE seq > snapshot_through_seq ORDER BY seq`; applies `loadState(document, snapshot, snapshot_format, LOAD_ORIGIN)` then `applyV1(document, row.update_v1, LOAD_ORIGIN)` for each row; verifies `yjs_major === 13`; **returns `undefined`** (returning bytes would make Hocuspocus `applyUpdate` them as V1). Throws `unavailable` for classified database acquisition, timeout or transport failures, `no-owner-lease` for a lost ownership generation, and `note-not-found` for a note without a `note_docs` row (an uninitialised note is a bug, never an empty document) — Hocuspocus 4.7 then destroys the phantom document and closes its connections |
+| `afterLoadDocument` | `persistence.attach(document, loaded)`: creates the `NoteWriter`, registers `document.on('update', listener)` — the listener ignores `LOAD_ORIGIN` and accepts `{source:'connection'}` and `{source:'local'}` origins — initialises `lastPersisted = {seq: head_seq, sv: recordedSv(last note_updates.sv_after ?? snapshot_sv, document), ds: deleteSetFingerprint(document)}`, i.e. from the recorded vector, or from `stateVector(document)` when the recorded value is zero length or `NULL` (state vector wider than `VARBINARY(4096)`; 03-data-model.md, D03-01), and asserts (in test builds) that it dominates `stateVector(document)`; runs `scanHostileContent` once and, if the note is already flagged `content_invalid`/`oversize`, sets every connection read-only and broadcasts `{t:'content-invalid'}` / `{t:'size-exceeded'}` |
+| `onStateless` | `note:*` only. Parses the payload with the client-message schema; `baseline {}` → `connection.sendStateless(persisted{seq, sv, ds})` from `lastPersisted`, or from `persistence.baselineOf(noteId)` when no writer is attached; `flush {}` → `compactNow(noteId, {trigger:'flush'})` then `connection.sendStateless(projected{seq})`, rate-limited to 6 per minute per connection (excess answered with the current `projected {seq}` without work — never `persist-failed`, never a close) and answered `persist-failed {reason:'db_unavailable', retryInMs}` only when the compaction genuinely cannot reach the FIFO head; anything else → the handler closes that document connection itself with `protocol-error` (it never throws) |
 | `onStoreDocument` | `note:*` only. Called by Hocuspocus's per-document debounce inside `document.saveMutex`. Enqueues a compaction job into the writer's FIFO with `trigger: payload.clientsCount === 0 ? 'unload' : 'debounce'` and **awaits it**, so `flushPendingStores()` and the post-store unload check are truthful. Three outcomes: it resolves when the job COMMITs (including the refused-snapshot and invalid-content outcomes, which still commit); it rejects `CompactionUnavailable`/`CompactionTimeout` when the writer cannot drain to the FIFO head (a MySQL outage); it rejects when the job itself failed. In every rejection `safeHook` rethrows, Hocuspocus logs its "Document stays in memory to avoid data loss", keeps the document loaded and re-schedules on the next change; the enqueued job stays in the FIFO and commits when MySQL returns |
 | `beforeUnloadDocument` | Throws (vetoes) while the writer's queue is non-empty, a transaction is in flight, the writer is in `retrying`, `failed` or `backpressure`, or no `note_revisions` row exists at `head_seq` (the unload-checkpoint invariant). The writer remembers `unloadRequested = true`; when it later drains with `document.getConnectionsCount() === 0` it calls `hocuspocus.unloadDocument(document)` itself, so vetoed unloads always complete |
 | `afterUnloadDocument` | Disposes the writer (clears timers, releases the queue), removes the participant table entry, and drops the closing marker for that note when `nodes.deleted_at IS NULL`. That last step is a **safety net, not the primary release** — `tree/trash.ts`'s `finally` is (see "Trash"), because a note with no loaded document never reaches this hook |
@@ -459,10 +461,11 @@ async afterLoadDocument({ document, documentName }) {
   const loaded = loadedStateCache.take(documentName)!;
   const writer = persistence.attach(document, loaded);              // NoteWriter + document.on('update', …)
   const recorded = loaded.updates.at(-1)?.sv_after ?? loaded.snapshot_sv;   // zero length or NULL = "not recorded" (03, D03-01)
-  writer.lastPersisted = { seq: loaded.head_seq, sv: recordedSv(recorded, document) };
+  writer.lastPersisted = { seq: loaded.head_seq, sv: recordedSv(recorded, document), ds: deleteSetFingerprint(document) };
   if (process.env.NODE_ENV === 'test') {
-    assert(dominates(writer.lastPersisted.sv, stateVector(document)),
-           'persisted baseline must dominate the freshly loaded document');
+    assert(dominates(writer.lastPersisted.sv, stateVector(document)) &&
+           writer.lastPersisted.ds === deleteSetFingerprint(document),
+           'persisted baseline must cover the freshly loaded document');
   }
   const scan = scanHostileContent(document);
   if (!scan.ok || loaded.content_invalid) lockDocumentReadOnly(document, 'content-invalid', scan);
@@ -493,7 +496,7 @@ A zero-length recorded vector means "not recorded" (03-data-model.md, D03-01: th
 | Bounded write amplification | Coalescing consecutive same-actor updates with `Y.mergeUpdates` |
 | Bounded memory | Queue cap of 5 000 updates or 32 MiB → backpressure |
 | No note starvation | Global round-robin scheduler with a concurrency budget equal to `DB_POOL_PERSIST` (4) |
-| Truthful acknowledgement | `persisted {seq, sv}` broadcast only *after* COMMIT resolves |
+| Truthful acknowledgement | `persisted {seq, sv, ds}` broadcast only *after* COMMIT resolves |
 | Truthful failure signalling | `persist-failed {seq?, reason, retryInMs}` plus its own retry/backoff (Hocuspocus has none) |
 | Compaction ordering | Compaction jobs are enqueued in the same FIFO, so a snapshot can never be taken mid-batch |
 | Correct unload | Vetoes `beforeUnloadDocument` while work remains, then completes the unload itself |
@@ -509,6 +512,7 @@ type WriterState = 'idle' | 'writing' | 'retrying' | 'failed' | 'backpressure' |
 interface PendingUpdate {
   update: V1Update;                 // bytes exactly as applied to the document
   svAfter: StateVector;             // Y.encodeStateVector(doc) captured synchronously after the apply
+  dsAfter: string;                  // canonical delete-set fingerprint captured at the same boundary
   actor: { userId: UserId | null; sessionId: SessionId | null; actorType: 'user' | 'system' };
   origin: 'connection' | 'restore' | 'repair';
   bytes: number;                    // update.byteLength, for the queue byte budget
@@ -528,7 +532,7 @@ class NoteWriter {
   private readonly jobs: QueueItem[] = [];          // interleaving marker stream: see "Compaction shares the FIFO"
   private queueBytes = 0;
   state: WriterState = 'idle';
-  lastPersisted: { seq: number; sv: StateVector };  // initialised in afterLoadDocument
+  lastPersisted: { seq: number; sv: StateVector; ds: string };  // initialised in afterLoadDocument
   lastCommittedSeq: number;                         // === lastPersisted.seq; kept separate for readability
   lastEditor: { userId: UserId | null; at: Date } | null = null;   // last committed batch's actor; read by the next compaction (D03-14)
   attempt = 0;                                      // retry counter of the current head batch
@@ -550,7 +554,8 @@ document.on('update', (update: Uint8Array, origin: unknown) => {
     const mapped = mapOrigin(origin);                          // see the origin table in "Document model"
     if (!mapped) return;                                       // unknown origin: never persisted, logged once per document
     const svAfter = stateVector(document);                     // synchronous: ordering is guaranteed by Yjs
-    writer.enqueue({ update: update as V1Update, svAfter, ...mapped, bytes: update.byteLength, enqueuedAt: performance.now() });
+    const dsAfter = deleteSetFingerprint(document);             // same applied-update boundary
+    writer.enqueue({ update: update as V1Update, svAfter, dsAfter, ...mapped, bytes: update.byteLength, enqueuedAt: performance.now() });
   } catch (err) {
     log.error({ err, documentName }, 'collab.update-listener.error');
     metrics.persistFailures.inc({ reason: 'listener' });
@@ -559,9 +564,9 @@ document.on('update', (update: Uint8Array, origin: unknown) => {
 });
 ```
 
-Two invariants come from capturing `svAfter` inside the listener rather than inside the writer:
+Two invariants come from capturing `{svAfter, dsAfter}` inside the listener rather than reading the live document after COMMIT:
 
-- The state vector is captured **synchronously after the apply**, so `svAfter_k` dominates `svAfter_j` for every `j < k` in the same document. One `persisted` message therefore acknowledges every earlier update, and a coalesced batch can carry the `svAfter` of its last member.
+- The vector and delete-set fingerprint are captured **synchronously after the apply**. `svAfter_k` dominates `svAfter_j` for every `j < k`, while `dsAfter_k` identifies the deleted ranges of that same prefix. A coalesced batch retains its final member's pair through retries and acknowledges that committed FIFO prefix. A later deletion must never enter an earlier batch's acknowledgement.
 - Updates enter the queue in exactly the order Yjs applied them, which is the order in which they must be written for `onLoadDocument`'s replay to reconstruct the same document.
 
 `enqueue` is O(1) and never awaits. It applies the queue bound (below) and schedules the writer with the global scheduler.
@@ -582,61 +587,39 @@ Interleaving is preserved: coalescing only ever merges *contiguous* runs, so the
 ### The transaction
 
 ```ts
-private async writeBatch(batch: PendingUpdate[]): Promise<void> {
-  const runs = groupRuns(batch);                      // contiguous same-(actor, origin) runs, each merged to one row
-  const svAfter = runs.at(-1)!.svAfter;               // == batch.at(-1)!.svAfter
-  const now = new Date();
-
-  for (const r of runs) {
-    r.storedSv = storedSv(r.svAfter);                 // zero length when the vector exceeds SV_STORED_MAX_BYTES (03-data-model.md, D03-01)
-    if (r.storedSv.byteLength === 0) {
-      metrics.stateVectorOversize.inc();
-      log.warn({ noteId: this.noteId, bytes: r.svAfter.byteLength }, 'collab.state_vector.oversize');
-    }
+// Prepare once; retain this exact attempt (including timestamps and queue prefix) across retries.
+const attempt = this.writeAttempt ??= prepareAttempt(batch, this.lastCommittedSeq);
+await store.runWrite(async (tx) => {
+  // runWrite asserts the current owner generation in this transaction.
+  const row = await tx.lockHead(this.noteId);
+  if (row.deletedAt !== null) throw new NoteTrashedDuringWrite(this.noteId);
+  if (row.headSeq !== attempt.fromSeq) {
+    // A live process can lose the COMMIT reply after the database made this attempt durable.
+    if (attempt.submitted && row.headSeq === attempt.fromSeq + attempt.rows.length &&
+        await tx.matchesUpdates(attempt.rows)) return;
+    throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId, expected: attempt.fromSeq });
   }
-
-  const head = await dbPersist.transaction().setIsolationLevel('repeatable read').execute(async (trx) => {
-    const row = await trx.selectFrom('note_docs as d')
-      .innerJoin('nodes as n', 'n.id', 'd.note_id')
-      .select(['d.head_seq', 'n.deleted_at'])
-      .where('d.note_id', '=', this.noteId)
-      .forUpdate()                                    // locks note_docs (and the nodes row via the join) for this note only
-      .executeTakeFirstOrThrow();
-
-    if (row.deleted_at !== null) throw new NoteTrashedDuringWrite(this.noteId);
-
-    const head = row.head_seq;
-    await trx.insertInto('note_updates').values(runs.map((r, i) => ({
-      note_id: this.noteId, seq: head + i + 1, update_v1: Buffer.from(r.merged), yjs_major: 13,
-      sv_after: Buffer.from(r.storedSv), actor_type: r.actor.actorType,
-      actor_id: r.actor.userId, session_id: r.actor.sessionId,
-      origin: r.origin, created_at: now,
-    }))).execute();
-
-    const res = await trx.updateTable('note_docs')
-      .set({ head_seq: head + runs.length, updated_at: now })
-      .where('note_id', '=', this.noteId)
-      .where('head_seq', '=', head)                   // compare-and-set: one CAS per transaction, whatever N is
-      .executeTakeFirst();
-    if (res.numUpdatedRows !== 1n) throw new HeadSeqCasViolation(this.noteId, head);
-    return head;                                      // exactly two rows locked: note_docs and (through the join) nodes
-  });
-  // faults.hit('store.crash-after-commit-before-ack')   — chaos fault point, NODE_ENV=test only
-
-  const seq = head + runs.length;
-  this.lastCommittedSeq = seq;
-  this.lastPersisted = { seq, sv: svAfter };
-  this.lastEditor = { userId: runs.at(-1)!.actor.userId, at: now };   // consumed by the next compaction's single UPDATE notes (D03-14)
-  this.document.broadcastStateless(encodeStateless({ v: 1, t: 'persisted', seq, sv: b64(svAfter) }));
-  metrics.persistLatency.observe((performance.now() - batch[0].enqueuedAt) / 1000);
-  this.attempt = 0; this.failedSince = null;
-}
+  attempt.submitted = true;
+  await tx.insertUpdates(attempt.rows);
+  if (!await tx.casHead(attempt.fromSeq, attempt.fromSeq + attempt.rows.length, attempt.at)) {
+    throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId, expected: attempt.fromSeq });
+  }
+});
+// Test-only faults: process death, or a live lost-result exception after the actual COMMIT.
+faults.hit('store.crash-after-commit-before-ack');
+faults.hit('store.throw-after-commit-before-ack');
+this.lastCommittedSeq = attempt.fromSeq + attempt.rows.length;
+const committedWitness = attempt.runs.at(-1);
+this.lastPersisted = { seq: this.lastCommittedSeq, sv: committedWitness.svAfter, ds: committedWitness.dsAfter };
+this.writeAttempt = null;
+// Remove only this attempt's original queue prefix; later arrivals are still pending.
+// Broadcast persisted only after COMMIT or exact durable reconciliation, never after an error.
 ```
 
 Notes on the SQL:
 
-- **N rows, one CAS.** A batch is written as `seq = head+1 … head+N`, where `N` is the number of actor-runs in the batch (usually 1), and `head_seq` advances to `head+N` with a **single** compare-and-set. One `persisted` message carrying the last row's `sv_after` therefore acknowledges the whole batch, because `sv_after` is monotone along the batch. Per-row `actor_id`/`session_id` stay exact, which is what `list_note_revisions` and the audit trail need.
-- **`FOR UPDATE` is the real guard.** The in-memory `lastCommittedSeq` is a convenience; the CAS on `head_seq` is what makes an older write unable to overwrite a newer state. In one process the lock is uncontended; after a future split into multiple collaboration processes (post-MVP, `@hocuspocus/extension-redis`) it is the mechanism that keeps two writers for the same note from interleaving. `numUpdatedRows !== 1n` is therefore a **corruption alarm**, never a silent retry: it logs `persist.cas_violation`, increments `iridium_persist_failures_total{reason="cas"}`, fires the alert, puts the writer into `failed`, and the document is set read-only for every connection with `persist-failed {reason:'db_error'}`. (`FOUND_ROWS` is asserted at boot so `numUpdatedRows` counts *matched* rows and a no-op update is distinguishable — see 11-operations-and-deployment.md.)
+- **N rows, one CAS.** A batch is written as `seq = head+1 … head+N`, where `N` is the number of actor-runs in the batch (usually 1), and `head_seq` advances to `head+N` with a **single** compare-and-set. One `persisted` message carries the final run's captured `{svAfter, dsAfter}` pair and acknowledges the whole committed prefix. Vector dominance covers inserted structs; exact fingerprint equality covers deleted ranges. Per-row `actor_id`/`session_id` stay exact, which is what `list_note_revisions` and the audit trail need.
+- **Owner fencing, locked head, exact reconciliation and CAS work together.** A retained attempt fixes the original queue prefix, sequence range, merged bytes, state-vector bytes, actor/session/origin, Yjs major and timestamp. If a retry sees an advanced head, it succeeds only when the attempt was submitted, the head equals its exact end, and every stored row equals that retained attempt. This covers a committed write whose reply was lost while the owner process stayed alive; it neither duplicates rows nor acknowledges later queued edits. Any unexplained advancement remains a corruption alarm, as does a failed head CAS. Generation fencing inside the transaction prevents a displaced owner from reconciling or writing. `collab.commit-reconcile.integration` executes a real COMMIT and then drops its result at the store/writer boundary without killing the process; it is an application-boundary lost-result test, not a claimed dropped MySQL wire packet.
 - **The trashed check is inside the lock.** If the structural transaction that trashed the note committed first, the writer sees `deleted_at` and drops the batch (below). If the writer committed first, the trash transaction proceeds and the gateway closes the document; nothing is lost because the revision written at trash time reflects the committed head.
 - **The writer never touches `notes`.** `notes.last_edited_by`/`last_edited_at`, `size_chars`, `oversize`, `content_invalid`, `last_checkpoint_at` and `updated_at` are all written by the compaction transaction in one `UPDATE notes` (03-data-model.md §8.6 step 4, D03-14); the writer writes only `note_updates` and `note_docs`. Keeping `notes` out of the hot durability path is what makes the writer's lock set the two rows its guard statement covers and nothing else. The last editor of a committed batch is carried in memory as `NoteWriter.lastEditor` and handed to the next compaction in `Captured`, which is why `last_edited_*` lags by at most `maxDebounce` (D03-14).
 - **`sv_after` is clamped by `storedSv`.** A state vector wider than `SV_STORED_MAX_BYTES` (4096, the `VARBINARY(4096)` width) is stored zero length, meaning "not recorded" (03-data-model.md, D03-01), and `iridium_state_vector_oversize_total` plus the `collab.state_vector.oversize` log line record it. The stored value is only a hint for the next load; the wire always carries the full in-memory vector, so client dominance (A19) is unaffected.
@@ -658,7 +641,7 @@ Hocuspocus does not retry a failed store and does not retry anything at all for 
 | Compaction cannot reach the FIFO head (writer `retrying`/`failed`/`backpressure`, e.g. a MySQL outage) | `enqueueCompaction` rejects fast with `CompactionUnavailable`, or with `CompactionTimeout` after `COMPACTION_AWAIT_TIMEOUT_MS`; the job **stays queued** and commits when the writer recovers | When the writer recovers | the already-sent `persist-failed`; a `flush` is answered `persist-failed {reason:'db_unavailable', retryInMs}`, and `GET /notes/:noteId/markdown?fresh=true` answers `503 unavailable` with `Retry-After` |
 | A refused snapshot (> 64 MB) or a failed content scan | The compaction **resolves** after COMMIT with `status="refused"` / the projection skipped; the writer stays `idle` and the document is closed read-only | Next debounce (the condition is latched in `notes`) | `size-exceeded` / `content-invalid` broadcast; never `persist-failed` |
 
-Escalation: after 10 consecutive failed attempts **or** 30 s in `retrying`, the writer enters `failed`: it emits one `collab.persist.failed` SIEM log line, sets `iridium_persist_failures_total`, keeps retrying every 30 s, and `/readyz` reports unhealthy (`writer failed > 60 s`). When a retry finally succeeds the writer logs `collab.persist.recovered`, broadcasts the normal `persisted`, and returns to `idle`. Clients do not need to do anything on recovery: the `SaveStateMachine` leaves `save-failed` as soon as a `persisted` newer than the last `persist-failed` dominates the local state vector.
+Escalation: after 10 consecutive failed attempts **or** 30 s in `retrying`, the writer enters `failed`: it emits one `collab.persist.failed` SIEM log line, sets `iridium_persist_failures_total`, keeps retrying every 30 s, and `/readyz` reports unhealthy (`writer failed > 60 s`). When a retry finally succeeds the writer logs `collab.persist.recovered`, broadcasts the normal `persisted`, and returns to `idle`. Clients do not need to do anything on recovery: the `SaveStateMachine` leaves `save-failed` once a `persisted` newer than the last `persist-failed` dominates the local state vector and its canonical delete-set fingerprint equals `localDs`.
 
 The writer **never** drops an update except for a trashed note. Pending edits are not lost on a DB outage; they sit in the queue (bounded, below) and in every client's Y.Doc, and the clients correctly show *Not saved — retrying*.
 
@@ -686,7 +669,7 @@ On entering `backpressure` the writer:
 2. Broadcasts `persist-failed {reason:'backpressure', retryInMs}`;
 3. Raises the `collab.backpressure` alert and increments `iridium_persist_queue_depth` / `iridium_persist_backlog_age_seconds` (both already exported continuously).
 
-It leaves `backpressure` when the queue is below half of both bounds, restores `readOnly` from each connection's role, and broadcasts `role` so the clients re-enable editing. Reaching the bound at all means MySQL has been unavailable for a long time; the state is observable, reversible, and never silently lossy.
+It leaves `backpressure` when the queue is below half of both bounds and, once every other write latch has cleared, restores `readOnly` from each connection's role and broadcasts `role {role, recovered:true}`. Clients replace their provider on the same Y.Doc even when the role is unchanged, because updates refused while blocked are still in that document and need a fresh SyncStep1/SyncStep2 exchange. Reaching the bound at all means MySQL has been unavailable for a long time; the state is observable, reversible, and never silently lossy.
 
 ### Global fairness and the persist pool
 
@@ -720,7 +703,7 @@ In both cases the enqueued job **stays in the FIFO**, coalescing exactly as spec
 - the writer is in `retrying`, `failed` or `backpressure`;
 - no `note_revisions` row exists at `head_seq` (the unload-checkpoint invariant: an unloaded note always has a Markdown checkpoint at its head).
 
-A veto in Hocuspocus only aborts *that* unload attempt, and nothing re-attempts it for a document with zero connections — so the writer records `unloadRequested = true` and, when it next drains to empty with `document.getConnectionsCount() === 0`, runs the final compaction (which writes the `unload` checkpoint if needed) and then calls `hocuspocus.unloadDocument(document)` itself. `afterUnloadDocument` disposes the writer: clears timers, releases its scheduler ring entry, releases the admission budget, removes the participant table entry. `collab.unload-after-veto` is the integration test for this path.
+A veto in Hocuspocus only aborts *that* unload attempt, and nothing re-attempts it for a document with zero connections — so the writer records `unloadRequested = true` before any asynchronous checkpoint read and, when it next drains to empty with `document.getConnectionsCount() === 0`, runs the final compaction (which writes the `unload` checkpoint if needed) and then calls `hocuspocus.unloadDocument(document)` itself. `afterUnloadDocument` disposes the writer: clears timers, releases its scheduler ring entry, releases the admission budget, removes the participant table entry. `collab.unload-after-veto` is the integration test for this path. The request stays set until disposal; a failed checkpoint lookup or unload callback arms one bounded retry timer even when there is no queue work. Rejoining clients suppress unload until the document is empty again. A transient read failure therefore cannot consume the only retry intent or leak admission capacity.
 
 **The completion path always terminates.** The last-client compaction ends in exactly one of the three ways listed under "The compaction job" — committed normally, snapshot refused, or content invalid — and each of them commits a `note_revisions` row at `head_seq` and resolves rather than rejecting. Condition 3 is therefore satisfiable after a single attempt and conditions 1–2 are not re-armed by the attempt itself, so a document is never pinned for the life of the process, its admission-budget entry (document count plus state bytes) is always released, and `iridium_docs_loaded` cannot drift upward. This is what keeps invariant I-10 ("every note with no loaded document has a `note_revisions` row at `head_seq`") satisfiable for exactly the notes that most need operator attention. The blocking restore check `projection_freshness` (`projected_seq = head_seq` for every note on a cold deployment, 11-operations-and-deployment.md) then holds too — except for notes with `content_invalid = 1` or `note_projections.status='invalid_content'`, which are reported with the `doctor --content-invalid` remedy rather than failing the restore, because `reindex --stale` cannot make an invalid note current and the nightly drill fixture deliberately seeds one.
 
@@ -742,16 +725,16 @@ A veto in Hocuspocus only aborts *that* unload attempt, and nothing re-attempts 
 
 ### Definition
 
-> **Saved** (for note N, on one client, at one instant) ⇔ the client's WebSocket is connected **and** the provider reports `synced === true` **and** `unsyncedChanges === 0` **and** the most recent `persisted` message's state vector **dominates** the client's entire local state vector.
+> **Saved** (for note N, on one client, at one instant) ⇔ the client's WebSocket is connected **and** the provider reports `synced === true` **and** `unsyncedChanges === 0` **and** the most recent `persisted` message's state vector **dominates** the client's entire local state vector **and** its canonical delete-set fingerprint equals the client's.
 >
-> The server sends `persisted {seq, sv}` only after a MySQL transaction containing the corresponding `note_updates` row has COMMITted, with `innodb_flush_log_at_trx_commit = 1`.
+> The server sends `persisted {seq, sv, ds}` only after a MySQL transaction containing the corresponding `note_updates` row has COMMITted, with `innodb_flush_log_at_trx_commit = 1`.
 
 This is the spec §5 requirement ("Saved means the server has durably persisted a state that includes the user's pending edits") turned into something mechanically checkable. Two things it deliberately is **not**:
 
 - It is **not** Hocuspocus's `SyncStatus(true)` / `provider.synced` / `unsyncedChanges === 0`. Those say the server applied the update to the in-memory Y.Doc; the server may die one millisecond later and the update is gone. They are inputs to *Syncing*, never to *Saved*.
 - It is **not** "a Markdown checkpoint exists". Checkpoints (`note_revisions`) and projections (`note_projections`) trail the live document by at most `maxDebounce` (10 s) and are what agents and exports read. *Saved* means the CRDT state is durable; *up to date for agents* is a separate, explicitly requested state reached with `flush` (deviation F2, see 01-vision-scope-and-principles.md).
 
-**Dominance, not the own-clock.** `dominates(persistedSv, localSv)` is true iff for every `(clientId, clock)` present in `localSv`, `persistedSv.get(clientId) ?? 0 >= clock`. Comparing only the client's own `clientID` clock was rejected: Hocuspocus issue #845 (still open) reports the client ID changing around `maxDebounce` flushes, and a client that has *seen* a remote edit but whose own clock is acknowledged would claim *Saved* for content the server has not committed. Full dominance is strictly more conservative and costs nothing extra, because every update a client has applied reached the same writer in the same order. `crdt.dominates.prop` property-tests it, including vectors with clientIDs absent from `persistedSv` (never dominated) and a local clientID that changes mid-session.
+**Whole-vector dominance and deletion equality.** `dominates(persistedSv, localSv)` is true iff for every `(clientId, clock)` present in `localSv`, `persistedSv.get(clientId) ?? 0 >= clock`. Comparing only the client's own `clientID` clock was rejected: Hocuspocus issue #845 (still open) reports the client ID changing around `maxDebounce` flushes, and a client that has *seen* a remote edit but whose own clock is acknowledged would claim *Saved* for content the server has not committed. Full dominance is strictly more conservative and costs nothing extra, because every update a client has applied reached the same writer in the same order. `crdt.dominates.prop` property-tests it, including vectors with clientIDs absent from `persistedSv` (never dominated) and a local clientID that changes mid-session. Deletions have a separate requirement: `persisted.ds === localDs`, as specified in the A19 amendment below.
 
 ### End-to-end flow
 
@@ -773,8 +756,8 @@ sequenceDiagram
   Note over A: unsyncedChanges-- → state still "syncing" (in-memory only)
   H-->>B: relay Update U
   H->>L: 'update' (U, origin)
-  L->>L: svAfter = encodeStateVector(doc)  (synchronous)
-  L->>W: enqueue {U, svAfter, actor, origin}
+  L->>L: capture svAfter and dsAfter = deleteSetFingerprint(doc) (synchronous)
+  L->>W: enqueue {U, svAfter, dsAfter, actor, origin}
   W->>W: split into contiguous same-actor runs, merge each (≤ 1 MiB per row) → N rows
   W->>DB: BEGIN
   W->>DB: SELECT d.head_seq, n.deleted_at FROM note_docs d JOIN nodes n ON n.id = d.note_id WHERE d.note_id = N FOR UPDATE
@@ -782,9 +765,9 @@ sequenceDiagram
   W->>DB: UPDATE note_docs SET head_seq = head+N WHERE note_id = N AND head_seq = head   %% CAS, numUpdatedRows === 1n
   W->>DB: COMMIT
   DB-->>W: committed (redo log fsynced)
-  W->>All: broadcastStateless {v:1, t:'persisted', seq: head+N, sv: base64(svAfter of the last row)}
-  Note over A,B: saved ⇔ connected ∧ synced ∧ unsynced == 0 ∧ dominates(persistedSv, localSv)
-  W->>W: lastPersisted = {seq, sv}
+  W->>All: broadcastStateless {v:1, t:'persisted', seq: head+N, sv: base64(svAfter of the last row), ds: dsAfter of the last row}
+  Note over A,B: saved ⇔ connected ∧ synced ∧ unsynced == 0 ∧ dominates(persistedSv, localSv) ∧ persistedDs == localDs
+  W->>W: lastPersisted = {seq, sv, ds}
 ```
 
 Step by step, with the guarantees each step contributes:
@@ -793,13 +776,19 @@ Step by step, with the guarantees each step contributes:
 |---|---|---|
 | 1 | Client sends a Yjs `Update` frame on `note:<id>` | Size and rate capped by `IridiumLimits.beforeHandleMessage`; authorization epoch re-checked |
 | 2 | Server applies it; Hocuspocus replies `SyncStatus(true)` | In-memory convergence only. A viewer's update is *not* applied and is answered `SyncStatus(false)`, leaving `unsyncedChanges > 0` — the spec's "rejected changes remain visibly unsaved" |
-| 3 | Iridium's `update` listener captures `svAfter` synchronously and enqueues | Capture order == apply order, so `svAfter_k` dominates `svAfter_j` for `j < k` |
+| 3 | Iridium's `update` listener captures `svAfter` and `dsAfter` synchronously and enqueues | Capture order == apply order, so `svAfter_k` dominates `svAfter_j` for `j < k` |
 | 4 | `NoteWriter` coalesces and runs one transaction: row lock, INSERT of `N` rows, one `head_seq` CAS | Strict per-note ordering; an older write can never overwrite a newer head; a trashed note is detected under the lock |
 | 5 | COMMIT resolves | Durable: the redo log is fsynced (`innodb_flush_log_at_trx_commit=1`) |
-| 6 | **Only then** `document.broadcastStateless({t:'persisted', seq, sv})` | Killing the process between 5 and 6 loses the *acknowledgement*, not the *data*; the baseline (below) repairs the client's view on reconnect |
+| 6 | **Only then** `document.broadcastStateless({t:'persisted', seq, sv, ds})` | Killing the process between 5 and 6 loses the *acknowledgement*, not the *data*; the baseline (below) repairs the client's view on reconnect |
 | 7 | Every connection of the document recomputes its state | One message acknowledges all earlier updates, for every participant, not just the author |
 | 8 | On failure: `{t:'persist-failed', seq, reason, retryInMs}`, batch stays at the head, backoff 200 ms → 5 s with jitter | No false *Saved*; the failure is visible and the retry is the pipeline's, not Hocuspocus's |
 | 9 | `flush {}` (Ctrl/Cmd+S, ≤ 6/min per connection) runs compaction + projection now and replies `{t:'projected', seq}` | The save reflex gets a truthful meaning: "committed **and** what agents and exports read is current" |
+
+**A19 amendment, 2026-09-18: deletion-aware durability.** Yjs state vectors count inserted structs; a pure deletion can leave every clock unchanged. The previous vector-only predicate could therefore show Saved, and suppress the close warning, after Hocuspocus accepted a deletion but before its MySQL COMMIT. `persisted.ds` is now mandatory: the 64 lowercase hexadecimal characters of SHA-256 over `Y.encodeSnapshot(Y.createSnapshot(Y.snapshot(doc).ds, new Map()))`, implemented only in `@iridium/crdt` using the existing `lib0/hash/sha256` dependency. Yjs sorts client ids and merges deleted ranges, so replay order and garbage collection preserve this encoding. No deleted content or synthetic metadata enters the witness.
+
+The writer captures the vector and fingerprint synchronously with each accepted update. Coalescing uses the final member's pair, and a retained retry keeps that same pair; a later deletion cannot enter an earlier batch's acknowledgement. Saved requires both vector dominance and exact fingerprint equality. Equality is deliberately conservative when the server has additional deletions not yet relayed to this client. The predicate also governs `warnsBeforeUnload` and the 15 s deadline. A missing or malformed fingerprint is rejected before client state changes; there is no empty-delete default on the wire. This is a pre-release correction to v1, and clients and servers must ship together.
+
+The witness is derived from committed CRDT state, not stored as another SQL column. On load it is computed after snapshot/log replay; without an attached writer, `baselineOf` captures the head and replays only its contiguous prefix. A newly appended tail is excluded, and missing rows during a concurrent compaction/prune refuse the baseline for retry. The retained queue/wire cost is fixed at 64 characters per witness, regardless of deletion history. `collab.deletion-durability.integration` holds a real MySQL transaction before COMMIT and exercises both local and relayed deletions; the client and writer suites also cover stale acknowledgements, retry prefixes and reconnects.
 
 ### The baseline: `persisted` on demand
 
@@ -814,10 +803,10 @@ After **every** `synced` event — the initial connect and every reconnect — t
 // IridiumPersistence.onStateless, note:* branch
 case 'baseline': {
   const w = persistence.writerOf(context.noteId!);
-  let base: { seq: number; sv: StateVector };
+  let base: { seq: number; sv: StateVector; ds: string };
   try { base = w?.lastPersisted ?? await persistence.baselineOf(context.noteId!); }
   catch { connection.sendStateless(encodeStateless({ v: 1, t: 'persist-failed', reason: 'db_error', retryInMs: 1000 })); return; }
-  connection.sendStateless(encodeStateless({ v: 1, t: 'persisted', seq: base.seq, sv: b64(base.sv) }));
+  connection.sendStateless(encodeStateless({ v: 1, t: 'persisted', seq: base.seq, sv: b64(base.sv), ds: base.ds }));
   if (w && (w.state === 'failed' || w.state === 'backpressure')) {
     connection.sendStateless(encodeStateless({ v: 1, t: 'persist-failed', reason: w.lastFailureReason, retryInMs: w.nextRetryInMs }));
   }
@@ -825,11 +814,11 @@ case 'baseline': {
 }
 ```
 
-`lastPersisted` is initialised in `afterLoadDocument` from `note_docs.head_seq` plus the `sv_after` of the last `note_updates` row (falling back to `note_docs.snapshot_sv` when the snapshot is at the head, and to `stateVector(document)` when the recorded value is zero length — state vector wider than `VARBINARY(4096)`, 03-data-model.md D03-01), so the baseline is correct even for a document loaded fresh after a restart. Because the answer is sent on one connection rather than broadcast, a reconnect storm does not fan out.
+`lastPersisted` is initialised in `afterLoadDocument` from `note_docs.head_seq` plus the `sv_after` of the last `note_updates` row (falling back to `note_docs.snapshot_sv` when the snapshot is at the head, and to `stateVector(document)` when the recorded value is zero length — state vector wider than `VARBINARY(4096)`, 03-data-model.md D03-01), with `ds` computed from the fully replayed committed document; recorded vectors alone never supply the deletion witness. The baseline is therefore correct even for a document loaded fresh after a restart. Because the answer is sent on one connection rather than broadcast, a reconnect storm does not fan out.
 
 Two invariants make the answer total rather than best-effort:
 
-- **A `baseline` is answered on every connection of a loaded document.** When no writer is attached — a `baseline` racing `afterLoadDocument`, or a connection still draining after `afterUnloadDocument` disposed the writer — the answer is read from `note_docs.head_seq` plus the last `note_updates.sv_after` through `persistence.baselineOf`, and only a failure of *that read* is answered with a retryable `persist-failed {reason:'db_error', retryInMs: 1000}`. A `baseline` is never silently dropped, and a missing writer is never reported as `persist-failed`: the `reason` vocabulary is closed by skeleton A19(7) (`db_unavailable`, `db_error`, `note_trashed`, `too_large`, `backpressure`, `content_invalid`) and none of those means "writer not attached", while rule 8 of the client state machine would turn such a message straight into `save-failed` for state that is already committed. Dropping the answer instead is just as bad: the client's only self-heal is one re-request after 5 s (D05-05), after which it reports `save-failed` for a fully durable note.
+- **A `baseline` is answered on every connection of a loaded document.** When no writer is attached — a `baseline` racing `afterLoadDocument`, or a connection still draining after `afterUnloadDocument` disposed the writer — the answer is read from `note_docs.head_seq` plus the last `note_updates.sv_after` and a delete-set witness by replaying the complete committed prefix through `persistence.baselineOf`, and only a failure of *that read* is answered with a retryable `persist-failed {reason:'db_error', retryInMs: 1000}`. A `baseline` is never silently dropped, and a missing writer is never reported as `persist-failed`: the `reason` vocabulary is closed by skeleton A19(7) (`db_unavailable`, `db_error`, `note_trashed`, `too_large`, `backpressure`, `content_invalid`) and none of those means "writer not attached", while rule 8 of the client state machine would turn such a message straight into `save-failed` for state that is already committed. Dropping the answer instead is just as bad: the client's only self-heal is one re-request after 5 s (D05-05), after which it reports `save-failed` for a fully durable note.
 - **An unparseable, unknown or oversized (> 4 KiB) client stateless payload closes that document's connection with `protocol-error`**, never merely logs — the handler calls `connection.close` itself, which is why `onStateless` is not on the `safeHook` rethrow list.
 
 `baseline` is also the client's self-healing path for a dropped broadcast: `SaveStateMachine` re-requests the baseline if it has been in `syncing` for 5 s with `unsyncedChanges === 0` (one request, then back to waiting), which turns a lost stateless frame into a one-round-trip delay instead of a stuck indicator.
@@ -841,6 +830,7 @@ All collaboration stateless payloads are JSON strings validated by zod in both d
 ```ts
 // packages/contracts/src/collab.ts
 import { z } from 'zod';
+import { Sha256Hex } from './rest/common.ts';
 
 export const V = z.literal(1);
 export const Seq       = z.number().int().nonnegative();          // note_updates.seq as a JS number (safe: < 2^53)
@@ -854,7 +844,7 @@ export const Uuid      = z.string().uuid();                        // canonical 
 export const VaultRole = z.enum(['viewer', 'editor', 'manager']);
 
 /* ---------- server → client, document `note:<uuid>` ---------- */
-export const PersistedMsg = z.object({ v: V, t: z.literal('persisted'), seq: Seq, sv: Base64Sv }).strict();
+export const PersistedMsg = z.object({ v: V, t: z.literal('persisted'), seq: Seq, sv: Base64Sv, ds: Sha256Hex }).strict();
 
 export const PersistFailedReason = z.enum([
   'db_unavailable', 'db_error', 'note_trashed', 'too_large', 'backpressure', 'content_invalid',
@@ -951,6 +941,7 @@ export const ClientNoteMessage = z.discriminatedUnion('t', [BaselineMsg, FlushMs
 export const CollabCloseReason = z.enum([
   'unauthorized', 'revoked', 'note-not-found', 'note-trashed', 'note-closing', 'vault-archived',
   'too-large', 'rate-limited', 'capacity', 'awareness-spoof', 'protocol-error', 'shutdown',
+  'unavailable', 'no-owner-lease',
 ]);
 ```
 
@@ -964,6 +955,8 @@ Server-side close codes (from `@hocuspocus/common`) and the reason strings they 
 | Update frame over 1 MiB | 1009 `MessageTooBig` | `too-large` |
 | Message-rate cap, per-user connection cap | 4403 | `rate-limited` |
 | Admission budget exhausted | 4403 | `capacity` |
+| Dependency or pool unavailable | 4503 | `unavailable` |
+| Schema owner lease not held | 4503 | `no-owner-lease` |
 | Awareness identity mismatch, malformed stateless payload | 4403 | `awareness-spoof`, `protocol-error` |
 | Graceful shutdown / reset | 4205 `ResetConnection` | `shutdown` |
 
@@ -980,7 +973,8 @@ export interface SaveStateInput {
   synced: boolean;                   // provider.synced (initial sync completed)
   unsynced: number;                  // provider.unsyncedChanges
   localSv: StateVector;              // Y.encodeStateVector(ydoc), recomputed on every local update
-  persisted: { seq: number; sv: StateVector } | null;
+  localDs: string;                   // canonical delete-set fingerprint, recomputed on every local or relayed update
+  persisted: { seq: number; sv: StateVector; ds: string } | null;
   persistFailed: { seq?: number; reason: PersistFailedReason; at: number } | null;
   projectedSeq: number | null;
   role: 'viewer' | 'editor' | 'manager';
@@ -1004,10 +998,10 @@ export function saveState(i: SaveStateInput): SaveState;       // first matching
  *  property of this accumulator plus the rule order, never of a hidden transition table. */
 export type SaveEvent =
   | { e: 'open' } | { e: 'authenticated' } | { e: 'synced' }
-  | { e: 'localUpdate'; localSv: StateVector; at: number }
+  | { e: 'localUpdate'; localSv: StateVector; localDs: string; at: number }
   | { e: 'syncStatus'; applied: boolean }                       // applied:false never decrements `unsynced` (see below)
   | { e: 'unsyncedChanges'; n: number }
-  | { e: 'persisted'; seq: number; sv: StateVector }
+  | { e: 'persisted'; seq: number; sv: StateVector; ds: string }
   | { e: 'persistFailed'; seq?: number; reason: PersistFailedReason }
   | { e: 'projected'; seq: number }
   | { e: 'role'; role: 'viewer' | 'editor' | 'manager' }
@@ -1032,15 +1026,17 @@ Rules, in evaluation order. Each close reason gets the state whose retry policy 
 | 5 | `too-large` | `closeReason === 'too-large' ∨ oversizeDelta` | **Terminal for that document.** The provider is destroyed, never reconnected, because the same undeliverable bytes would be re-sent (see "Reconnection semantics") | "Pending changes too large to send", **Export my text** / **Discard my changes** |
 | 6 | `trashed` | `closeReason === 'note-trashed'` | No retry | Tab shows "moved to trash", link to the trash view, **Export my text** |
 | 7 | `closed` | `closeReason ∈ {shutdown, note-closing, note-not-found, rate-limited}` | Transient: `shutdown`/`note-closing` re-attach after a backoff; `rate-limited` from a CLOSE(7) frame backs off once; `rate-limited` from a `PermissionDenied` (the document-attachment cap) never re-attaches automatically; `note-not-found` stops | "Disconnected by the server — reconnecting" (the provider reconnects on the socket, not per document), except the attachment-cap refusal, which is presented as a dormant note session (see the mapping table below) |
-| 8 | `disconnected` | `socket !== 'connected'` | Provider backoff, 1 s → 30 s | Editing paused (read-only compartment), "Reconnecting…", `beforeunload` warns while `unsynced > 0 ∨ ¬dominates` |
+| 8 | `disconnected` | `closeReason === 'unavailable' ∨ socket !== 'connected'` | Dependency refusal: per-document 5 s → 60 s backoff; socket loss: provider 1 s → 30 s backoff | Editing paused (read-only compartment), "Reconnecting…", `beforeunload` warns while `unsynced > 0 ∨ ¬dominates ∨ persisted.ds !== localDs` |
 | 9 | `connecting` | `socket === 'connected' ∧ (¬authenticated ∨ ¬synced)` | — | Spinner in the pill; editor read-only until the first sync completes |
 | 10 | `rejected` | `role === 'viewer' ∧ unsynced > 0` | — | "Read-only — your changes were not accepted", **Export my text** / **Discard my changes** |
 | 11 | `read-only` | `role === 'viewer' ∨ contentInvalid ∨ oversize` | — | Pill "Read-only" with the cause in a tooltip |
-| 12 | `save-failed` | `persistFailed` newer than `persisted`, **or** `¬dominates(persisted.sv, localSv) ∧ now − lastLocalEditAt > 15 000` | The writer's own retry; no client action | Red pill "Not saved — retrying", tooltip with the reason, **Export my text** |
-| 13 | `syncing` | `unsynced > 0 ∨ persisted === null ∨ ¬dominates(persisted.sv, localSv)` | — | Pill "Syncing…" |
+| 12 | `save-failed` | `persistFailed` newer than `persisted`, **or** `(¬dominates(persisted.sv, localSv) ∨ persisted.ds !== localDs) ∧ now − lastLocalEditAt > 15 000` | The writer's own retry; no client action | Red pill "Not saved — retrying", tooltip with the reason, **Export my text** |
+| 13 | `syncing` | `unsynced > 0 ∨ persisted === null ∨ ¬dominates(persisted.sv, localSv) ∨ persisted.ds !== localDs` | — | Pill "Syncing…" |
 | 14 | `saved` | otherwise | — | Pill "Saved"; "Saved · up to date for agents" for 2 s when `projectedSeq === persisted.seq` after a `flush` |
 
 This ordered table is the **single normative definition** of the client save state; 09-api-reference.md §3.9 maps the wire and provider signals onto the `SaveStateInput` fields above and adds no second definition. Rule 10 is the observable form of skeleton A20's `SyncStatus(false)` → `rejected`: the provider emits **no per-update rejection event** (its event set is `open`, `connect`, `authenticated`, `authenticationFailed`, `status`, `synced`, `unsyncedChanges`, `stateless`, `close`, `disconnect`, `destroy`, `maxAttemptsFailed`, `awarenessUpdate`/`awarenessChange`, and `MessageReceiver.applySyncStatusMessage` decrements `unsyncedChanges` only on `SyncStatus(applied === true)`), so a viewer's refused write is observable only as `unsynced` staying above zero — the role plus the unsynced count is therefore the rule, and "a local update was answered `SyncStatus(false)`" is not implementable from the provider's public surface.
+
+Every input fold first samples the injected monotonic clock. Replacing a provider retains the last pending-local-edit time and the prior dominance baseline while discarding its acknowledgement, so re-attachment cannot restart or disarm the 15 s deadline for existing unsaved work. An already-expired deadline is evaluated immediately. Incoming `persisted.sv` must be a canonical Yjs state vector as well as valid base64, and `persisted.ds` must be exactly 64 lowercase hexadecimal characters, before any input is retained; malformed witnesses cannot poison later folds.
 
 The close-reason column of 09-api-reference.md §3.6 maps onto these rules one-to-one, and `@iridium/collab-client` implements exactly this and nothing else. One reason string carries two policies and is therefore keyed on `closeVia` as well:
 
@@ -1056,6 +1052,8 @@ The close-reason column of 09-api-reference.md §3.6 maps onto these rules one-t
 | `rate-limited` via `close-frame` (the 200-messages-per-10 s cap, 4403) | `closed` | Back off and re-attach once |
 | `rate-limited` via `auth-denied` (`PermissionDenied` from the 20-document-attachment cap in `onAuthenticate`; the socket and the window's other documents keep syncing) | `closed` | Do **not** re-attach automatically — the cap is still full, so a retry would loop. `NoteSessionRegistry` makes that note session **dormant** with D07-15's machinery (provider detached, the last rendered text kept as a read-only snapshot) and the tab shows "Too many notes open on this account — pause a note in another window"; closing or pausing a note in another window or profile frees an attachment and re-opening this one succeeds |
 | `capacity` | `capacity` | "Server busy — retrying", re-attach with 5 s → 60 s backoff |
+| `unavailable` | `disconnected` | Dependency or pool unavailable; preserve local text and undo, re-attach with 5 s → 60 s backoff without treating the session as expired |
+| `no-owner-lease` | `capacity` | Process has no schema ownership; re-attach with 5 s → 60 s backoff |
 | `awareness-spoof` | `revoked` | Do not retry; log — a client bug or an attack |
 | `protocol-error` | `revoked` | Do not retry; report the client version |
 | `shutdown` | `closed` | Re-attach with backoff |
@@ -1065,11 +1063,11 @@ stateDiagram-v2
   [*] --> connecting
   connecting --> syncing : authenticated + synced
   connecting --> disconnected : socket closed
-  syncing --> saved : dominates(persistedSv, localSv) and unsynced == 0
+  syncing --> saved : dominates(persistedSv, localSv) ∧ persistedDs == localDs and unsynced == 0
   saved --> syncing : local edit or remote update applied
-  syncing --> save_failed : persist-failed, or 15 s without dominance
+  syncing --> save_failed : persist-failed, or 15 s without vector dominance and delete-set equality
   save_failed --> syncing : newer persisted arrives
-  save_failed --> saved : persisted dominates localSv
+  save_failed --> saved : persisted dominates localSv and persistedDs == localDs
   syncing --> disconnected : socket closed
   saved --> disconnected : socket closed
   save_failed --> disconnected : socket closed
@@ -1100,7 +1098,7 @@ stateDiagram-v2
 
 Five properties of the machine are property-tested in `collab-client/save-state.prop.spec.ts` (10-testing-and-quality.md's `save-state.machine.prop`), over input snapshots produced by folding generated `SaveEvent` sequences through `reduceSaveInput`:
 
-- **No false positives.** For every input sequence, `saved` implies a `persisted` whose `sv` dominates the `localSv` at that instant. (Generated sequences interleave local edits, remote updates, acks with arbitrary delays, reconnects and clientID changes.)
+- **No false positives.** For every input sequence, `saved` implies a `persisted` whose `sv` dominates `localSv` and whose `ds` equals `localDs` at that instant. (Generated sequences interleave local edits, remote updates, acks with arbitrary delays, reconnects and clientID changes.)
 - **Liveness.** Given a connected socket, `synced`, no failures and a `persisted` for the latest update, the machine reaches `saved` without further input.
 - **Monotone recovery.** Once a `persisted` with `seq = S` has been seen, no later input makes the machine claim less than durability through `S` (an older `persisted` arriving out of order is ignored by `seq` comparison).
 - **`too-large` is terminal.** No input sequence leads from `too-large` back to `connecting` or `syncing` for the same document, so an undeliverable update can never produce a close/reconnect loop.
@@ -1334,7 +1332,7 @@ Bulk discovery is a set of read-only `iridium doctor` checks (mutations live und
 2. The next compaction flags the note, audits `note.content.invalid`, broadcasts `content-invalid`, and every connection becomes read-only; the projection and `projected_seq` stay where they were, and the unload compaction still writes `note_revisions(kind='unload', label='head-unverified')` at `head_seq`, so the document unloads instead of being pinned by the checkpoint veto.
 3. A legitimate client's subsequent update is answered `SyncStatus(false)`; the committed projection still serves the previous good revision through REST and MCP.
 4. `iridium doctor --repair-content` with `--dry-run` prints the expected diff and changes nothing.
-5. The real repair rewrites the text, clears the flag, restores write access, produces a projection whose `content_hash` matches the repaired text, and leaves exactly one `pre_restore` revision plus one `note.content.repaired` audit event with a verifying chain.
+5. The real repair rewrites the text, clears the flag, restores write access with the same explicit `role {role, recovered:true}` signal, produces a projection whose `content_hash` matches the repaired text, and leaves exactly one `pre_restore` revision plus one `note.content.repaired` audit event with a verifying chain.
 
 ## Coordinating structural changes with live sessions
 
@@ -1442,9 +1440,9 @@ At the head of the FIFO the job does the following **with no `await` between any
 
 1. Record `pending = queue.length`. Those updates arrived after the job was enqueued, are already applied to the live document, and are therefore part of the text about to be captured.
 2. Capture `{ markdown: current, stateV2, sv, contentHash }` with the compactor's own `capture(document, writer)` helper.
-3. Compute `prefixSuffixDiff(current, target)` from **that** string and apply `t.delete(start, deleteLength)` / `insertChunked(t, start, insert, origin)` inside `conn.transact` with origin `{source:'local', context:{reason:'restore', revisionId, userId}}`, keeping `assert(t.toString() === target, 'restore must reproduce the revision text exactly')`. The `document.on('update')` listener appends the restore update immediately behind those `pending` items, so the FIFO order is fixed before control returns to the event loop.
+3. Compute `prefixSuffixDiff(current, target)` from **that** string and apply `t.delete(start, deleteLength)` in `conn.transact`, then call the fenced `ServerEdit.insertChunked(start, insert)` outside that transaction, with each chunk carrying origin `{source:'local', context:{reason:'restore', revisionId, userId}}`, keeping `assert(t.toString() === target, 'restore must reproduce the revision text exactly')`. The `document.on('update')` listener appends the restore update immediately behind those `pending` items, so the FIFO order is fixed before control returns to the event loop.
 
-The job then runs a **single** `dbPersist` transaction, reusing `writeBatch`'s guard `SELECT … FOR UPDATE` and its one `head_seq` CAS: the `pending` client-update rows under the normal actor-run coalescing → `note_revisions(kind='pre_restore')` at the seq of the **last** of those rows (the seq the captured text actually corresponds to — not `lastCommittedSeq` as observed before the job ran, which predates the queued updates the capture already contains) → the restore's own `note_updates` row with `origin='restore'`, `actor_type='user'`, `actor_id = principal.userId` → the `head_seq` CAS to the new head → `note_revisions(kind='restore', restored_from_revision_id)` at the new head. `uq_revisions_note_seq_kind` is satisfied because the two revision rows sit at consecutive seqs. After COMMIT, unchanged: `{t:'persisted', seq, sv}`, two `{t:'checkpoint'}` broadcasts, `compactNow(noteId, {trigger:'flush'})`, `audit('note.revision.restored')`. The crash property is explicit: a crash can never leave a persisted restore whose `pre_restore` row is missing.
+The job then runs a **single** `dbPersist` transaction, reusing `writeBatch`'s guard `SELECT … FOR UPDATE` and its one `head_seq` CAS: the `pending` client-update rows under the normal actor-run coalescing → `note_revisions(kind='pre_restore')` at the seq of the **last** of those rows (the seq the captured text actually corresponds to — not `lastCommittedSeq` as observed before the job ran, which predates the queued updates the capture already contains) → the restore's bounded `note_updates` rows with `origin='restore'`, `actor_type='user'`, `actor_id = principal.userId` → the `head_seq` CAS to the new head → `note_revisions(kind='restore', restored_from_revision_id)` at the new head. `uq_revisions_note_seq_kind` is satisfied because the pre-restore revision is at the last pending-client row and the restore revision is at the final restore row; a large restore can span several bounded update rows. After COMMIT, unchanged: `{t:'persisted', seq, sv, ds}`, two `{t:'checkpoint'}` broadcasts, `compactNow(noteId, {trigger:'flush'})`, `audit('note.revision.restored')`. The crash property is explicit: a crash can never leave a persisted restore whose `pre_restore` row is missing.
 
 Because the capture and the diff are one item, the **no-op restore** (the captured text already equals the target) is decided before anything is written: the job writes neither revision row and returns the current head with `changed: false`, which is the case 09-api-reference.md's response shape allows by making `restored` and `preRestore` absent while `revision` carries the current head.
 
@@ -1594,7 +1592,7 @@ The single limits policy lives in `packages/contracts/src/limits.ts` and is repr
 |---|---|---|---|
 | WebSocket frame `maxPayload` | 2 MiB (`WS_MAX_PAYLOAD_BYTES`) | `@fastify/websocket` `options.maxPayload` | `ws` closes the socket (1009) |
 | Single Yjs update | ≤ 1 MiB (`YJS_UPDATE_MAX_BYTES`) | `IridiumLimits.beforeHandleMessage` (via `peekFrame`, before decoding) | close `too-large` (1009), terminal for that document |
-| Insertion chunk | 256 KiB of UTF-8 (`INSERT_CHUNK_MAX_BYTES`) | `insertChunked()` in `@iridium/crdt`, called by `@iridium/editor` paste/drop, the tree-item-drop link insert, import fix-ups and the server's `DirectConnection` restore/repair paths | — (this is what makes the update cap unreachable rather than merely enforced) |
+| Insertion chunk | 256 KiB of UTF-8 (`INSERT_CHUNK_MAX_BYTES`) | `insertChunked()` in `@iridium/crdt`, called by `@iridium/editor` paste/drop, the tree-item-drop link insert, import fix-ups and the server's fenced `ServerEdit.insertChunked` restore/repair paths outside enclosing transactions | — (this is what makes the update cap unreachable rather than merely enforced) |
 | Re-attach delta | ≤ `YJS_UPDATE_MAX_BYTES` | `NoteSessionRegistry` measures `encodeState(ydoc, 1, lastKnownServerSv)` before attaching | the document is not attached; terminal `too-large` with **Export my text** / **Discard my changes** |
 | Yjs messages per connection | 200 / 10 s | `beforeHandleMessage` token bucket, all non-awareness message types | close `rate-limited` |
 | Awareness messages per document connection | 10 / s (`AWARENESS_MESSAGES_PER_SECOND`) | pre-dispatch filter in the `/collab` plugin (`peekFrame`, type 1 only), keyed `(socket, documentName)` | **dropped** before Hocuspocus sees the frame, counter only, never a close |
@@ -1633,8 +1631,9 @@ Awareness state shapes (the only shapes accepted; anything else closes the conne
 
 - **No names, no colours, no email, no role.** Those come from `participants`. Awareness holds the bare minimum needed to place a caret.
 - `cursor.anchor`/`cursor.head` are Yjs **relative positions** (as produced by `y-codemirror.next`), not offsets, so a remote caret survives concurrent edits. A relative position may resolve to `null` after garbage collection of its anchor; every consumer (`yRemoteSelections`, the caret-restore path after an `EditorView` rebuild, undo selection restore) handles `null` by dropping the decoration rather than throwing.
-- `beforeHandleAwareness` decodes **every** awareness update with `decodeAwarenessStates` (lib0 varint framing plus one `JSON.parse` per state — cheap, no Yjs document work) and closes the connection with `awareness-spoof` if any non-null state's `user.id !== context.userId` or the state fails the zod shape. Sampling or validating only the first message was rejected: impersonation is a one-message attack. The rejection is audited once as `collab.write.rejected {reason:'awareness-spoof'}`.
+- `beforeHandleMessage` validates **every raw entry** before awareness dispatch, including duplicate client ids. Non-null states must match the authenticated user and schema; an active client id cannot be taken over from another connection. Null removals may only remove ids owned by that connection; absent ids are allowed only when the stored clock proves an existing no-op, so removals cannot poison another client's future clock. `beforeHandleAwareness` retains the non-null identity/shape check as defence in depth. The pinned Hocuspocus awareness patch described by A17 removes its synthetic scratch state and preserves explicit null removals without undoing hook suppression. The raw decoder is `decodeAwarenessEntries` (lib0 varint framing plus one `JSON.parse` per state, with no Yjs document work); a mismatch closes the connection with `awareness-spoof`. Sampling or validating only the first message was rejected: impersonation is a one-message attack. The rejection is audited once as `collab.write.rejected {reason:'awareness-spoof'}`.
 - Rate cap: 10 awareness messages per second per document connection; excess is **dropped**, not closed (see the reasoning in "Limits relevant to collaboration"). A Hocuspocus hook cannot express "drop this one message": a hook that resolves lets the chain continue and the update is applied and broadcast, and the only way to object is to throw, which closes the connection. The cap is therefore enforced **before dispatch**, in the `/collab` plugin's `socket.on('message')` handler: `peekFrame(bytes)` reads the frame header, and an `Awareness` (type 1) frame for a document whose per-`(socket, documentName)` bucket is empty is not forwarded to `cc.handleMessage` at all. Drops are counted as `iridium_collab_messages_total{type="awareness_dropped"}` with **no per-drop log line** (a flood would self-DoS the log); forwarded awareness frames are still counted `{type="awareness"}` in `beforeHandleMessage`. No close, no `collab.limit.exceeded` event, and `collab.awareness-rate` is the test.
+- The provider adapter publishes only its own `Y.Doc.clientID`, including its null removal. Remote presence and its local timeouts are received and rendered but never rebroadcast as another client's removal. The server owns peer removal.
 - Viewers keep awareness **enabled**. A `null` awareness instance breaks Hocuspocus's ping/pong handling, and a viewer's caret is legitimately useful ("someone is reading this section"); the UI renders viewer carets in a muted "viewing" style.
 - Awareness timeouts are the y-protocols defaults (a state is considered outdated after 30 s, re-broadcast every 15 s), so a client that vanishes without a close frame disappears from the participant list within 30 s even if the socket lingers.
 - Load budget: the k6 scenario models awareness churn at **4 Hz per virtual user**, which is what the message caps and the CPU budget were sized against (see 10-testing-and-quality.md for the SLOs).
@@ -1693,9 +1692,9 @@ Full specifications live in 10-testing-and-quality.md; this is the map from the 
 | Guarantee | Test(s) | Layer |
 |---|---|---|
 | Three clients converge, including overlapping positions | `collab.convergence`, `convergence.model.prop` | integration, property |
-| *Saved* is never claimed for uncommitted state | `collab.durable-ack.chaos` (kill inside the `persisted` handler; `store.throw`, `store.crash-before-commit`, `store.crash-after-commit-before-ack`, `store.slow`; its oracle "a `note_updates` row with `seq` exists and `sv_after` equals the acked `sv`" also accepts a zero-length `sv_after` when the vector exceeded `SV_STORED_MAX_BYTES`), `desktop.durable-save.e2e` (Playwright `electron`, the run that gates 1.0) and `saved-indicator.e2e` (Playwright `chromium`, delayed-commit fault) | chaos, E2E |
+| *Saved* is never claimed for uncommitted state | `collab.deletion-durability.integration` (local and relayed deletions remain pending before COMMIT), `crdt.durability.unit`, `collab.durable-ack.chaos` (kill inside the `persisted` handler; `store.throw`, `store.crash-before-commit`, `store.crash-after-commit-before-ack`, `store.slow`; its oracle "a `note_updates` row with `seq` exists and `sv_after` equals the acked `sv`" also accepts a zero-length `sv_after` when the vector exceeded `SV_STORED_MAX_BYTES`), `desktop.durable-save.e2e` (Playwright `electron`, the run that gates 1.0) and `saved-indicator.e2e` (Playwright `chromium`, delayed-commit fault) | chaos, E2E |
 | The client state machine is sound and live | `collab-client/save-state.prop.spec` (no false `saved`, liveness, monotone recovery), component tests with a fake provider | property, component |
-| Baseline closes the "opened without editing", "crash before ack", "degraded state vector" and "no writer attached" gaps | `collab.baseline-on-connect.integration` — including *a note whose newest `sv_after` is zero length* (seeded fixture row, or `FAULT.svNotRecorded` forcing `storedSv` to degrade) reaching `saved` from the baseline alone with a non-empty `persisted.sv`, and *a `baseline` racing `afterLoadDocument`/`afterUnloadDocument`* (arm a load delay, send `baseline` before `synced`) settling with exactly one `persisted` | integration |
+| Baseline closes the "opened without editing", "crash before ack", "degraded state vector" and "no writer attached" gaps | `collab.baseline-on-connect.integration` — including *a note whose newest `sv_after` is zero length* (seeded fixture row, or `FAULT.svNotRecorded` forcing `storedSv` to degrade) reaching `saved` from the baseline alone with a non-empty `persisted.sv` and a matching `persisted.ds`, and *a `baseline` racing `afterLoadDocument`/`afterUnloadDocument`* (arm a load delay, send `baseline` before `synced`) settling with exactly one `persisted` | integration |
 | Client stateless payloads are refused, never ignored | `collab.stateless-protocol.integration` — unknown `t`, unknown `v`, non-JSON, a payload over 4 KiB, and any client stateless frame on `vault:<id>` each close with `reason: 'protocol-error'`, using the declared `NoteClient.sendStateless(payload: unknown)`, with `iridium_collab_hook_errors_total{hook="onStateless"} === 0` after each (the close is a protocol decision, not a hook error) | integration |
 | Ordering and CAS | `persistence.model.prop` (random interleavings of updates, compactions, restarts against a model of `head_seq`/`snapshot_through_seq`/`projected_seq`; invariant "a degraded zero-length `sv_after`/`snapshot_sv` never weakens the baseline"; invariant "every `note_revisions.content_hash` equals the SHA-256 of the text reconstructed from the log at that row's `seq`"; `TrashNote{whileQueued}` followed by `Compact` changes nothing), `collab.restart-no-duplication` | property, integration |
 | Sequence counters are JS numbers | `guards.seq-is-number.guard.spec` (no `BigInt(`/`bigint`/`…n` literal under `collab/**`, `notes/**`, `db/schema.ts` except against `numUpdatedRows`) | static |
@@ -1746,7 +1745,7 @@ Decisions the skeleton does not settle, made here for consistency and listed for
 | D05-15 | Every sequence counter (`head_seq`, `snapshot_through_seq`, `projected_seq`, `note_updates.seq`, `note_revisions.seq`, `note_projections.revision`) is a JS `number` per 03-data-model.md §1.3; Kysely's `numUpdatedRows` is the only `bigint` in the persistence path, and `guards.seq-is-number.guard.spec.ts` fails the build on any `BigInt(`, `bigint` or numeric `…n` literal under `apps/server/src/collab/**`, `apps/server/src/notes/**` and `apps/server/src/db/schema.ts` outside a `numUpdatedRows` comparison. | `number + bigint` is a runtime `TypeError` inside the only write path that produces the durable acknowledgement, and a `1n` literal bound to a `number` column is a silent type hole. The representation is a data-loss-adjacent invariant, so it gets a mechanical guard rather than review attention. |
 | D05-16 | `insertChunked()` in `@iridium/crdt` (`INSERT_CHUNK_MAX_BYTES` = 256 KiB, split at code-point boundaries) is the only way first-party code inserts a large string into a `Y.Text`, and `NoteSessionRegistry` measures `encodeState(ydoc, 1, lastKnownServerSv)` before attaching a provider. An update or delta that is still oversize closes that document connection **terminally** (`too-large`), never into a reconnect. | The 1 MiB update cap was previously enforced but unreachable only by a UTF-16 paste guard, so one 900 000-character CJK paste produced an update the client re-sent on every reconnect: an unbounded close/reconnect loop with permanently unsavable text. Bounding the producer makes the cap a backstop, and a terminal state with **Export my text** turns the residual case into one human decision. |
 | D05-17 | `SaveState` carries one member per close-reason policy (`revoked`, `unauthorized`, `capacity`, `vault-archived`, `too-large`, `trashed`, `closed`) instead of folding six reasons into a terminal `revoked`. | `unauthorized` is raised on ordinary ticket expiry and must fetch fresh tickets and retry once; `capacity` is transient admission pressure and must retry with backoff (D05-06). One state with one retry policy per reason is the only shape in which 09-api-reference.md §3.6's client-behaviour column and 07's pill table can both be implemented literally. |
-| D05-18 | The 10/s awareness cap is enforced **pre-dispatch** in the `/collab` plugin (`peekFrame`, `MessageType.Awareness` only, bucket keyed `(socket, documentName)`), not in `beforeHandleAwareness`. | A Hocuspocus hook that resolves lets the update be applied and broadcast, and the only way for it to object is to throw, which closes the connection — so a hook-based "drop" is a no-op and the cap would not exist. Pre-dispatch is the one place a frame can be discarded without a close, and a per-document key keeps the cap from shrinking as a user opens more notes. |
+| D05-18 | The 10/s awareness cap is enforced **pre-dispatch** in the `/collab` plugin (`peekFrame`, `MessageType.Awareness` only, bucket keyed `(physical socket, validated canonical documentName)`), not in `beforeHandleAwareness`. The complete raw routing key is validated before any retention: one canonical note/vault name plus at most one NUL and a 1–64 character `[A-Za-z0-9_-]` attachment suffix. At most `AWARENESS_DOCUMENTS_PER_SOCKET` (100) one-second windows are retained, one timer removes expired windows even on an idle socket, and new-name awareness is dropped while full; sync/auth are unaffected. Authentication refusal does not reset the quota. | A Hocuspocus hook that resolves lets the update be applied and broadcast, and the only way for it to object is to throw, which closes the connection — so a hook-based "drop" is a no-op and the cap would not exist. Pre-dispatch is the one place a frame can be discarded without a close, and a per-document key keeps the cap from shrinking as a user opens more notes. |
 | D05-19 | D03-01's zero-length degradation lives in three named `@iridium/crdt` exports (`SV_STORED_MAX_BYTES`, `storedSv`, `recordedSv`) used by the writer, the compactor and the loader; the wire always carries the full in-memory vector, and `Base64Sv` is bounded at 87 400 characters with `min(4)`. | Writers and readers must share one definition of "not recorded", or an unclamped insert fails with `Data too long for column 'sv_after'` and a zero-length read makes a fully durable note report `save-failed` forever. Bounding the contract at the *wire* size rather than the *column* width is what keeps the degradation representable. |
 | D05-20 | `enqueueCompaction`/`compactNow` reject with `CompactionUnavailable` when the writer is in `retrying`/`failed`/`backpressure` and with `CompactionTimeout` after `COMPACTION_AWAIT_TIMEOUT_MS` (15 s; 1 s in the integration project, the production 15 s in the chaos project, which runs production debounce values); the job stays in the FIFO and commits when MySQL returns. | `onStoreDocument` awaits its job inside `document.saveMutex`, and a job only reaches the FIFO head after every earlier batch has committed — so an unbounded await during a DB outage never settles, the document can never unload, and `flushPendingStores()` turns the 20 s drain into a guaranteed timeout for every loaded note. Bounding it once at the writer boundary covers every caller. |
 | D05-21 | A version restore is a single writer-FIFO job (`{kind:'restore'}`, `enqueueRestore`/`captureAndRestore`) that captures the text, writes `pre_restore`, applies `prefixSuffixDiff` and writes `restore` in one transaction, with no `await` between the capture and the diff; `captureCheckpoint` is removed from `ServerEdit`. | With the capture as a separate earlier job, client updates land between the two steps, so `pre_restore` describes an older state than the diff was computed against and reversing the restore discards those edits. The interlock is internal to the writer, so `If-Match` stays absent and a restore still succeeds during active editing (A13). |

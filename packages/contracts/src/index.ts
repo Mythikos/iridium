@@ -17,6 +17,8 @@ export * from './ids.ts';
 export * from './limits.ts';
 export * from './non-goals.ts';
 export * from './paths.ts';
+export * from './rest/index.ts';
 export * from './schema.ts';
 export * from './search-query.ts';
+export * from './time.ts';
 export * from './tokens.ts';

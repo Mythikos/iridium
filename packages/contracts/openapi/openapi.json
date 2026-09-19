@@ -20,9 +20,4958 @@
         "description": "A desktop session (`irid_ses_…`), an integration token (`irid_pat_…`) on `/api/v1` and `/mcp`, or an OAuth access token (`irid_oat_…`) on `/mcp/connect` only."
       }
     },
-    "schemas": {}
+    "schemas": {
+      "RoleInput": {
+        "type": "string",
+        "enum": [
+          "viewer",
+          "editor",
+          "manager"
+        ]
+      },
+      "ClientKindInput": {
+        "type": "string",
+        "enum": [
+          "web",
+          "desktop"
+        ]
+      },
+      "EmailInput": {
+        "type": "string",
+        "maxLength": 320,
+        "format": "email",
+        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      },
+      "DisplayNameInput": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "PasswordInput": {
+        "type": "string",
+        "minLength": 15,
+        "maxLength": 128
+      },
+      "NodeNameInput": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "format": "iridium-node-name",
+        "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$"
+      },
+      "VaultNameInput": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120,
+        "format": "iridium-node-name",
+        "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$"
+      },
+      "MarkdownFlavorInput": {
+        "type": "string",
+        "enum": [
+          "gfm",
+          "obsidian-compat"
+        ]
+      },
+      "LoadExternalImagesInput": {
+        "type": "string",
+        "enum": [
+          "never",
+          "click",
+          "always"
+        ]
+      },
+      "VaultSettingsPatchInput": {
+        "type": "object",
+        "properties": {
+          "markdownFlavor": {
+            "$ref": "#/components/schemas/MarkdownFlavorInput"
+          },
+          "softBreaks": {
+            "type": "boolean"
+          },
+          "attachmentFolder": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "loadExternalImages": {
+            "$ref": "#/components/schemas/LoadExternalImagesInput"
+          },
+          "mcpEnabled": {
+            "type": "boolean"
+          },
+          "aiGuidance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trashRetentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650
+          },
+          "autoCheckpointIntervalMin": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdminUserMembershipInput": {
+        "type": "object",
+        "properties": {
+          "vaultId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/RoleInput"
+          }
+        },
+        "required": [
+          "vaultId",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "CreateAdminUserBodyInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/EmailInput"
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayNameInput"
+          },
+          "isServerAdmin": {
+            "default": false,
+            "type": "boolean"
+          },
+          "memberships": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUserMembershipInput"
+            }
+          }
+        },
+        "required": [
+          "email",
+          "displayName"
+        ],
+        "additionalProperties": false
+      },
+      "DisableUserBodyInput": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateSessionBodyInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "$ref": "#/components/schemas/EmailInput"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "client": {
+            "$ref": "#/components/schemas/ClientKindInput"
+          },
+          "deviceName": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "client"
+        ],
+        "additionalProperties": false
+      },
+      "ReauthenticateBodyInput": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "SetPasswordBodyInput": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 75,
+            "maxLength": 75,
+            "pattern": "^irid_spl_[0-9A-Za-z]{16}_[0-9A-Za-z]{49}$",
+            "format": "iridium-credential-spl"
+          },
+          "password": {
+            "$ref": "#/components/schemas/PasswordInput"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "additionalProperties": false
+      },
+      "CreateCollabTicketsBodyInput": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateMeBodyInput": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayNameInput"
+          }
+        },
+        "required": [
+          "displayName"
+        ],
+        "additionalProperties": false
+      },
+      "ChangePasswordBodyInput": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "newPassword": {
+            "$ref": "#/components/schemas/PasswordInput"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "additionalProperties": false
+      },
+      "PutMemberBodyInput": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/RoleInput"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "CreateNodeBodyInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "note"
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "$ref": "#/components/schemas/NodeNameInput"
+          },
+          "markdown": {
+            "type": "string",
+            "maxLength": 2097152,
+            "description": "At most 2,097,152 UTF-16 code units."
+          }
+        },
+        "required": [
+          "kind",
+          "parentId",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "VaultMemberGrantInput": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/RoleInput"
+          }
+        },
+        "required": [
+          "userId",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "CreateVaultBodyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/VaultNameInput"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "settings": {
+            "$ref": "#/components/schemas/VaultSettingsPatchInput"
+          },
+          "members": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VaultMemberGrantInput"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "Timestamp": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d{1,6})?Z$"
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "viewer",
+          "editor",
+          "manager"
+        ]
+      },
+      "VaultStatus": {
+        "type": "string",
+        "enum": [
+          "importing",
+          "active",
+          "archived",
+          "deleting"
+        ]
+      },
+      "Permission": {
+        "type": "string",
+        "enum": [
+          "vault:read",
+          "note:read",
+          "search:read",
+          "history:read",
+          "attachment:read",
+          "export:read",
+          "note:write",
+          "node:create",
+          "node:rename",
+          "node:move",
+          "node:trash",
+          "node:restore",
+          "attachment:write",
+          "revision:name",
+          "vault:manage_members",
+          "vault:settings",
+          "vault:archive",
+          "history:restore",
+          "node:purge",
+          "import:commit",
+          "server:users",
+          "server:vaults:create",
+          "server:settings",
+          "server:audit:all",
+          "server:tokens:all",
+          "server:sessions:all",
+          "server:jobs",
+          "server:releases"
+        ]
+      },
+      "ClientKind": {
+        "type": "string",
+        "enum": [
+          "web",
+          "desktop"
+        ]
+      },
+      "Email": {
+        "type": "string",
+        "maxLength": 320,
+        "format": "email",
+        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+      },
+      "DisplayName": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+      },
+      "Sha256Hex": {
+        "type": "string",
+        "minLength": 64,
+        "maxLength": 64,
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "Version": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      },
+      "ColorHue": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 359
+      },
+      "UserStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled",
+          "deleted"
+        ]
+      },
+      "UserRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "colorHue": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "colorHue"
+        ],
+        "additionalProperties": false
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "email": {
+            "$ref": "#/components/schemas/Email"
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          },
+          "isServerAdmin": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "colorHue": {
+            "$ref": "#/components/schemas/ColorHue"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "lastLoginAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasCredentials": {
+            "type": "boolean"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "displayName",
+          "isServerAdmin",
+          "status",
+          "colorHue",
+          "createdAt",
+          "updatedAt",
+          "lastLoginAt",
+          "hasCredentials",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "AdminUserSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "email": {
+            "$ref": "#/components/schemas/Email"
+          },
+          "displayName": {
+            "$ref": "#/components/schemas/DisplayName"
+          },
+          "isServerAdmin": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "colorHue": {
+            "$ref": "#/components/schemas/ColorHue"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "lastLoginAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasCredentials": {
+            "type": "boolean"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "vaultCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sessionCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tokenCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "displayName",
+          "isServerAdmin",
+          "status",
+          "colorHue",
+          "createdAt",
+          "updatedAt",
+          "lastLoginAt",
+          "hasCredentials",
+          "version",
+          "vaultCount",
+          "sessionCount",
+          "tokenCount"
+        ],
+        "additionalProperties": false
+      },
+      "MeToken": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
+          },
+          "allVaults": {
+            "type": "boolean"
+          },
+          "vaultIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            }
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scopes",
+          "allVaults",
+          "vaultIds",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "isServerAdmin": {
+            "type": "boolean"
+          },
+          "principalKind": {
+            "type": "string",
+            "enum": [
+              "user",
+              "token"
+            ]
+          },
+          "sessionKind": {
+            "$ref": "#/components/schemas/ClientKind"
+          },
+          "sessionId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "lastAuthenticatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "token": {
+            "$ref": "#/components/schemas/MeToken"
+          }
+        },
+        "required": [
+          "user",
+          "isServerAdmin",
+          "principalKind"
+        ],
+        "additionalProperties": false
+      },
+      "SessionRevokedReason": {
+        "type": "string",
+        "enum": [
+          "logout",
+          "admin",
+          "password_change",
+          "user_disabled",
+          "expired",
+          "replaced"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ClientKind"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "lastSeenAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "idleExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "absoluteExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "lastAuthenticatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userAgent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clientName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deviceName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clientVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionRevokedReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserRef"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "current",
+          "createdAt",
+          "lastSeenAt",
+          "idleExpiresAt",
+          "absoluteExpiresAt",
+          "lastAuthenticatedAt",
+          "ip",
+          "userAgent",
+          "clientName",
+          "deviceName",
+          "clientVersion",
+          "revokedAt",
+          "revokedReason"
+        ],
+        "additionalProperties": false
+      },
+      "MarkdownFlavor": {
+        "type": "string",
+        "enum": [
+          "gfm",
+          "obsidian-compat"
+        ]
+      },
+      "LoadExternalImages": {
+        "type": "string",
+        "enum": [
+          "never",
+          "click",
+          "always"
+        ]
+      },
+      "VaultSettings": {
+        "type": "object",
+        "properties": {
+          "markdownFlavor": {
+            "$ref": "#/components/schemas/MarkdownFlavor"
+          },
+          "softBreaks": {
+            "type": "boolean"
+          },
+          "attachmentFolder": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "loadExternalImages": {
+            "$ref": "#/components/schemas/LoadExternalImages"
+          },
+          "mcpEnabled": {
+            "type": "boolean"
+          },
+          "aiGuidance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trashRetentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650
+          },
+          "autoCheckpointIntervalMin": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          }
+        },
+        "required": [
+          "markdownFlavor",
+          "softBreaks",
+          "attachmentFolder",
+          "loadExternalImages",
+          "mcpEnabled",
+          "aiGuidance",
+          "trashRetentionDays",
+          "autoCheckpointIntervalMin"
+        ],
+        "additionalProperties": false
+      },
+      "VaultCounts": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "categories": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "members": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "attachments": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "notes",
+          "categories",
+          "members",
+          "attachments"
+        ],
+        "additionalProperties": false
+      },
+      "Vault": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/VaultStatus"
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rootNodeId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "settings": {
+            "$ref": "#/components/schemas/VaultSettings"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveRole": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/VaultCounts"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "status",
+          "archivedAt",
+          "rootNodeId",
+          "treeVersion",
+          "settings",
+          "role",
+          "effectiveRole",
+          "counts",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "VaultSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/VaultStatus"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveRole": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "noteCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "markdownFlavor": {
+            "$ref": "#/components/schemas/MarkdownFlavor"
+          },
+          "mcpEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "status",
+          "role",
+          "effectiveRole",
+          "treeVersion",
+          "updatedAt",
+          "noteCount",
+          "markdownFlavor",
+          "mcpEnabled"
+        ],
+        "additionalProperties": false
+      },
+      "MemberUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "colorHue": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "email": {
+            "$ref": "#/components/schemas/Email"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "colorHue",
+          "email",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/MemberUser"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "grantedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          }
+        },
+        "required": [
+          "user",
+          "role",
+          "grantedBy",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "NodeKind": {
+        "type": "string",
+        "enum": [
+          "category",
+          "note"
+        ]
+      },
+      "ProjectionStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "pending",
+          "too_large",
+          "too_complex",
+          "timeout",
+          "error",
+          "invalid_content"
+        ]
+      },
+      "NoteSummary": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "headRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "contentHash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256Hex"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sizeChars": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "oversize": {
+            "type": "boolean"
+          },
+          "contentInvalid": {
+            "type": "boolean"
+          },
+          "projectionStatus": {
+            "$ref": "#/components/schemas/ProjectionStatus"
+          },
+          "fmTags": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "fmAliases": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          "lastEditedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastEditedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "revision",
+          "headRevision",
+          "contentHash",
+          "sizeChars",
+          "oversize",
+          "contentInvalid",
+          "projectionStatus",
+          "fmTags",
+          "fmAliases",
+          "lastEditedBy",
+          "lastEditedAt"
+        ],
+        "additionalProperties": false
+      },
+      "NodeChildCounts": {
+        "type": "object",
+        "properties": {
+          "categories": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "notes": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "categories",
+          "notes"
+        ],
+        "additionalProperties": false
+      },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "vaultId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NodeKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "deletedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "createdBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "updatedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "note": {
+            "$ref": "#/components/schemas/NoteSummary"
+          },
+          "childCounts": {
+            "$ref": "#/components/schemas/NodeChildCounts"
+          }
+        },
+        "required": [
+          "id",
+          "vaultId",
+          "parentId",
+          "kind",
+          "name",
+          "path",
+          "deletedAt",
+          "version",
+          "createdBy",
+          "updatedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "OriginalEol": {
+        "type": "string",
+        "enum": [
+          "lf",
+          "crlf",
+          "cr",
+          "mixed"
+        ]
+      },
+      "NoteHeading": {
+        "type": "object",
+        "properties": {
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "text": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "depth",
+          "text",
+          "slug",
+          "line",
+          "offset"
+        ],
+        "additionalProperties": false
+      },
+      "NoteTask": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "checked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "line",
+          "offset",
+          "checked"
+        ],
+        "additionalProperties": false
+      },
+      "NoteMeta": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "headRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "contentHash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256Hex"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sizeChars": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "oversize": {
+            "type": "boolean"
+          },
+          "contentInvalid": {
+            "type": "boolean"
+          },
+          "projectionStatus": {
+            "$ref": "#/components/schemas/ProjectionStatus"
+          },
+          "fmTags": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "fmAliases": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          "lastEditedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastEditedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "vaultId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "lineCount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wordCount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "originalEol": {
+            "$ref": "#/components/schemas/OriginalEol"
+          },
+          "hadBom": {
+            "type": "boolean"
+          },
+          "frontmatter": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frontmatterError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteHeading"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteTask"
+            }
+          },
+          "codeLangs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "linksCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "backlinksCount": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "pipelineVersion": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "projectedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "title",
+          "revision",
+          "headRevision",
+          "contentHash",
+          "sizeChars",
+          "oversize",
+          "contentInvalid",
+          "projectionStatus",
+          "fmTags",
+          "fmAliases",
+          "lastEditedBy",
+          "lastEditedAt",
+          "id",
+          "vaultId",
+          "parentId",
+          "name",
+          "path",
+          "version",
+          "lineCount",
+          "wordCount",
+          "originalEol",
+          "hadBom",
+          "frontmatter",
+          "frontmatterError",
+          "headings",
+          "tasks",
+          "codeLangs",
+          "linksCount",
+          "backlinksCount",
+          "pipelineVersion",
+          "projectedAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProblemValidationIssue": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "ProblemReference": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "unauthenticated",
+              "invalid_credentials",
+              "invalid_link",
+              "csrf_rejected",
+              "host_rejected",
+              "step_up_required",
+              "token_expired",
+              "token_scope_insufficient",
+              "client_outdated",
+              "precondition_required",
+              "stale_version",
+              "name_conflict",
+              "invalid_move",
+              "category_not_empty",
+              "node_trashed",
+              "invalid_name",
+              "email_conflict",
+              "not_found",
+              "method_not_allowed",
+              "forbidden",
+              "vault_archived",
+              "attachment_referenced",
+              "invalid_state",
+              "updates_manual_only",
+              "token_not_rotatable",
+              "note_oversized",
+              "content_invalid",
+              "rate_limited",
+              "payload_too_large",
+              "unsupported_media",
+              "validation_failed",
+              "capacity",
+              "busy",
+              "not_ready",
+              "unavailable",
+              "server_error"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "current": {},
+          "requestId": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemValidationIssue"
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemReference"
+            }
+          },
+          "retryAfterMs": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "AdminUserPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUserSummary"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AdminUserCreated": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "setPasswordLink": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "user",
+          "setPasswordLink",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "AdminUserPasswordReset": {
+        "type": "object",
+        "properties": {
+          "setPasswordLink": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "setPasswordLink",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "WebSessionCreated": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        },
+        "required": [
+          "user",
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "DesktopSessionCreated": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 75,
+            "maxLength": 75,
+            "pattern": "^irid_ses_[0-9A-Za-z]{16}_[0-9A-Za-z]{49}$"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "idleExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        },
+        "required": [
+          "token",
+          "expiresAt",
+          "idleExpiresAt",
+          "user",
+          "session"
+        ],
+        "additionalProperties": false
+      },
+      "SessionCreated": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/WebSessionCreated"
+          },
+          {
+            "$ref": "#/components/schemas/DesktopSessionCreated"
+          }
+        ]
+      },
+      "Reauthenticated": {
+        "type": "object",
+        "properties": {
+          "lastAuthenticatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "stepUpExpiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "lastAuthenticatedAt",
+          "stepUpExpiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "CollabTicketsCreated": {
+        "type": "object",
+        "properties": {
+          "tickets": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 75,
+              "maxLength": 75,
+              "pattern": "^irid_tkt_[0-9A-Za-z]{16}_[0-9A-Za-z]{49}$"
+            }
+          },
+          "expiresIn": {
+            "type": "number",
+            "const": 60
+          }
+        },
+        "required": [
+          "tickets",
+          "expiresIn"
+        ],
+        "additionalProperties": false
+      },
+      "SessionList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "MemberList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Feature": {
+        "type": "string",
+        "enum": [
+          "mcp",
+          "desktop-updates",
+          "attachments",
+          "import",
+          "export",
+          "search",
+          "obsidian-compat-rendering",
+          "oauth",
+          "smtp"
+        ]
+      },
+      "MetaCollab": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "const": "/collab"
+          },
+          "ticketBatchMax": {
+            "type": "number",
+            "const": 50
+          }
+        },
+        "required": [
+          "path",
+          "ticketBatchMax"
+        ],
+        "additionalProperties": false
+      },
+      "MetaMcp": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "const": "/mcp"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "oauthMcpUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "path",
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
+      "MetaLimits": {
+        "type": "object",
+        "properties": {
+          "uploadBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "importBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "importFiles": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "importDepth": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "noteSoftChars": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "noteHardChars": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "bodyBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "wsMaxPayloadBytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "uploadBytes",
+          "importBytes",
+          "importFiles",
+          "importDepth",
+          "noteSoftChars",
+          "noteHardChars",
+          "bodyBytes",
+          "wsMaxPayloadBytes"
+        ],
+        "additionalProperties": false
+      },
+      "MetaPolicies": {
+        "type": "object",
+        "properties": {
+          "passwordMinLength": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "passwordMaxLength": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "patMaxLifetimeDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "patAllowNoExpiry": {
+            "type": "boolean"
+          },
+          "patRotationOverlapMaxHours": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "passwordMinLength",
+          "passwordMaxLength",
+          "patMaxLifetimeDays",
+          "patAllowNoExpiry",
+          "patRotationOverlapMaxHours"
+        ],
+        "additionalProperties": false
+      },
+      "Meta": {
+        "type": "object",
+        "properties": {
+          "apiVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "minClientVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "serverVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Feature"
+            }
+          },
+          "publicOrigin": {
+            "type": "string",
+            "format": "uri"
+          },
+          "collab": {
+            "$ref": "#/components/schemas/MetaCollab"
+          },
+          "mcp": {
+            "$ref": "#/components/schemas/MetaMcp"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/MetaLimits"
+          },
+          "policies": {
+            "$ref": "#/components/schemas/MetaPolicies"
+          }
+        },
+        "required": [
+          "apiVersion",
+          "minClientVersion",
+          "serverVersion",
+          "features",
+          "publicOrigin",
+          "collab",
+          "mcp",
+          "limits",
+          "policies"
+        ],
+        "additionalProperties": false
+      },
+      "NoteParticipant": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "colorHue": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "source",
+                  "reading",
+                  "split"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "connections": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "since": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "userId",
+          "displayName",
+          "colorHue",
+          "role",
+          "mode",
+          "connections",
+          "since"
+        ],
+        "additionalProperties": false
+      },
+      "NoteParticipants": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteParticipant"
+            }
+          },
+          "loaded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "loaded"
+        ],
+        "additionalProperties": false
+      },
+      "HealthzBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          },
+          "version": {
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "eventLoopLagMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "uptimeSeconds",
+          "eventLoopLagMs"
+        ],
+        "additionalProperties": false
+      },
+      "ReadyzCheckName": {
+        "type": "string",
+        "enum": [
+          "mysql_version",
+          "db_app",
+          "db_persist",
+          "migrations",
+          "grants",
+          "durability",
+          "attachment_store",
+          "persist_backlog",
+          "doc_budget",
+          "collab_owner_lease",
+          "projection_workers",
+          "clock_skew",
+          "key_versions",
+          "tls_cert",
+          "shutdown",
+          "access_log_partitions"
+        ]
+      },
+      "ReadyzStatus": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "warn",
+          "fail"
+        ]
+      },
+      "ReadyzCheck": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/ReadyzCheckName"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReadyzStatus"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "durationMs"
+        ],
+        "additionalProperties": false
+      },
+      "ReadyzBody": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ReadyzStatus"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReadyzCheck"
+            }
+          },
+          "checkedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "status",
+          "checks",
+          "checkedAt"
+        ],
+        "additionalProperties": false
+      },
+      "VaultSummaryList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VaultSummary"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "SwaggerUiPage": {
+        "type": "string"
+      },
+      "NoteMarkdown": {
+        "type": "string"
+      },
+      "OpenApiDocument": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
   },
-  "paths": {},
+  "paths": {
+    "/meta": {
+      "get": {
+        "operationId": "meta.get",
+        "summary": "Compatibility and feature discovery; the one route exempt from client_outdated.",
+        "tags": [
+          "meta"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meta"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "meta.openapi",
+        "summary": "The committed OpenAPI 3.1 document, served from @fastify/swagger; open to any principal under NODE_ENV=development.",
+        "tags": [
+          "meta"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenApiDocument"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/sessions": {
+      "post": {
+        "operationId": "auth.createSession",
+        "summary": "Sign in; issues a web cookie or a desktop bearer session.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionBodyInput"
+              }
+            }
+          }
+        },
+        "security": [],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_credentials` — Incorrect e-mail address or password",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/sessions/current": {
+      "delete": {
+        "operationId": "auth.deleteCurrentSession",
+        "summary": "Sign out. Idempotent: an already-revoked credential also answers 204.",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/reauthenticate": {
+      "post": {
+        "operationId": "auth.reauthenticate",
+        "summary": "Refresh the step-up window.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthenticateBodyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reauthenticated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `invalid_credentials` — Incorrect e-mail address or password",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/set-password": {
+      "post": {
+        "operationId": "auth.setPassword",
+        "summary": "Consume a one-time irid_spl_ link and set the credential.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPasswordBodyInput"
+              }
+            }
+          }
+        },
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "`invalid_link` — This link is no longer valid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/collab-tickets": {
+      "post": {
+        "operationId": "auth.createCollabTickets",
+        "summary": "Mint a batch of single-use /collab tickets bound to this session.",
+        "tags": [
+          "auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCollabTicketsBodyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollabTicketsCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "auth.me",
+        "summary": "The current principal. For a token, isServerAdmin is false and token is populated.",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/sessions": {
+      "get": {
+        "operationId": "me.sessions.list",
+        "summary": "The caller's own live sessions, current first.",
+        "tags": [
+          "me"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`token_scope_insufficient` — This token cannot do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/sessions/{sessionId}": {
+      "delete": {
+        "operationId": "me.sessions.revoke",
+        "summary": "Revoke one of the caller's own sessions; a foreign id is 404, never 403.",
+        "tags": [
+          "me"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "patch": {
+        "operationId": "me.update",
+        "summary": "Change the display name.",
+        "tags": [
+          "me"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/password": {
+      "post": {
+        "operationId": "me.changePassword",
+        "summary": "Change the password; revokes every other session and leaves tokens alone.",
+        "tags": [
+          "me"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordBodyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `invalid_credentials` — Incorrect e-mail address or password",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "admin.users.list",
+        "summary": "Cursor listing with the console filters.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "q",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "disabled",
+                  "deleted"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "isServerAdmin",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "admin.users.create",
+        "summary": "Create a user without credentials and return the one-time set-password link.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdminUserBodyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`email_conflict` — That e-mail address is already registered",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{userId}/disable": {
+      "post": {
+        "operationId": "admin.users.disable",
+        "summary": "Block authentication, revoke every session and close every live connection.",
+        "tags": [
+          "admin"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisableUserBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{userId}/enable": {
+      "post": {
+        "operationId": "admin.users.enable",
+        "summary": "Allow authentication again.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{userId}/reset-password": {
+      "post": {
+        "operationId": "admin.users.resetPassword",
+        "summary": "Issue a replacement password link and revoke sessions, preserving personal tokens.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserPasswordReset"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults": {
+      "get": {
+        "operationId": "vaults.list",
+        "summary": "Vaults accessible to the principal, ordered by name.",
+        "tags": [
+          "vaults"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "includeArchived",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultSummaryList"
+                }
+              }
+            },
+            "links": {
+              "getVault": {
+                "operationId": "vaults.get",
+                "parameters": {
+                  "vaultId": "$response.body#/items/0/id"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "vaults.create",
+        "summary": "Create a vault, its root category row and any initial memberships in one transaction.",
+        "tags": [
+          "vaults"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVaultBodyInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            },
+            "links": {
+              "getVault": {
+                "operationId": "vaults.get",
+                "parameters": {
+                  "vaultId": "$response.body#/id"
+                }
+              },
+              "putMember": {
+                "operationId": "members.put",
+                "parameters": {
+                  "vaultId": "$response.body#/id",
+                  "userId": "$response.body#/createdBy/id"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`name_conflict` — That name is already taken here",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}": {
+      "get": {
+        "operationId": "vaults.get",
+        "summary": "The full vault with its treeVersion and the caller's role; a non-member gets 404.",
+        "tags": [
+          "vaults"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            },
+            "links": {
+              "createNote": {
+                "operationId": "nodes.create",
+                "parameters": {
+                  "vaultId": "$response.body#/id"
+                },
+                "requestBody": {
+                  "kind": "note",
+                  "parentId": "$response.body#/rootNodeId"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/members": {
+      "get": {
+        "operationId": "members.list",
+        "summary": "Everyone who can read the vault can see who else can.",
+        "tags": [
+          "members"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/members/{userId}": {
+      "put": {
+        "operationId": "members.put",
+        "summary": "Add a membership (201) or change its role (200); If-Match only when the row exists.",
+        "tags": [
+          "members"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutMemberBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": false,
+            "description": "The `\"<version>\"` this write is conditional on, required only when the row already exists."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "members.delete",
+        "summary": "Remove a membership; the last manager cannot be removed.",
+        "tags": [
+          "members"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content; the status is the whole answer."
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/nodes": {
+      "post": {
+        "operationId": "nodes.create",
+        "summary": "Create a note inside a category.",
+        "tags": [
+          "nodes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNodeBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "links": {
+              "getNote": {
+                "operationId": "notes.get",
+                "parameters": {
+                  "noteId": "$response.body#/id"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `vault_archived` — This vault is archived; `note_oversized` — This note is too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}": {
+      "get": {
+        "operationId": "notes.get",
+        "summary": "Full note metadata from the committed projection.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "A weak validator, `W/\"<version>:<revision>\"`, for cache validation only — never an `If-Match` value."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteMeta"
+                }
+              }
+            },
+            "links": {
+              "getMarkdown": {
+                "operationId": "notes.getMarkdown",
+                "parameters": {
+                  "noteId": "$response.body#/id"
+                }
+              },
+              "getParticipants": {
+                "operationId": "notes.participants",
+                "parameters": {
+                  "noteId": "$response.body#/id"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/markdown": {
+      "get": {
+        "operationId": "notes.getMarkdown",
+        "summary": "The committed Markdown as text/markdown, optionally a line slice or a revision.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "revision",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^0*[1-9][0-9]*-0*[1-9][0-9]*$",
+              "format": "iridium-line-range"
+            },
+            "in": "query",
+            "name": "lines",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "fresh",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The revision and the whole note’s content hash, as `\"<revision>:<contentHash>\"`."
+              }
+            },
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteMarkdown"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "No content; the status is the whole answer.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The revision and the whole note’s content hash, as `\"<revision>:<contentHash>\"`."
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`content_invalid` — This note needs repair",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`capacity` — The server is at capacity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/participants": {
+      "get": {
+        "operationId": "notes.participants",
+        "summary": "Server-authoritative presence, taken from connection contexts and never from awareness.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteParticipants"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/docs": {
+      "get": {
+        "operationId": "meta.docs",
+        "summary": "Swagger UI under a nonce CSP; \"try it out\" is disabled outside development.",
+        "tags": [
+          "meta"
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwaggerUiPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "ops.healthz",
+        "summary": "Liveness. The shutdown drain does not flip it; the process exiting does.",
+        "tags": [
+          "ops"
+        ],
+        "security": [],
+        "servers": [
+          {
+            "url": "{publicOrigin}",
+            "description": "An Iridium server's own origin, with no API prefix.",
+            "variables": {
+              "publicOrigin": {
+                "default": "https://iridium.example",
+                "description": "The deployment's `PUBLIC_ORIGIN`, `https://` in every deployment except the documented development profile (09-api-reference.md §1.2)."
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthzBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable` — Temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "ops.readyz",
+        "summary": "The readiness checklist; the same body with 200 and 503, and the status is the signal.",
+        "tags": [
+          "ops"
+        ],
+        "security": [],
+        "servers": [
+          {
+            "url": "{publicOrigin}",
+            "description": "An Iridium server's own origin, with no API prefix.",
+            "variables": {
+              "publicOrigin": {
+                "default": "https://iridium.example",
+                "description": "The deployment's `PUBLIC_ORIGIN`, `https://` in every deployment except the documented development profile (09-api-reference.md §1.2)."
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyzBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyzBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "ops.metrics",
+        "summary": "Prometheus text format. A bad credential gets an empty 401; absent token/CIDR configuration hides the endpoint with 404.",
+        "tags": [
+          "ops"
+        ],
+        "security": [],
+        "servers": [
+          {
+            "url": "{publicOrigin}",
+            "description": "An Iridium server's own origin, with no API prefix.",
+            "variables": {
+              "publicOrigin": {
+                "default": "https://iridium.example",
+                "description": "The deployment's `PUBLIC_ORIGIN`, `https://` in every deployment except the documented development profile (09-api-reference.md §1.2)."
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No response body"
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "servers": [
     {
       "url": "{publicOrigin}/api/v1",

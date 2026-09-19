@@ -30,8 +30,15 @@ const shared = {
   target: 'node24',
   outDir: 'dist',
   outExtensions: () => ({ js: '.mjs' }),
+  // `@hocuspocus/*` is bundled for the same reason `@iridium/*` is, and it is invariant 8 rather than
+  // a preference. `@iridium/crdt` is inlined, so the one copy of `yjs` it imports is inlined with it;
+  // leaving `@hocuspocus/server` external would make it resolve its own `yjs` from `node_modules` at
+  // run time, and the process would hold **two** Yjs copies — which breaks `instanceof` and stops
+  // documents converging with nothing thrown (A14). Yjs itself detects it and `iridium <any command>`
+  // then refuses to start, which is how this was found. Bundling the collaboration server resolves its
+  // `yjs`, `y-protocols` and `lib0` imports to the same inlined modules, so one instance serves both.
   deps: {
-    alwaysBundle: [/^@iridium\//],
+    alwaysBundle: [/^@iridium\//, /^@hocuspocus\//, 'y-protocols'],
     neverBundle: ['@node-rs/argon2', 'mysql2', 'piscina'],
   },
   sourcemap: true,
@@ -43,6 +50,15 @@ export default defineConfig([
     ...shared,
     name: 'main',
     entry: { main: 'src/main.ts' },
+    // The breached-password list is data, not code, and `auth/credentials/blocklist.ts` resolves it
+    // as `new URL('blocklist.txt', import.meta.url)` — which is `dist/blocklist.txt` once bundled. A
+    // bundler copies no data files on its own, so without this the built binary throws `ENOENT` in
+    // boot step 4 and **nothing that boots works**: not `iridium serve`, not any CLI command that
+    // reaches the application, and not `startServer({ mode: 'child' })`, which is how the chaos
+    // project gets a process it can `SIGKILL`.
+    // `to` names a *directory*, not a file: spelling it `dist/blocklist.txt` creates a directory of
+    // that name and puts the list inside it, which fails the same way with `EISDIR` instead of `ENOENT`.
+    copy: [{ from: 'src/auth/credentials/blocklist.txt', to: 'dist' }],
     // Exactly one configuration asks for a clean, and it asks for the whole directory. tsdown
     // collects the clean across every configuration and performs it once, before any build starts —
     // verified by leaving a stale file in `dist` and watching one "Cleaning" pass remove it while

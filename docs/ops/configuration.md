@@ -41,3 +41,9 @@ Both variables may be raised for a specific deployment without a code change; `i
 --argon2` (an M1+ CLI deliverable — the M0 CLI ships only `serve` and `migrate`) will warn rather
 than fail when the measured latency on a given host falls outside the 150–300 ms window, since the
 right pair is host-dependent (`docs/spikes/S13-argon2-calibration.md`, "Follow-ups").
+
+## Database query deadlines (`DB_QUERY_TIMEOUT_MS`)
+
+The M1 serving pools bound both connection acquisition and each SQL command to 10 000 ms by default. Set `DB_QUERY_TIMEOUT_MS` to a positive integer no greater than `2147483647`; `iridium config check` reports the effective value. `DB_CONNECT_TIMEOUT_MS` controls the separate initial TCP/MySQL connection timeout.
+
+A timed-out SQL command destroys its connection before propagating the failure, freeing the pool slot and preventing another request from inheriting an unfinished command. This does not expire idle collaboration-owner reservations or impose a deadline on migration and backup operations. A COMMIT timeout has an unknown outcome: the failed attempt emits no Saved acknowledgement, and durable replay resolves the committed state on recovery.

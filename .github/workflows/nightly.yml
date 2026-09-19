@@ -15,7 +15,14 @@ name: nightly
 on:
   schedule:
     - cron: '0 3 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      milestone_exit:
+        description: Rehearse the nightly suites due at a milestone without changing CURRENT.
+        type: choice
+        required: true
+        default: none
+        options: [none, M1, M2, M3, M4, M5, M6, M7, M8]
 
 concurrency:
   group: nightly-${{ github.workflow }}-${{ github.ref }}
@@ -26,10 +33,53 @@ permissions:
 
 env:
   TURBO_TELEMETRY_DISABLED: '1'
+  UV_THREADPOOL_SIZE: '8'
   DO_NOT_TRACK: '1'
+  IRIDIUM_TEST_SERVER_IMAGE: iridium-server:nightly
 
 jobs:
-  # `IRIDIUM_PROP_RUNS=5000`, `IRIDIUM_PROP_DB_RUNS=200`, `IRIDIUM_PROP_DB_COMMANDS=300`,
+  # Later product suites do not become earlier exit gates (12-milestones.md §1).
+  # A rehearsal may advance the target, but never suppress checks already due in CURRENT.
+  milestone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      milestone: ${{ steps.target.outputs.milestone }}
+      mcp: ${{ steps.target.outputs.mcp }}
+      web: ${{ steps.target.outputs.web }}
+      operations: ${{ steps.target.outputs.operations }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the nightly milestone
+        id: target
+        env:
+          IRIDIUM_TEST_TARGET_MILESTONE: ${{ inputs.milestone_exit }}
+        run: |
+          node --input-type=commonjs <<'NODE'
+          const { appendFileSync, readFileSync } = require('node:fs');
+          const current = readFileSync('docs/milestones/CURRENT', 'utf8').trim();
+          const requested = process.env.IRIDIUM_TEST_TARGET_MILESTONE;
+          const target = requested && requested !== 'none' ? requested : (current === 'M0' ? 'M1' : current);
+          const index = (value) => {
+            if (!/^M[0-8]$/.test(value)) throw new Error(`Invalid milestone: ${value}`);
+            return Number(value.slice(1));
+          };
+          const reached = index(target);
+          if (reached < index(current)) {
+            throw new Error(`The nightly target ${target} cannot precede CURRENT ${current}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, [
+            `milestone=${target}`,
+            `mcp=${reached >= 3}`,
+            `web=${reached >= 4}`,
+            `operations=${reached >= 8}`,
+            '',
+          ].join('\n'));
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `Nightly scope: ${target}; last recorded exit: ${current}.\n`);
+          NODE
+
+  # `IRIDIUM_PROP_RUNS=5000`, `IRIDIUM_PROP_DB_RUNS=5000`, `IRIDIUM_PROP_DB_COMMANDS=300`,
   # `IRIDIUM_PROP_SIZE=+2`, plus the 10-peer × 2 000-command convergence soak.
   property-long:
     runs-on: ubuntu-latest
@@ -37,8 +87,9 @@ jobs:
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
       IRIDIUM_PROP_RUNS: '5000'
-      IRIDIUM_PROP_DB_RUNS: '200'
+      IRIDIUM_PROP_DB_RUNS: '5000'
       IRIDIUM_PROP_DB_COMMANDS: '300'
+      IRIDIUM_PROP_SOAK: '1'
       IRIDIUM_PROP_SIZE: '+2'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -67,6 +118,8 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Build the server
         run: pnpm turbo run build --filter=@iridium/server
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Chaos project at the nightly budget
         run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
       - uses: ./.github/actions/upload-nightly-reports
@@ -78,7 +131,8 @@ jobs:
   # thresholds enforced (`break` 70 at M1–M2, 75 at M3–M7, 80 at M8 — decision D12-3).
   mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # Allow setup, build and slower runners to finish a full fresh mutation run.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-workspace
@@ -114,16 +168,9 @@ jobs:
         run: pnpm turbo run build --filter=@iridium/server
       - name: Build the server image
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
-      # pipx is preinstalled on the ubuntu runner; the version is the plan's pin, so the
-      # fuzzer cannot drift between the PR lane and this one.
+      # The shared runner provisions and removes its own production server and MySQL.
       - name: Schemathesis, full budget
-        run: >-
-          pipx run --spec 'schemathesis==4.26.1' schemathesis run
-          http://127.0.0.1:4000/openapi.json --checks all --stateful=links
-          --max-examples=500
-          --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
-          --header "X-Iridium-Client: web"
-          --exclude-path-regex '^/__test__' --report junit
+        run: pnpm exec node scripts/run-schemathesis.ts
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
@@ -135,6 +182,8 @@ jobs:
   # how k6 2.2.0 is installed on the runner; either implementation emits the same metric
   # names, so the thresholds and the baseline do not change with it.
   load:
+    needs: milestone
+    if: needs.milestone.outputs.operations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 300
     env:
@@ -157,27 +206,56 @@ jobs:
   # The blocking client-budget run plus the 4× CPU-throttled variant. The timing budgets are
   # advisory on a pull request and blocking here, where the runner class is consistent.
   perf:
+    needs: milestone
+    if: needs.milestone.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    services:
+      mysql:
+        image: mysql:8.4.11@sha256:85b9bf2e29cf836ecb8c2a15a935d4ba0c606631dff1dd79531a11983c638f2a
+        env:
+          MYSQL_ROOT_PASSWORD: iridium-ci
+          MYSQL_DATABASE: iridium
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
+      NODE_ENV: test
+      BIND_ADDRESS: 127.0.0.1
+      PUBLIC_ORIGIN: http://127.0.0.1:4000
+      DATABASE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_PASSWORD: iridium-ci
+      DATABASE_MIGRATE_URL: mysql://root@127.0.0.1:3306/iridium
+      DATABASE_MIGRATE_PASSWORD: iridium-ci
+      IRIDIUM_MIGRATE_ON_BOOT: 'true'
+      READYZ_STRICT_DURABILITY: 'false'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-workspace
         with:
           playwright-browsers: --with-deps chromium
+      - name: Generate the ephemeral keyring
+        run: |
+          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
       - name: Build the web host and the server
         run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
+      - name: Apply the migrations
+        run: pnpm --filter @iridium/server run iridium migrate up
       - name: Client budgets
         run: >-
           pnpm exec playwright test -c playwright.config.ts --project=chromium
-          --grep @perf --pass-with-no-tests
+          --grep @perf
       - name: Client budgets, 4× CPU throttled
         env:
           IRIDIUM_E2E_CPU_THROTTLE: '4'
         run: >-
           pnpm exec playwright test -c playwright.config.ts --project=chromium
-          --grep @perf --pass-with-no-tests
+          --grep @perf
       - name: Performance trend table
         if: always()
         run: node scripts/perf-trend.ts >> "$GITHUB_STEP_SUMMARY"
@@ -195,6 +273,8 @@ jobs:
   # what covers the two cross-line cases (`ops.cross-line-restore.drill` and the
   # `restore.mysql_line_downgrade` case inside `ops.restore-verify.chaos`).
   backup-restore-drill:
+    needs: milestone
+    if: needs.milestone.outputs.operations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     strategy:
@@ -213,11 +293,11 @@ jobs:
         run: pnpm turbo run build --filter=@iridium/server
       - name: Operator rehearsals
         run: >-
-          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          pnpm exec vitest --run --config vitest.config.ts
           --project chaos apps/server/test/chaos/ops
       - name: Upgrade rehearsal
         run: >-
-          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          pnpm exec vitest --run --config vitest.config.ts
           --project chaos apps/server/test/chaos/ops.upgrade-rehearsal
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
@@ -234,8 +314,9 @@ jobs:
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:9.7.2-oraclelinux9'
       IRIDIUM_PROP_RUNS: '5000'
-      IRIDIUM_PROP_DB_RUNS: '200'
+      IRIDIUM_PROP_DB_RUNS: '5000'
       IRIDIUM_PROP_DB_COMMANDS: '300'
+      IRIDIUM_PROP_SOAK: '1'
       IRIDIUM_PROP_SIZE: '+2'
       IRIDIUM_CHAOS_ITERATIONS: '200'
     steps:
@@ -252,13 +333,7 @@ jobs:
       - name: Chaos project on the other line
         run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
       - name: Schemathesis on the other line
-        run: >-
-          pipx run --spec 'schemathesis==4.26.1' schemathesis run
-          http://127.0.0.1:4000/openapi.json --checks all --stateful=links
-          --max-examples=500
-          --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
-          --header "X-Iridium-Client: web"
-          --exclude-path-regex '^/__test__' --report junit
+        run: pnpm exec node scripts/run-schemathesis.ts
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
@@ -279,6 +354,8 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Build the server
         run: pnpm turbo run build --filter=@iridium/server
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Integration project on the innovation line
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
@@ -316,11 +393,17 @@ jobs:
       - name: Create the database
         shell: bash
         run: mysql -h 127.0.0.1 -u root -e 'CREATE DATABASE IF NOT EXISTS iridium'
+      - name: Generate the ephemeral keyring
+        shell: bash
+        run: |
+          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
       - name: Install the Playwright Linux dependencies
         if: runner.os == 'Linux'
         run: npx playwright install-deps chromium
       - name: Build the desktop shell (unpackaged) and the server
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
+      - name: Apply the migrations
+        run: pnpm --filter @iridium/server run iridium migrate up
       - name: Electron suite (Linux, under xvfb)
         if: runner.os == 'Linux'
         run: >-
@@ -350,6 +433,8 @@ jobs:
   # `docs/ops/mcp-clients.md`; a product that cannot complete the flow is recorded in
   # `apps/e2e/mcp-clients/versions.json` with its observed failure.
   mcp-clients:
+    needs: milestone
+    if: needs.milestone.outputs.mcp == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -363,7 +448,7 @@ jobs:
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Real-client matrix and proxied stack
         run: >-
-          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          pnpm exec vitest --run --config vitest.config.ts
           --project mcp --project contract apps/e2e/mcp-clients
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
@@ -374,6 +459,8 @@ jobs:
   # verbatim, then a three-editor smoke and a `claude mcp add` against it. The air-gapped
   # in-process TLS profile is the second mode of the same job.
   compose-boot:
+    needs: milestone
+    if: needs.milestone.outputs.operations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -385,7 +472,7 @@ jobs:
         run: docker compose -f infra/compose.prod.yaml up --wait
       - name: Clean-VM smoke
         run: >-
-          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
+          pnpm exec vitest --run --config vitest.config.ts
           --project chaos apps/server/test/chaos/ops.compose-prod
       - name: Tear the reference deployment down
         if: always()
@@ -398,6 +485,8 @@ jobs:
   # `@modelcontextprotocol/conformance --suite all`. New failures are reported and only the
   # `active` suite — which runs in `ci.yml › integration` — blocks, so this lane is advisory.
   conformance-all:
+    needs: milestone
+    if: needs.milestone.outputs.mcp == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     continue-on-error: true
@@ -410,7 +499,7 @@ jobs:
       - name: Build the server
         run: pnpm turbo run build --filter=@iridium/server
       - name: MCP conformance, full suite
-        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project mcp
+        run: pnpm exec vitest --run --config vitest.config.ts --project mcp
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
@@ -421,8 +510,22 @@ jobs:
   # `vitest --project integration` runs on `main`; any test that both passes and fails
   # within the job is reported with its trace.
   flake-hunt:
+    needs: milestone
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    services:
+      mysql:
+        image: mysql:8.4.11@sha256:85b9bf2e29cf836ecb8c2a15a935d4ba0c606631dff1dd79531a11983c638f2a
+        env:
+          MYSQL_ROOT_PASSWORD: iridium-ci
+          MYSQL_DATABASE: iridium
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
     steps:
@@ -432,10 +535,10 @@ jobs:
           playwright-browsers: --with-deps chromium
       - name: Build
         run: pnpm turbo run build
-      - name: Web suite, three times over
-        run: >-
-          pnpm exec playwright test -c playwright.config.ts --project=chromium
-          --repeat-each=3 --pass-with-no-tests
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
+      # Run the self-contained database fixtures before adding the web server's keyring.
+      # The testkit supplies its own unversioned secrets; inheriting *_V1 too is invalid.
       - name: Integration project, three consecutive runs
         run: |
           for run in 1 2 3; do
@@ -443,6 +546,32 @@ jobs:
             pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project integration
             echo '::endgroup::'
           done
+      - name: Configure the web fixture
+        if: needs.milestone.outputs.web == 'true'
+        run: |
+          cat >> "$GITHUB_ENV" <<'ENV'
+          NODE_ENV=test
+          BIND_ADDRESS=127.0.0.1
+          PUBLIC_ORIGIN=http://127.0.0.1:4000
+          DATABASE_URL=mysql://root@127.0.0.1:3306/iridium
+          DATABASE_PASSWORD=iridium-ci
+          DATABASE_MIGRATE_URL=mysql://root@127.0.0.1:3306/iridium
+          DATABASE_MIGRATE_PASSWORD=iridium-ci
+          IRIDIUM_MIGRATE_ON_BOOT=true
+          READYZ_STRICT_DURABILITY=false
+          ENV
+      - name: Generate the ephemeral keyring
+        if: needs.milestone.outputs.web == 'true'
+        run: |
+          node -e 'const c=require("node:crypto");for(const k of ["AUTH_PASSWORD_PEPPER_V1","AUDIT_HMAC_KEY_V1","MCP_CURSOR_KEY_V1"])console.log(`${k}=${c.randomBytes(32).toString("base64")}`)' >> "$GITHUB_ENV"
+      - name: Apply the migrations
+        if: needs.milestone.outputs.web == 'true'
+        run: pnpm --filter @iridium/server run iridium migrate up
+      - name: Web suite, three times over
+        if: needs.milestone.outputs.web == 'true'
+        run: >-
+          pnpm exec playwright test -c playwright.config.ts --project=chromium
+          --repeat-each=3
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
@@ -471,6 +600,8 @@ jobs:
           install-args: --config.engine-strict=false
       - name: Build the server
         run: pnpm turbo run build --filter=@iridium/server
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Unit and integration projects on Node 26
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts

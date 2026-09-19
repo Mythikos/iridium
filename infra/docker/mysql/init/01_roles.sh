@@ -109,6 +109,21 @@ CREATE USER IF NOT EXISTS 'iridium_app'@'%'      IDENTIFIED WITH caching_sha2_pa
 CREATE USER IF NOT EXISTS 'iridium_migrator'@'%' IDENTIFIED WITH caching_sha2_password BY '${iridium_roles_migrator_q}' PASSWORD EXPIRE NEVER;
 CREATE USER IF NOT EXISTS 'iridium_backup'@'%'   IDENTIFIED WITH caching_sha2_password BY '${iridium_roles_backup_q}'   PASSWORD EXPIRE NEVER;
 
+SQL
+
+  # Check pre-existing accounts before granting: GRANT itself may fail for an unloaded plugin. The password plugin removed in 9.0 still exists on
+  # 8.4 as a loadable component that is disabled by default, so a data directory initialised with it
+  # loaded could otherwise produce a role Iridium did not intend. Failing here puts that discovery in
+  # container initialisation rather than at the first connection.
+  iridium_roles_wrong=$(printf '%s\n' "SELECT COUNT(*) FROM mysql.user WHERE user IN ('iridium_app','iridium_migrator','iridium_backup') AND plugin <> 'caching_sha2_password';" | iridium_roles_sql --skip-column-names --batch) || return 1
+  if [ -z "$iridium_roles_wrong" ]; then
+    iridium_roles_fail 'the authentication-plugin assertion returned no rows'
+  fi
+  if [ "$iridium_roles_wrong" != "0" ]; then
+    iridium_roles_fail "$iridium_roles_wrong of the three Iridium roles are not using caching_sha2_password"
+  fi
+
+  iridium_roles_sql <<SQL || return 1
 -- migrator: everything inside the iridium schema, nothing global; GRANT OPTION is scoped to the
 -- schema so migration 0034_grants can grant per-table rights to iridium_app.
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, TRIGGER, EVENT,
@@ -132,18 +147,6 @@ GRANT BACKUP_ADMIN, SHOW_ROUTINE ON *.* TO 'iridium_backup'@'%';
 GRANT USAGE ON *.* TO 'iridium_app'@'%';
 FLUSH PRIVILEGES;
 SQL
-
-  # The last step is an assertion, not a grant. The password plugin removed in 9.0 still exists on
-  # 8.4 as a loadable component that is disabled by default, so a data directory initialised with it
-  # loaded could otherwise produce a role Iridium did not intend. Failing here puts that discovery in
-  # container initialisation rather than at the first connection.
-  iridium_roles_wrong=$(printf '%s\n' "SELECT COUNT(*) FROM mysql.user WHERE user IN ('iridium_app','iridium_migrator','iridium_backup') AND plugin <> 'caching_sha2_password';" | iridium_roles_sql --skip-column-names --batch) || return 1
-  if [ -z "$iridium_roles_wrong" ]; then
-    iridium_roles_fail 'the authentication-plugin assertion returned no rows'
-  fi
-  if [ "$iridium_roles_wrong" != "0" ]; then
-    iridium_roles_fail "$iridium_roles_wrong of the three Iridium roles are not using caching_sha2_password"
-  fi
 
   iridium_roles_note 'iridium_app, iridium_migrator and iridium_backup are ready (caching_sha2_password)'
 }

@@ -40,9 +40,13 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 COPY --from=prune /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 COPY --from=prune /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+# Fetch is cached by dependency inputs; install only after the final source/patch COPY. A cached
+# installation followed by COPY can invalidate pnpm's patch state even when patch bytes match.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --store-dir=/pnpm/store
+    pnpm fetch --store-dir=/pnpm/store
 COPY --from=prune /app/out/full/ .
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --offline --frozen-lockfile --store-dir=/pnpm/store
 # tsdown bundles the server with every @iridium/* workspace package inlined into dist/main.mjs
 # (@node-rs/argon2, mysql2 and piscina stay external); Vite 8 builds the web bundle.
 RUN pnpm turbo run build --filter=@iridium/server... --filter=@iridium/web
@@ -53,6 +57,8 @@ RUN pnpm deploy --filter=@iridium/server --prod /prod/server
 # bundle exists, and @node-rs/argon2 resolved to its prebuilt binary instead of being compiled.
 RUN test -f /prod/server/dist/main.mjs \
       || { echo "build: /prod/server/dist/main.mjs is missing"; exit 1; }; \
+    test -f /prod/server/dist/blocklist.txt \
+      || { echo "build: /prod/server/dist/blocklist.txt is missing (the tsdown copy step)"; exit 1; }; \
     test -n "$(find /prod/server/node_modules -path '*argon2*' -name '*.node' -print -quit)" \
       || { echo "build: @node-rs/argon2 has no prebuilt binary in the deployment"; exit 1; }; \
     mkdir -p /prod/server/web /prod/server/migrations; \
@@ -110,6 +116,10 @@ RUN apt-get update; \
     rm -rf /var/lib/apt/lists/*; \
     groupadd -g 10001 iridium; \
     useradd -u 10001 -g iridium -M iridium
+# Docker initializes a fresh named volume from the image directory's ownership. These four
+# writable mounts must work on first boot under the image's unprivileged runtime user.
+RUN install -d -o 10001 -g 10001 -m 0750 \
+      /data/attachments /data/staging /data/exports /data/desktop-updates
 # No compiler may reach the shipped image: a native module that needs one has to fail the build,
 # never be papered over at runtime.
 RUN for tool in cc gcc g++ make; do \

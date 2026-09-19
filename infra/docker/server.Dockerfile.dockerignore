@@ -15,7 +15,11 @@
 **/coverage
 **/*.tsbuildinfo
 
-# Test and release output.
+# Test and release output, including mutation sandboxes and local patch staging.
+**/.stryker-tmp
+.tmp
+reports
+.vitest-reports
 **/playwright-report
 **/test-results
 apps/desktop/release

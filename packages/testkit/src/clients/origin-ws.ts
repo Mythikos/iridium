@@ -61,6 +61,8 @@ export interface OriginWebSocketOptions {
   readonly headers?: Readonly<Record<string, string>>;
   /** Mirrors the server's `WS_MAX_PAYLOAD_BYTES` so an oversize frame fails client-side too. */
   readonly maxPayload?: number;
+  /** Bind an actual source address for multi-peer load tests; no proxy-header identity is forged. */
+  readonly localAddress?: string;
 }
 
 /**
@@ -80,6 +82,7 @@ class OriginWebSocket extends WebSocketImpl {
     super(address, protocols, {
       headers,
       ...(options.maxPayload === undefined ? {} : { maxPayload: options.maxPayload }),
+      ...(options.localAddress === undefined ? {} : { localAddress: options.localAddress }),
     });
   }
 }

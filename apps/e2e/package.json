@@ -21,6 +21,8 @@
   "devDependencies": {
     "@iridium/tsconfig": "workspace:*",
     "@playwright/test": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "@types/ws": "catalog:",
+    "ws": "catalog:"
   }
 }

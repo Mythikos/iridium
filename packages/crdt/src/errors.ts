@@ -20,7 +20,9 @@ export type CrdtErrorCode =
   /** A `snapshot_format` value that is neither 1 (V1) nor 2 (V2). */
   | 'unknown-snapshot-format'
   /** A `Y.Text` that is not integrated into a `Y.Doc`, so no transaction can carry an origin. */
-  | 'detached-text';
+  | 'detached-text'
+  /** An outer transaction would coalesce bounded insertions into one unbounded update. */
+  | 'nested-transaction';
 
 /**
  * A refusal from `@iridium/crdt`, carrying the `code` a call site branches on.

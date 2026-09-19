@@ -16,6 +16,8 @@ catalog:
   oxlint: 1.82.0
   oxlint-tsgolint: 7.0.2001
   oxfmt: 0.67.0
+  # Static source guards parse TypeScript without the removed TS 7 compiler API.
+  oxc-parser: 0.148.0
   tsdown: 0.23.0
   vite: 8.3.0
   '@vitejs/plugin-react': 6.1.1
@@ -70,7 +72,6 @@ catalog:
   # Server
   fastify: 5.12.4
   '@fastify/cookie': 11.1.2
-  '@fastify/csrf-protection': 8.0.1
   '@fastify/helmet': 13.1.1
   '@fastify/multipart': 10.1.1
   '@fastify/rate-limit': 11.2.0
@@ -188,28 +189,11 @@ catalogs:
 catalogMode: strict
 saveExact: true
 engineStrict: true
+# Install dependencies explicitly before running workspace tasks.
+verifyDepsBeforeRun: error
 minimumReleaseAge: 4320
-# The plan pins releases younger than three days at bootstrap time (2026-09-13). Each entry is an exact
-# version, matures out of the window by 2026-09-14T21:00Z, and is removed then; a range is never listed.
-minimumReleaseAgeExclude:
-  - '@aws-sdk/client-s3@3.1131.0'
-  - '@fast-check/vitest@0.5.0'
-  - '@tanstack/react-router@1.170.35'
-  - '@tanstack/react-virtual@3.14.12'
-  - '@tanstack/virtual-core@3.17.10'
-  - 'fast-check@4.10.0'
-  - 'fastify@5.12.4'
-  # Added by spike S8 (2026-09-13): the MIME sniffer pin, published 2026-09-11T10:28:53Z,
-  # matures out of the window by 2026-09-14T10:28:53Z and is removed then.
-  - 'file-type@22.1.0'
-  - 'lucide-react@1.45.0'
-  - 'micromark-extension-gfm-table@2.1.2'
-  - 'vite@8.3.0'
-  - 'yaml@2.9.1'
-  - 'zod@4.6.2'
-  # The plan's OpenAPI linter pin, published 2026-09-11T13:45:47Z; matures out of the window by
-  # 2026-09-14T13:45:47Z and is removed then.
-  - '@redocly/cli@2.52.1'
+# Bootstrap exceptions expired on 2026-09-14; every pin now observes the same release-age floor.
+minimumReleaseAgeExclude: []
 trustPolicy: no-downgrade
 # Exact old versions that no-downgrade flags because a later version gained provenance and these predate it.
 # Every entry is a pin, never a range, and is reviewed when its dependent moves (13-decision-log.md A1).
@@ -256,3 +240,8 @@ overrides:
   y-protocols: 'catalog:'
   '@codemirror/state': 'catalog:'
   '@codemirror/view': 'catalog:'
+patchedDependencies:
+  '@fastify/websocket@11.3.0': patches/@fastify__websocket@11.3.0.patch
+  '@hocuspocus/provider@4.7.0': patches/@hocuspocus__provider@4.7.0.patch
+  '@hocuspocus/server@4.7.0': patches/@hocuspocus__server@4.7.0.patch
+  ssh-remote-port-forward@1.0.4: patches/ssh-remote-port-forward@1.0.4.patch

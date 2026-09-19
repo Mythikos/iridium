@@ -28,7 +28,7 @@ export const ROLES = ['viewer', 'editor', 'manager'] as const;
 export type Role = (typeof ROLES)[number];
 
 /** A vault role. */
-export const Role: EnumOf<typeof ROLES> = z.enum(ROLES);
+export const Role: EnumOf<typeof ROLES> = z.enum(ROLES).meta({ id: 'Role' });
 
 /** The order of the roles, used only by `maxRole`. */
 export const ROLE_RANK: Readonly<Record<Role, number>> = { viewer: 1, editor: 2, manager: 3 };
@@ -47,7 +47,9 @@ export const VAULT_STATUSES = ['importing', 'active', 'archived', 'deleting'] as
 export type VaultStatus = (typeof VAULT_STATUSES)[number];
 
 /** `vaults.status`. */
-export const VaultStatus: EnumOf<typeof VAULT_STATUSES> = z.enum(VAULT_STATUSES);
+export const VaultStatus: EnumOf<typeof VAULT_STATUSES> = z
+  .enum(VAULT_STATUSES)
+  .meta({ id: 'VaultStatus' });
 
 /** Statuses that make a vault invisible to every listing and every authorization decision. */
 export const INVISIBLE_VAULT_STATUSES: readonly VaultStatus[] = ['importing', 'deleting'];
@@ -96,7 +98,9 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 /** A member of the closed permission vocabulary. */
-export const Permission: EnumOf<typeof PERMISSIONS> = z.enum(PERMISSIONS);
+export const Permission: EnumOf<typeof PERMISSIONS> = z.enum(PERMISSIONS).meta({
+  id: 'Permission',
+});
 
 /** The group a permission belongs to, as the vocabulary table names it. */
 export type PermissionGroup = 'read' | 'write' | 'manage' | 'server';
@@ -436,6 +440,12 @@ export interface DecideInput {
    * not a member or lacks the permission is refused before the prompt could reveal anything.
    */
   readonly stepUpOk: boolean;
+  /**
+   * Whether the route lifts the archived-vault write freeze (section 5.6): `true` only for the
+   * members of `ALLOW_ARCHIVED_ROUTES`, so an archived vault can still be unarchived and audited.
+   * The matrix still applies; the flag removes the freeze, never a role check.
+   */
+  readonly allowArchived: boolean;
 }
 
 /**
@@ -468,7 +478,11 @@ export function decide(input: DecideInput): Decision {
     isUser && input.isServerAdmin ? maxRole(input.explicitRole, 'manager') : input.explicitRole;
 
   if (effectiveRole === null) return DENY_NOT_FOUND;
-  if (input.vaultStatus === 'archived' && !isReadPermission(input.permission)) {
+  if (
+    input.vaultStatus === 'archived' &&
+    !input.allowArchived &&
+    !isReadPermission(input.permission)
+  ) {
     return DENY_FORBIDDEN;
   }
   if (!matrixAllows(effectiveRole, input.permission)) return DENY_FORBIDDEN;
@@ -485,4 +499,147 @@ export function decide(input: DecideInput): Decision {
 
   if (isUser && !input.stepUpOk) return DENY_STEP_UP;
   return 'allow';
+}
+
+// ---------------------------------------------------------------------------------------------
+// The route policy vocabulary
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Where a route's `preHandler` resolves the vault from (04-auth-and-access-control.md section 6.2
+ * step 3). The prefixed forms name the row the id addresses, because resolving a node, a note, an
+ * attachment or a job to its vault is one point lookup the handler reuses.
+ */
+export type VaultFrom =
+  | 'params.vaultId'
+  | 'node:params.nodeId'
+  | 'note:params.noteId'
+  | 'attachment:params.attachmentId'
+  | 'job:params.jobId'
+  | 'body.vaultId';
+
+/**
+ * The principal kinds a route may admit. `system` is deliberately absent: a system principal is
+ * never constructed from a request, so a route can never list it (section 5.1).
+ */
+export type RoutePrincipalKind = 'user' | 'token';
+
+/**
+ * Every Fastify route declares `config.auth`; a route without one refuses to boot the server
+ * (04-auth-and-access-control.md section 6.2; skeleton A30; invariant 2 of
+ * 02-system-architecture.md). `apps/server/src/authz/route-policy.ts` reads this type and nothing
+ * else, and `M1_ROUTES` carries one of these values per route so the policy, the OpenAPI
+ * `x-iridium-auth` extension and the boot assertion all read the same object.
+ *
+ * `'test-only'` is the `/__test__` namespace, which is registered only when `NODE_ENV=test`
+ * (12-milestones.md section 5.2, `apps/server/src/ops`); it is part of the vocabulary rather than a
+ * later widening of this type.
+ */
+export type RouteAuth =
+  | { readonly public: true }
+  | 'test-only'
+  /**
+   * Any user principal, on a route that addresses no row of its own (`POST /auth/reauthenticate`,
+   * `POST /auth/collab-tickets`). `principalKinds` is what the starred routes of
+   * 09-api-reference.md add `'token'` to: `GET /auth/me` and `GET /vaults` are read-only and
+   * cross-vault, so they have no `vaultFrom` to hang a permission on and the ACL is applied inside
+   * their own query through `accessibleVaultIds()`.
+   */
+  | {
+      readonly session: true;
+      readonly stepUp?: boolean;
+      readonly principalKinds?: readonly RoutePrincipalKind[];
+    }
+  /** Operates only on the caller's own rows; a foreign `:sessionId`/`:tokenId` is `not_found`. */
+  | { readonly self: true; readonly stepUp?: boolean }
+  /**
+   * The server-admin flag. `permission` is present on every `/admin/*` route and absent on exactly
+   * the two documentation operations of `ADMIN_FLAG_ONLY_ROUTES`, which read no domain resource —
+   * 12-milestones.md section 5.2 spells their policy `{serverAdmin: true}` and there is no
+   * `server:*` permission that would be truthful for "read the API document".
+   */
+  | { readonly serverAdmin: true; readonly permission?: Permission; readonly stepUp?: boolean }
+  | {
+      readonly permission: Permission;
+      readonly vaultFrom: VaultFrom;
+      readonly stepUp?: boolean;
+      readonly allowArchived?: boolean;
+      /** Default `['user']`; the starred read-only routes add `'token'`. */
+      readonly principalKinds?: readonly RoutePrincipalKind[];
+      /** The two MCP mounts only: a cookie can never resolve to a principal there. */
+      readonly bearerOnly?: true;
+      /** Which credential kind the mount accepts, matched against its discovery posture. */
+      readonly mcpAudience?: 'pat' | 'oauth';
+    };
+
+/**
+ * The closed set of routes whose policy is the server-admin flag with no permission: the OpenAPI
+ * document and the Swagger UI (09-api-reference.md sections 2.17, 2.18; 12-milestones.md section
+ * 5.2). The set is enumerated for the same reason `ALLOW_ARCHIVED_ROUTES` is — an optional
+ * `permission` that any route could omit would turn a forgotten permission into a silent pass, so
+ * the boot assertion holds membership instead.
+ */
+export const ADMIN_FLAG_ONLY_ROUTES = ['GET /openapi.json', 'GET /docs'] as const;
+
+/** A route whose policy is the server-admin flag alone. */
+export type AdminFlagOnlyRoute = (typeof ADMIN_FLAG_ONLY_ROUTES)[number];
+
+/**
+ * The closed set of routes that may carry `allowArchived` (section 5.6). A route qualifies if and
+ * only if its permission is outside `READ_BUNDLE` **and** the action must still work while the
+ * vault is frozen: unarchiving itself, and the vault manager's audit view. The boot assertion
+ * asserts membership, so archiving actually freezes a vault.
+ */
+export const ALLOW_ARCHIVED_ROUTES = [
+  'POST /vaults/:vaultId/unarchive',
+  'GET /vaults/:vaultId/audit',
+] as const;
+
+/** A route that may lift the archived check. */
+export type AllowArchivedRoute = (typeof ALLOW_ARCHIVED_ROUTES)[number];
+
+/**
+ * The closed set of state-changing routes the CSRF guard skips (section 4.4, D04-32). The two MCP
+ * mounts are exempt because they are `bearerOnly`; the four `/oauth/*` endpoints authenticate a
+ * client or carry their own single-use, session-bound `request_id`. `authz.route-policy.boot`
+ * asserts the served exemption set equals this constant exactly, so a seventh cannot be added
+ * silently.
+ */
+export const CSRF_EXEMPT_ROUTES = [
+  'POST /mcp',
+  'POST /mcp/connect',
+  'POST /oauth/consent',
+  'POST /oauth/token',
+  'POST /oauth/revoke',
+  'POST /oauth/register',
+] as const;
+
+/** A route the CSRF guard skips. */
+export type CsrfExemptRoute = (typeof CSRF_EXEMPT_ROUTES)[number];
+
+/** Whether a `RouteAuth` requires the step-up window. `public` routes never do. */
+export function requiresStepUp(auth: RouteAuth): boolean {
+  return auth !== 'test-only' && !('public' in auth) && auth.stepUp === true;
+}
+
+/**
+ * The permission a `RouteAuth` decides against, or `null` when it names none — a `public`, `self`,
+ * `session` or `test-only` route, and the two documentation operations of
+ * `ADMIN_FLAG_ONLY_ROUTES`.
+ */
+export function routePermission(auth: RouteAuth): Permission | null {
+  if (auth === 'test-only' || 'public' in auth || 'self' in auth || 'session' in auth) return null;
+  return auth.permission ?? null;
+}
+
+/**
+ * The principal kinds a `RouteAuth` admits. The default is `['user']` everywhere: a token principal
+ * reaches a route only where the route lists it, which is how every mutating route refuses a PAT
+ * with `403 token_scope_insufficient` without writing a check of its own (A31).
+ */
+export function routePrincipalKinds(auth: RouteAuth): readonly RoutePrincipalKind[] {
+  if (auth === 'test-only' || 'public' in auth || 'self' in auth || 'serverAdmin' in auth) {
+    return ['user'];
+  }
+  return auth.principalKinds ?? ['user'];
 }

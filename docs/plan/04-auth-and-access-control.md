@@ -100,11 +100,13 @@ Table `password_setup_tokens` (03-data-model.md §C.1). One code path serves bot
 
 | Step | Behaviour |
 |---|---|
-| Issue | `auth/setpw/issue.ts`: generate an `irid_spl_` token, insert `{token_id, secret_hash, user_id, purpose:'initial'\|'reset', issued_by, expires_at = now + password_policy.setupLinkHours}` (24 h by default, 03-data-model.md §13.1). Before the insert, every outstanding link of the same user is superseded by setting `expires_at = now` (only the newest link is ever valid; `consumed_at` keeps its meaning "used"). |
+| Issue | `auth/setpw/issue.ts`: generate an `irid_spl_` token, insert `{token_id, secret_hash, user_id, purpose:'initial'\|'reset', issued_by, expires_at = now + password_policy.setupLinkHours}` (24 h by default, 03-data-model.md §13.1). In one `READ COMMITTED` transaction, lock the parent `users` row by primary key, then expire every outstanding link of that user across both purposes with `expires_at = now`, then insert (only the newest link is valid; `consumed_at` keeps its meaning "used"). The transaction helper owns isolation and gives callers a scoped issuer; account creation joins that transaction and appends its audit event last. An arbitrary caller-owned transaction cannot issue a link. |
 | Deliver | The link is `<PUBLIC_ORIGIN>/set-password#<token>`. The token is in the URL **fragment**, so it never reaches server logs, reverse-proxy logs or `Referer` headers; the SPA reads `location.hash` and immediately replaces the history entry. The desktop login screen has a "Paste set-password link" action that parses the same URL. |
-| Consume | `POST /auth/set-password {token, password}` (public; login rate bucket; CSRF guard per §4.4). In one transaction: `SELECT … FROM password_setup_tokens WHERE token_id=? FOR UPDATE` → `timingSafeEqual` → `consumed_at IS NULL AND expires_at > now` → user `status='active'` → password policy (§3.4) → `INSERT … ON DUPLICATE KEY UPDATE user_credentials {password_hash, pepper_version, password_changed_at}` → `consumed_at = now` → `users.authz_version + 1` → audit `user.password.set {purpose}` (chain `server`, `credential_type='setpw'`, `credential_id = password_setup_tokens.id`). Response `204`. Invalid, expired, consumed or superseded links all return `401 invalid_credentials` (one message, no distinction). Policy violations return `400 validation_failed` with the failing rule ids. |
+| Consume | `POST /auth/set-password {token, password}` (public; login rate bucket; CSRF guard per §4.4). Locate the owner with an unlocked token lookup, then in one transaction lock that `users` primary-key row before re-reading `password_setup_tokens WHERE token_id=? FOR UPDATE` → `timingSafeEqual` → `consumed_at IS NULL AND expires_at > now` → user `status='active'` → password policy (§3.4) → `INSERT … ON DUPLICATE KEY UPDATE user_credentials {password_hash, pepper_version, password_changed_at}` → `consumed_at = now` → `users.authz_version + 1` → audit `user.password.set {purpose}` (chain `server`, `credential_type='setpw'`, `credential_id = password_setup_tokens.id`). Response `204`. Invalid, expired, consumed or superseded links all return `401 invalid_credentials` (one message, no distinction). Policy violations return `400 validation_failed` with the failing rule ids. |
 | After consume | No automatic login: the client navigates to the login form with the email pre-filled. Keeping one login path (A29) means one throttle, one audit shape and one session issuer. |
 | Reset | `POST /admin/users/:userId/reset-password` (`server:users`, step-up): in one transaction delete the `user_credentials` row (the old password stops working immediately — a reset may be a compromise response), revoke every session of the user (`revoked_reason='admin'`), bump `authz_version`, issue a new `purpose='reset'` link, clear login-throttle limiter A keys for that `email_key` (§3.7), audit `admin.user.password_reset`; after COMMIT publish `session.revoked` for each revoked session (§8). PATs are untouched (A28) — the admin UI shows the user's active tokens next to the reset button and offers `POST /admin/users/:userId/revoke-tokens` as a separate, separately audited action. |
+
+**Concurrency clarification (2026-09-17).** Issuance and consumption always lock users before token rows. Issuance uses `READ COMMITTED` because a `REPEATABLE READ` update of an empty, non-unique `user_id` range takes gap locks that deadlock concurrent first-link inserts for different users. The parent lock serializes links for one user without serializing unrelated users. This exception is confined to credential issuance; vault mutations retain `withVaultLock()` at `REPEATABLE READ`. `setpw-link.integration` covers parallel account creation, concurrent same-user reissue, and consumption racing reissue on both supported MySQL lines. This clarification supersedes the former per-purpose/mark-consumed wording in 03-data-model.md.
 
 Unconsumed links are removed by the `session_ticket_sweep` job 7 days after expiry (rows are not needed for audit; the audit event carries the link id).
 
@@ -631,7 +633,7 @@ Every surface authenticates, then authorizes through §5, then queries with the 
 |---|---|---|---|
 | REST `/api/v1/*` | `onRequest` → `authenticate(request)`: cookie → `verifySession(raw,'cookie')`, `Authorization: Bearer irid_ses_…` → `verifySession(raw,'bearer')`, `Bearer irid_pat_…` → `verifyToken(raw, {surface:'rest'})` | `preHandler` → `routePolicy`: resolve vault from `config.auth.vaultFrom`, call `authorize()`, attach `request.principal` / `request.vault` | `ProblemDetails` 401 `invalid_credentials` · 403 `forbidden` / `csrf_rejected` / `step_up_required` / `token_scope_insufficient` · 404 `not_found` |
 | WebSocket upgrade `/collab` | none yet — `preValidation` only checks Origin, Host and the IP/process socket caps | — | HTTP 403 (Origin/Host) or 429 `rate_limited` (socket caps) before the upgrade completes |
-| WebSocket document | Hocuspocus `onAuthenticate`: consume ticket → `loadLiveSession` (§4.2) → resolve `note:`/`vault:` → `authorize('note:read'\|'vault:read')` | same call sets `connection.readOnly = authorize('note:write') !== 'allow'` | throw → close 4401 `unauthorized` / 4403 `revoked` / 4404 `note-not-found`, `note-trashed` or `note-closing` |
+| WebSocket document | Hocuspocus `onAuthenticate`: consume ticket → `loadLiveSession` (§4.2) → resolve `note:`/`vault:` → `authorize('note:read'\|'vault:read')` | same call sets `connection.readOnly = authorize('note:write') !== 'allow'` | throw → close 4401 `unauthorized` / 4403 `revoked` / 4404 `note-not-found`, `note-trashed` or `note-closing`; storage unavailable → retryable 4503 `unavailable` |
 | WebSocket message | connection context (already authenticated) | `beforeHandleMessage`: epoch check (§8.6), closing set (`note-closing`), size and rate caps; `readOnly` enforced by Hocuspocus itself | close 4403 `revoked`, 4404 `note-closing`, 1009 `too-large`, close `rate-limited`, `SyncStatus(false)` for a read-only client's update |
 | WebSocket awareness | connection context | `beforeHandleAwareness`: decoded `user.id === context.userId`, rate cap | close `awareness-spoof`; excess dropped silently |
 | MCP `POST /mcp` (integration tokens) and `POST /mcp/connect` (OAuth connectors) | `onRequest` host/origin guards + `preHandler` `patAuth` (`/mcp`) or `oauthAuth` (`/mcp/connect`), both calling `verifyToken(raw, {surface:'mcp', resource})` → `request.mcpAuthInfo` | every tool and resource handler calls `authorize(principal, …, {vaultId, surface:'mcp'})` through `ContentReadCore` — identically on both mounts | HTTP 401 with `WWW-Authenticate` when the bearer is missing, invalid or of the kind the other mount accepts (`/mcp/connect` adds `resource_metadata` and `scope`, §6.5); `isError` content for every in-tool denial |
@@ -681,8 +683,10 @@ Every Fastify route declares `config.auth`. The type is in `@iridium/contracts/a
 ```ts
 export type RouteAuth =
   | { public: true }
+  | 'test-only'                                          // only the reserved test namespace
+  | { session: true; stepUp?: boolean; principalKinds?: readonly ('user' | 'token')[] }
   | { self: true; stepUp?: boolean }                       // operates only on the caller's own rows
-  | { serverAdmin: true; permission: Permission; stepUp?: boolean }
+  | { serverAdmin: true; permission?: Permission; stepUp?: boolean }
   | {
       permission: Permission;
       vaultFrom:
@@ -699,6 +703,8 @@ export type RouteAuth =
       mcpAudience?: 'pat' | 'oauth';                       // which credential kind this route accepts (§6.1)
     };
 ```
+
+`session` addresses the authenticated caller or a cross-vault listing without resolving a single vault. It defaults to user principals; only safe read methods may explicitly admit tokens, and their query must apply `accessibleVaultIds()` or the caller's own credential view. This shape does not grant token scopes by itself. The method/kind guard runs before every policy-shape return, both at boot and at request time. `serverAdmin.permission` may be absent only on the closed `ADMIN_FLAG_ONLY_ROUTES` set (`GET /docs`, `GET /openapi.json`). Public policies never imply step-up, so a public mutating administrator route fails boot. A token cannot satisfy step-up in any policy branch, including a policy used directly without the boot assertion.
 
 `apps/server/src/authz/route-policy.ts` is a Fastify plugin that, for every route with a non-`public` policy, registers a `preHandler` which:
 
@@ -985,7 +991,7 @@ Upgrade rejections carry a `ProblemDetails` body: HTTP `429` `code:'rate_limited
 
 Spec §4: *"Revoking access or downgrading a role must affect already-open sessions, not just the next login. The server must stop unauthorized future reads/writes and disconnect or reauthorize affected collaboration sessions."* This section specifies the mechanism that makes that true, with numbers.
 
-### 8.1 The five mechanisms and what each one covers
+### 8.1 The mechanisms and what each one covers
 
 | # | Mechanism | Covers |
 |---|---|---|
@@ -994,6 +1000,7 @@ Spec §4: *"Revoking access or downgrading a role must affect already-open sessi
 | 3 | **`AuthzBus`** — in-process publish after COMMIT | Turning a database change into an action on live connections. |
 | 4 | **`CollabGateway`** — sweeps live connections | Closing, downgrading and upgrading connections; closing documents on trash/archive. |
 | 5 | **`onTokenSync`** — periodic re-validation every 15 min ± 3 min | Backstop: catches anything the bus missed (a dropped subscriber, a future multi-process deployment, a connection created during a race). |
+| 6 | **Owner admission and writer-drain fence** | Prevents new apply and settles previously admitted writes before an authorization mutation can COMMIT; remains held while its outcome or fan-out is uncertain. |
 
 Mechanisms 2 and 5 exist because 3 and 4 are best-effort in principle: a sweep iterates a set that can change while it iterates, and in a multi-process future the bus becomes a network hop. Correctness never depends on the sweep alone — the epoch check makes any *write* from a stale connection impossible, and the token sync bounds how long a silent, stale connection can linger.
 
@@ -1025,17 +1032,34 @@ export type AuthzEvent =
   | { type: 'note.purged';            vaultId: VaultId; noteId: NoteId };
 
 export interface AuthzBus {
-  publish(event: AuthzEvent): void;                     // synchronous fan-out, never throws to the caller
-  subscribe(handler: (e: AuthzEvent) => void): Unsubscribe;
+  publish(event: AuthzEvent): void;                     // synchronous invocation, observes async failures
+  publishAndWait(event: AuthzEvent): Promise<boolean>;   // joins all subscribers, false on any failure
+  subscribe(handler: (e: AuthzEvent) => unknown): Unsubscribe;
 }
 ```
 
 Rules:
 
-- **Publish after COMMIT, never inside the transaction.** `withTransaction()` returns a list of deferred effects; the service pushes `bus.publish(...)` into it and the transaction helper runs them after a successful COMMIT. Publishing inside the transaction would close a user's connections for a change that then rolled back. `authz.bus-after-commit.unit` injects a rollback and asserts no event is published.
-- **Synchronous fan-out.** Subscribers run on the same tick, so by the time the HTTP handler returns `204` the epoch table is already updated (and in practice the connections are already closed). Each handler is wrapped in `try/catch` with an `error`-level log plus the `iridium_authz_bus_handler_errors_total` metric; one failing subscriber cannot block another or fail the request that triggered it.
-- **In-process today, interface forever.** The single-process deployment (F9) makes fan-out exact and instantaneous. The Redis implementation (post-MVP, `RedisAuthzBus` over pub/sub) is a drop-in; the epoch check and `onTokenSync` are what keep the design correct once fan-out becomes lossy.
+- **Publish after COMMIT, never inside the transaction.** Authorization mutations fence the affected principal and drain admitted writes before their transaction; the committed result supplies their deferred events. Publishing inside the transaction would close a user's connections for a change that then rolled back. `authz.bus-after-commit.unit` injects a rollback and asserts no event is published.
+- **Synchronous invocation, acknowledged completion.** Every subscriber starts in registration order on the same tick, including when a preceding subscriber returns a Promise. `publishAndWait` waits for all of them and returns false on any synchronous or asynchronous failure; every failure is logged and counted by `iridium_authz_bus_handler_errors_total`. One failed subscriber cannot skip the others or produce an unhandled rejection. A revoking mutation retains its principal fence until delivery succeeds or authoritative reconciliation proves each connection's current rights; a committed mutation with failed delivery may return `503 unavailable`, never a claim that the mutation rolled back.
+- **One serving owner in M1.** Only the process holding the schema owner lease accepts product traffic. A separate operator CLI hands its session mutation to that owner through the durable command protocol below. Any future distributed bus must preserve the pre-COMMIT admission and drain barrier; periodic token revalidation does not grant a stale-write window.
 - **Subscribers, in registration order:** (1) `EpochReconciler` (§8.6) — updates the in-process epoch table; (2) `CollabGateway` (§8.4) — acts on connections; (3) `TicketStore` — drops outstanding tickets of a revoked session; (4) metrics/SIEM logging. The reconciler is first so that a connection sending a message during the gateway's sweep already sees the new epoch.
+
+### 8.3.1 Owner-executed CLI session commands
+
+`iridium sessions revoke-all [--user <email>]` prints a command UUID before inserting immutable intent into `session_revocation_commands` (03-data-model.md §13.5). The request includes its original operator attribution and audit context. A serving owner discovers undelivered commands every 250 ms on its deadline-bound `dbApp` pool; a standby does not consume them. Discovery delay occurs **before** revocation, never as a post-COMMIT authorization grace period. A global request resolves every user holding sessions at execution and delivers every affected session in the same fan-out; row batching cannot extend an already-committed user's close deadline.
+
+If no server owns the schema lease, the CLI acquires that same lease and runs the same command executor locally. It also retries acquisition while waiting, so an owner exiting does not strand the command. The CLI returns success only after mutation and live delivery are confirmed. After 30 s it returns a pending outcome and the durable id; the command is not cancelled. A lost INSERT, COMMIT or result response must be resolved by that id and its stored result before issuing another request. Completed rows are retained as recovery evidence, with no M1 purge scheduler.
+
+The executor begins a principal fence before awaiting anything: scoped commands cover one user, global commands cover all users. That fence synchronously relatches affected native connections read-only, and `drainForUser` settles every already-admitted FIFO update from those principals before the authorization transaction begins. This includes accepted edits still queued in a note writer; closing the socket alone cannot remove them. The transaction captures the owner generation and takes its shared singleton lock first, locks its command row and affected users, revokes sessions and bumps each changed user's epoch once, writes its result, then records the original CLI audit as the final operation. Structural transactions retain their existing isolation; session commands use READ COMMITTED with user-PK serialization.
+
+A successful COMMIT is followed by acknowledged `session.revoked` fan-out, then fence release and `delivered_at`. On an uncertain COMMIT, the fence remains. A later transaction locks the same command row, waiting for the earlier transaction to end: an existing result is delivered without repeating the mutation; a null result then proves rollback and is stored as `{ok:false}`. Database or subscriber failure retains the fence and retries only outcome resolution or delivery. Known rollback resumes the same authorized connection without a false revoked close. A restart loads the durable result; it cannot execute the session mutation or audit twice.
+
+The same principal barrier surrounds serving REST revocations and permission changes. A body-complete REST transaction whose COMMIT reply is lost waits on its target user's lock before reconciliation. Reconciliation reads **each actual connection's own session** and current user/membership policy, independently of the shared epoch entry; a sibling reseeding that entry cannot hide a revoked session. Known denial closes that connection; unavailable storage keeps the fence. Concurrent overlapping barriers remain composed until all of their outcomes are safe.
+
+Authentication, token sync and stale-epoch reads record the fence revision and repeat their authority reads when an entire begin/finish pair races the read. An existing blocked message waits and reloads its session before continuing. Native `readOnly` is checked synchronously at Yjs apply, and every close latches it permanently before removing the connection. Role refresh and writer recovery cannot clear a principal fence, an owner-loss fence or an independent document lock. The ordinary message path remains memory-only; background command discovery is separate control traffic.
+
+`cli.live-revocation.integration` exercises the separately spawned CLI, global and scoped invalidation, offline owner acquisition, final audit failure rollback, durable result replay, and real MySQL command-row lock resolution on both required engines. Its `auth.command-after-commit:<ms>` fault delays live delivery after an independently visible COMMIT and sends a hostile update while the wire connection remains open: no live or committed state may contain it. This one-shot fault is available only in the existing test fault registry and is inert outside `NODE_ENV=test`. `authz.session-command-fence.unit`, `authz.session-revocations.unit` and `collab.auth-hook.unit` cover overlapping barriers, uncertain outcomes and per-connection read races.
 
 ### 8.4 `CollabGateway`
 
@@ -1106,17 +1130,21 @@ sequenceDiagram
 
   Mgr->>API: DELETE /api/v1/vaults/V/members/B with If-Match
   API->>API: authorize Mgr vault:manage_members on V = allow
+  API->>GW: fence user B and drain already-admitted writer updates
   API->>DB: BEGIN at REPEATABLE READ
+  API->>DB: SELECT generation FROM collab_owner_fence WHERE id=1 FOR SHARE
+  API->>DB: SELECT id FROM users WHERE id=B FOR UPDATE
   API->>DB: SELECT id FROM vaults WHERE id=V AND status='active' FOR UPDATE
   API->>DB: DELETE FROM vault_members WHERE vault_id=V AND user_id=B — assert 1 row, version CAS
   API->>DB: UPDATE users SET authz_version=authz_version+1 WHERE id=B
   API->>DB: audit_chain_heads FOR UPDATE → INSERT audit_events vault.member.removed → UPDATE head
   API->>DB: COMMIT
-  API->>Bus: publish membership.removed userId=B vaultId=V userAuthzVersion=k+1
+  API->>Bus: publishAndWait membership.removed userId=B vaultId=V userAuthzVersion=k+1
   Bus->>Rec: epoch table — user B becomes k+1, membership V/B becomes removed
   Bus->>GW: sweep documents of vault V
   GW->>WS: connection.close code=4403 reason=revoked
   Bus->>GW: TicketStore keeps the session — it is still valid for other vaults
+  API->>GW: release the settled principal fence
   API-->>Mgr: 204 No Content
   WS-->>Cli: onClose code=4403 reason=revoked
   Cli->>Cli: NoteSession destroyed; "Access to this vault was removed"; tabs closed; no reconnect
@@ -1126,7 +1154,7 @@ sequenceDiagram
 
 ### 8.6 The epoch check and `EpochReconciler` (closing the commit-to-sweep race)
 
-There is a window — microseconds, but real — between COMMIT and the gateway's `close()`. A Yjs update that arrives inside it must not be persisted. `beforeHandleMessage` closes that window without a query per message.
+There is a window — microseconds, but real — between COMMIT and the gateway's `close()`. A Yjs update that arrives inside it must not be persisted. The pre-COMMIT principal fence and writer drain close that window, including queued updates; `beforeHandleMessage` and the native apply latch enforce it without a query per ordinary message.
 
 `apps/server/src/authz/epochs.ts` holds the in-process epoch table:
 
@@ -1150,9 +1178,11 @@ class EpochTable {
 
 ```
 beforeHandleMessage({documentName, connection, context, update}):
+  if principalFence.blocked(context.userId)
+       await its settled outcome; reload this connection's session; reject if revoked
   if gateway.isClosing(context.noteId)                → throw 'note-closing'          (4404)
   if epochTable.isStale(context):
-        d = await reauthorizeConnection(connection, context)      // the ONLY DB access in this hook
+        d = await reauthorizeConnection(connection, context)      // exceptional stale-epoch path
         if d === 'closed'                             → throw 'revoked'               (4403)
         // d === 'updated' → context epoch refreshed, readOnly possibly flipped, continue
   if update.byteLength > 1 MiB                        → throw 'too-large'             (1009)
@@ -1160,7 +1190,9 @@ beforeHandleMessage({documentName, connection, context, update}):
   → proceed (Hocuspocus enforces connection.readOnly for sync messages)
 ```
 
-`reauthorizeConnection()` repeats steps 4–6 of `authorize()` from the database, updates `connection.readOnly`, writes the re-read `{userAuthzVersion, memberVersion}` **both** into the epoch table (`user()` + `member()`) and onto `connection.context.authzEpoch`, sends `{t:'role', role}` if the role changed, and returns `'closed'` when the user is no longer allowed to read. Writing both sides is what makes the fail-safe path converge: after one re-authorization the connection and the table agree again, so the next message performs no I/O. It costs two point lookups and runs only on a genuine epoch mismatch — in steady state the hook performs no I/O at all. `collab.live-revocation.integration` includes a fault (`auth.slow:<ms>`) that delays the gateway sweep and asserts that an update sent in the gap is rejected by the epoch path and leaves no `note_updates` row.
+Database availability is an operational failure, never proof that a credential or note disappeared. Initial authentication, token synchronization, a resumed principal-fence wait and a stale-epoch reread map the shared native database-unavailable classification and explicit missing-store errors to `unavailable` (4503). The failed operation applies no update and seeds no successful authorization result. Actual missing, expired, revoked or forbidden identities retain their documented denial reasons; uncertain-COMMIT reconciliation instead propagates failed reads and keeps its principal fence until each connection can be checked. `collab.auth-hook.unit` covers these distinct boundaries.
+
+`reauthorizeConnection()` repeats steps 4–6 of `authorize()` from the database, updates `connection.readOnly`, writes the re-read `{userAuthzVersion, memberVersion}` **both** into the epoch table (`user()` + `member()`) and onto `connection.context.authzEpoch`, sends `{t:'role', role}` if the role changed, and returns `'closed'` when the user is no longer allowed to read. Writing both sides is what makes the fail-safe path converge: after one re-authorization the connection and the table agree again, so the next message performs no I/O. It costs two point lookups and runs only on a genuine epoch mismatch — in steady state the hook performs no I/O at all. `auth.slow:<ms>` delays initial authentication for the CH-14 race. The separate `auth.command-after-commit:<ms>` fault delays command fan-out; `cli.live-revocation.integration` proves that the principal fence rejects an update in that post-COMMIT interval and leaves no `note_updates` row.
 
 `isStale()` returns true when the connection's tuple differs from the table in either component, or when the membership entry is `'removed'`, or when there is **no** entry for that user. A missing entry means the table and the connection disagree — a bookkeeping bug, or a future multi-process/`RedisAuthzBus` deployment where the table was not the one that authenticated this socket — so re-validating **and re-seeding** (the `reauthorizeConnection()` write above) is the fail-safe answer, and it is self-limiting: one message pays two lookups, the rest pay nothing. In the single-process MVP (F9) a restart drops every socket, so no live connection outlives the table, and every connection re-authenticates — which re-seeds it.
 
@@ -1173,6 +1205,7 @@ Per connection, a timer set at `afterLoadDocument` fires every 15 min ± 3 min a
 | Fresh ticket, still authorized | epoch re-seeded in the table and on the context, `readOnly` re-derived, connection continues |
 | Fresh ticket, role changed since | `readOnly` flipped + `{t:'role'}` sent; no reconnect |
 | Fresh ticket, session idle- or absolute-expired | close 4401 `unauthorized` (the client fetches fresh tickets and retries once, then shows sign-in) |
+| Storage acquisition, connection or query deadline fails during authentication, token refresh or epoch/session reread | close/refuse 4503 `unavailable`; retain the local document and retry with backoff, without treating the session as invalid |
 | Fresh ticket, membership gone / user disabled / session revoked | close 4403 `revoked` |
 | Ticket unknown, expired or already used | close 4401 `unauthorized` |
 | No answer within the 5 min grace | close 4401 `unauthorized` (09-api-reference.md §3.6 lists the elapsed grace under `unauthorized`; the client reconnects if it is actually alive) |
@@ -1187,7 +1220,7 @@ This is the backstop that makes the design safe under a lossy bus: even if every
 | REST (next request) | Denied on the first request issued after COMMIT. No cache, no TTL, no grace. | `authz.revocation-rest.integration` |
 | MCP (next call) | Denied on the first `tools/call` after COMMIT, including a call already in flight when it re-enters `ContentReadCore` for a second vault. | `mcp.revocation.mcp` |
 | MCP over `/mcp/connect` (next call) | Denied on the first call after COMMIT for a revoked token, consent or client, and the next refresh is refused. | `oauth.revocation.mcp` |
-| WebSocket write from a revoked principal | Impossible after COMMIT: either the connection is already closed, or `beforeHandleMessage` sees the new epoch. | `collab.live-revocation.integration` (with the sweep artificially delayed) |
+| WebSocket write from a revoked principal | Impossible after COMMIT: previously admitted writes drained before it, and the principal fence/native apply latch blocks later writes until confirmed delivery or authoritative reconciliation. | `collab.live-revocation.integration`, `collab.revocation-race.chaos`, `cli.live-revocation.integration` (with command delivery artificially delayed) |
 | WebSocket connection closure | Test budget **≤ 1 s** from COMMIT; measured p99 in-process is single-digit milliseconds. The budget is deliberately loose so the test is not flaky on CI. | `collab.live-revocation.integration` asserts `onClose` within 1 s |
 | Refused reconnect | The next `onAuthenticate` denies; the client does not retry after `revoked` (A20 close-reason handling). | same test |
 | Silent stale connection (bus failure) | ≤ 23 min (15 + 3 jitter + 5 grace); no writes possible in that window. | `collab.token-sync.integration` with the bus subscriber detached |
@@ -1590,7 +1623,7 @@ Decisions the skeleton does not cover, made here, used consistently above, and o
 | D04-11 | **`accessibleVaultIds(principal, {permission, surface})`** is the only way a cross-vault query obtains its ACL, and the role filter is derived from the matrix rather than hard-coded as `IN ('viewer','editor','manager')`. | Keeps the matrix the single source of truth and keeps the ACL inside the SQL plan, so no result is ever post-filtered. |
 | D04-12 | **`allowArchived` route flag**, permitted only on the two routes of `ALLOW_ARCHIVED_ROUTES` (`POST /vaults/:vaultId/unarchive`, `GET /vaults/:vaultId/audit`) — the escape hatch and the one read whose permission is outside `READ_BUNDLE` — is the single exception to the archived-vault write freeze, and the boot assertion both enumerates its users and rejects it on any route whose permission is already in `READ_BUNDLE`. | Unarchiving must be possible without weakening the freeze for anything else, including server administrators; a no-op flag on a read route would suggest the freeze had been lifted where it had not. |
 | D04-13 | **The in-process epoch table holds entries only for users with live `/collab` connections**; it is seeded at `onAuthenticate`/`onTokenSync` from the rows those hooks already read, updated by `EpochReconciler` from the `AuthzBus` payload (which therefore carries post-commit version numbers), re-seeded by `reauthorizeConnection()` on the fail-safe path, refcounted per user (`retain`/`release`, private `forget()` at zero), and treats a missing entry for a live connection as stale. | Bounds memory by the connection cap rather than the user count, keeps `beforeHandleMessage` I/O-free in steady state (an unseeded entry would make every inbound message re-authorize), and fails safe when table and connection disagree. |
-| D04-14 | **`AuthzBus` fan-out is synchronous and after COMMIT**, with per-subscriber `try/catch`, a dedicated error metric, and a fixed subscriber order (`EpochReconciler` → `CollabGateway` → `TicketStore` → telemetry). | Guarantees the epoch is current before the sweep runs, and prevents one failing subscriber from failing the mutation or silently disabling revocation. |
+| D04-14 | **`AuthzBus` invocation is synchronous and after COMMIT**, with awaitable completion, isolated subscriber failures and fixed order (`EpochReconciler` → `CollabGateway` → `TicketStore` → telemetry). Owner-executed durable CLI commands and serving REST mutations fence admission and drain accepted writes before COMMIT; uncertain outcomes remain fenced until authoritative resolution. | Preserves immediate post-COMMIT write denial across a separate CLI process, queued writer updates, asynchronous fan-out and lost COMMIT responses without per-message database queries. |
 | D04-15 | **`CollabGateway` keeps its own document→vault index** (maintained in `afterLoadDocument`/`afterUnloadDocument`) so a revocation sweep performs no database query. | A sweep runs inside the request that triggered it; it must be microseconds and must not be able to fail on a database hiccup. |
 | D04-16 | **Bounded failure auditing**: `user.login.failed`, `token.denied`, `collab.connection.rejected`, `mcp.access.denied` and `oauth.authorize.denied` are deduplicated per key per window (60 s for `user.login.failed` and `collab.connection.rejected`; 10 min for `token.denied`, `mcp.access.denied` and `oauth.authorize.denied`, which are keyed by credential or client and are retried indefinitely by a misconfigured agent), always writing the block/lift transitions; `oauth.refresh.reuse_detected` and `oauth.code.replayed` are deliberately exempt from bounding; malformed credentials, CSRF, Origin and rate-limit rejections are never audited, only logged and counted. | Every audit insert locks a chain head; an unauthenticated attacker must not be able to serialise all writers or flood the tamper-evident history. Metrics and pino keep the full volume. |
 | D04-17 | **`user.login.failed` records a salted hash of the submitted address** and names the account in `actor_display` only when it exists. | A typo storm or an enumeration attempt must not fill the permanent audit history with third-party email addresses. |

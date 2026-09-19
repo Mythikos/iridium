@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { SERVER_APP_MODULE } from '../paths.ts';
+import type { BuildAppLimits } from './limits.ts';
 
 export type ServerMode = 'in-process' | 'child' | 'container';
 
@@ -24,11 +25,29 @@ export type ServerMode = 'in-process' | 'child' | 'container';
 export interface TestAppInstance {
   listen(options: { port: number; host: string }): Promise<string>;
   close(): Promise<void>;
+  /**
+   * The ordered shutdown drain the ops plugin decorates (`app.drain()`, ARCH-06). Optional only so
+   * that a double injected through `StartInProcessOptions.buildApp` need not implement it; every
+   * instance `buildApp` returns has one, and `stop()` runs it before `close()`.
+   */
+  drain?(): Promise<void>;
   readonly server: { address(): { port: number } | string | null };
 }
 
-/** The product's own factory (02-system-architecture.md, `apps/server/src/app.ts`). */
-export type BuildApp = (options: { mode: ServerMode }) => Promise<TestAppInstance>;
+/**
+ * The product's own factory (02-system-architecture.md, `apps/server/src/app.ts`).
+ *
+ * `TApp` is what the factory actually returns. It exists because 10-testing-and-quality.md's mode
+ * table gives `in-process` one job the other two modes cannot do — *"gives direct access to
+ * singletons for white-box assertions (`app.collab.gateway`, `app.authzBus`)"* — and a harness that
+ * narrowed the instance to `TestAppInstance` would have thrown that away. A suite in `apps/server`
+ * writes `startServer<FastifyInstance>({ … })` and reads the decorators it declared.
+ */
+export type BuildApp<TApp extends TestAppInstance = TestAppInstance> = (options: {
+  mode: ServerMode;
+  env?: Readonly<Record<string, string | undefined>>;
+  limits?: BuildAppLimits;
+}) => Promise<TApp>;
 
 function describeMissing(reason: string): Error {
   return new Error(
@@ -44,13 +63,15 @@ function describeMissing(reason: string): Error {
  * is missing. Isolated so a missing export never surfaces as `TypeError: buildApp is not a function`
  * three frames inside a `beforeAll`.
  */
-export async function loadBuildApp(): Promise<BuildApp> {
+export async function loadBuildApp<TApp extends TestAppInstance = TestAppInstance>(): Promise<
+  BuildApp<TApp>
+> {
   if (!existsSync(SERVER_APP_MODULE)) {
     return Promise.reject(describeMissing('apps/server/src/app.ts does not exist'));
   }
   // A dynamic import of a computed specifier is untyped, so the module's declared contract is stated
   // here once and checked at runtime below — the "clear error, not a crash" half of the seam.
-  let module: { buildApp?: BuildApp };
+  let module: { buildApp?: BuildApp<TApp> };
   try {
     module = await import(pathToFileURL(SERVER_APP_MODULE).href);
   } catch (error) {
@@ -65,25 +86,33 @@ export async function loadBuildApp(): Promise<BuildApp> {
   return buildApp;
 }
 
-export interface InProcessServer {
-  readonly app: TestAppInstance;
+export interface InProcessServer<TApp extends TestAppInstance = TestAppInstance> {
+  readonly app: TApp;
   readonly port: number;
   close(): Promise<void>;
 }
 
-export interface StartInProcessOptions {
+export interface StartInProcessOptions<TApp extends TestAppInstance = TestAppInstance> {
   /** Inject the factory instead of importing it — used by the harness's own tests. */
-  readonly buildApp?: BuildApp;
+  readonly buildApp?: BuildApp<TApp>;
+  /** Per-instance raw configuration; omitted only when a direct caller chooses ambient defaults. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
   /** The port reserved before boot so `PUBLIC_ORIGIN` can name it (see `harness/free-port.ts`). */
   readonly port?: number;
+  /** The per-boot collaboration overrides; see `BuildAppLimits` in `server/limits.ts`. */
+  readonly limits?: BuildAppLimits;
 }
 
 /** Build and listen on loopback. */
-export async function startInProcessServer(
-  options: StartInProcessOptions = {},
-): Promise<InProcessServer> {
-  const factory = options.buildApp ?? (await loadBuildApp());
-  const app = await factory({ mode: 'in-process' });
+export async function startInProcessServer<TApp extends TestAppInstance = TestAppInstance>(
+  options: StartInProcessOptions<TApp> = {},
+): Promise<InProcessServer<TApp>> {
+  const factory = options.buildApp ?? (await loadBuildApp<TApp>());
+  const app = await factory({
+    mode: 'in-process',
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.limits === undefined ? {} : { limits: options.limits }),
+  });
   await app.listen({ port: options.port ?? 0, host: '127.0.0.1' });
   const address = app.server.address();
   if (address === null || typeof address === 'string') {

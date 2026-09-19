@@ -66,7 +66,14 @@ export interface MarkerSequence {
   readonly issued: number;
 }
 
-/** One sequence per `NoteClient`, so two clients typing the same tag still produce distinct text. */
+/**
+ * A fresh ordinal sequence for one tag, numbered from 1.
+ *
+ * The sequence is per caller, **not** per tag globally: two `NoteClient`s given the same tag both
+ * write `⟦tag:1⟧`, and a duplication bug that copied one of them would then be invisible to
+ * `countMarkers`, which counts every ordinal of a tag. A test that opens two clients therefore gives
+ * each its own tag, which is what makes the count an oracle rather than a coincidence.
+ */
 export function createMarkerSequence(tag: string): MarkerSequence {
   let issued = 0;
   return {

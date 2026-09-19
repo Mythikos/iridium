@@ -2,7 +2,7 @@
  * `startServer({ mode: 'child' })` — the only mode that can prove HP-1 and HP-2, because it is the
  * only one that can be `SIGKILL`ed mid-transaction (10-testing-and-quality.md, the mode table).
  *
- * It spawns the shipped binary — `node apps/server/dist/main.mjs serve` with `NODE_ENV=test` — and
+ * It spawns the shipped binary — `node apps/server/dist/main.mjs serve --child` with `NODE_ENV=test` — and
  * reads the `{"listening":<port>}` line ARCH-01 requires the child to print on stdout. Nothing about
  * the boot path differs from production except the environment, which is the point.
  */
@@ -34,6 +34,17 @@ export interface ChildServer {
   kill(signal: NodeJS.Signals): Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 }
 
+class ChildServerStartupError extends Error {
+  constructor(cause: unknown, stdout: readonly string[], stderr: readonly string[]) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `@iridium/testkit: the child server failed to start: ${reason}\nstdout:\n${stdout.join('\n')}\nstderr:\n${stderr.join('\n')}`,
+      { cause },
+    );
+    this.name = 'ChildServerStartupError';
+  }
+}
+
 const LISTENING = /\{"listening":\s*(\d+)\}/;
 
 /** ARCH-01: the `child` mode reports its ephemeral port on stdout as `{"listening":<port>}`. */
@@ -57,7 +68,7 @@ function ambientEnv(): Record<string, string> {
 export async function startChildServer(options: ChildServerOptions): Promise<ChildServer> {
   requireExistingPath(SERVER_DIST_ENTRY, 'the built server binary', SERVER_NOT_BUILT_HINT);
 
-  const child: PipedChild = spawn(process.execPath, [SERVER_DIST_ENTRY, 'serve'], {
+  const child: PipedChild = spawn(process.execPath, [SERVER_DIST_ENTRY, 'serve', '--child'], {
     env: options.inheritEnv === false ? { ...options.env } : { ...ambientEnv(), ...options.env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -66,6 +77,8 @@ export async function startChildServer(options: ChildServerOptions): Promise<Chi
   const stderr: string[] = [];
   const listening = createDeferred<number>();
   const exited = createDeferred<{ code: number | null; signal: NodeJS.Signals | null }>();
+  // An error can reject `exited` before stdio closes. Startup cleanup still owns that lifetime.
+  const closed = createDeferred<void>();
 
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
@@ -111,6 +124,7 @@ export async function startChildServer(options: ChildServerOptions): Promise<Chi
       ),
     );
     exited.resolve({ code, signal });
+    closed.resolve(undefined);
   });
 
   // A spawn error rejects `exited` too; keep a handler on it so a failure never surfaces as an
@@ -120,6 +134,13 @@ export async function startChildServer(options: ChildServerOptions): Promise<Chi
   const port = await withDeadline(listening.promise, {
     timeoutMs: options.listenTimeoutMs ?? 60_000,
     description: 'the child server to print {"listening":<port>} on stdout (ARCH-01)',
+  }).catch(async (cause: unknown): Promise<never> => {
+    if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+    // `close` also follows a failed spawn and captures the final, possibly unterminated output.
+    await closed.promise;
+    throw new ChildServerStartupError(cause, stdout, stderr);
   });
 
   return {

@@ -18,6 +18,14 @@ on:
   push:
     branches: [main]
   pull_request: {}
+  workflow_dispatch:
+    inputs:
+      milestone_exit:
+        description: Rehearse a milestone exit and archive its upgrade fixture.
+        type: choice
+        required: true
+        default: none
+        options: [none, M1]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -28,6 +36,7 @@ permissions:
 
 env:
   TURBO_TELEMETRY_DISABLED: '1'
+  UV_THREADPOOL_SIZE: '8'
   DO_NOT_TRACK: '1'
   # No IRIDIUM_MYSQL_IMAGE default here: the matrix sets it per entry, and an unset
   # selector inside the harness resolves to the floor (mysql:8.4.11).
@@ -199,8 +208,8 @@ jobs:
         mysql: ['mysql:8.4.11', 'mysql:9.7.2-oraclelinux9']
     env:
       IRIDIUM_MYSQL_IMAGE: ${{ matrix.mysql }}
-      # PR budget for the MySQL-backed models: 20 × 60 (nightly `property-long` raises it).
-      IRIDIUM_PROP_DB_RUNS: '20'
+      # PR budget for the MySQL-backed models: 200 × 60 (nightly `property-long` raises it).
+      IRIDIUM_PROP_DB_RUNS: '200'
       IRIDIUM_PROP_DB_COMMANDS: '60'
       IRIDIUM_PROP_SIZE: '='
     steps:
@@ -221,17 +230,22 @@ jobs:
       - name: Build the server image
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .
 
+      # M0's docker-image gate includes a real production boot, not only a successful build.
+      # The runner owns an isolated Compose project and always removes its containers and volumes.
+      - name: Server image runtime smoke
+        run: node infra/docker/runtime-smoke.ts iridium-server:ci
+
       # This step carries the three remaining steps of the lane's row in
       # 10-testing-and-quality.md, because each needs the ephemeral port and the minted
       # credential that `@iridium/testkit` owns rather than a fixed port the workflow could
       # know. The spec that owns each one invokes it:
       #
-      #   Schemathesis light (against the container-mode server) —
-      #     schemathesis run http://127.0.0.1:<port>/openapi.json --checks all
-      #       --stateful=links --max-examples=50
-      #       --header "Authorization: Bearer $IRIDIUM_TEST_FUZZ_TOKEN"
-      #       --header "X-Iridium-Client: web"
-      #       --exclude-path-regex '^/(admin|__test__)' --report junit
+      #   Schemathesis light: schemathesis.light.contract provisions its own production image,
+      #     fresh MySQL and a non-admin editor, then runs the pinned image with all checks,
+      #     examples/coverage/fuzzing/stateful phases and fifty examples per shipped operation.
+      #     M1 covers its routes; M2 extends the same gate. Only schema export uses the admin.
+      #     It excludes admin/test-only routes, preserves origin-root operation paths and
+      #     writes sanitized JUnit and diagnostic reports before destroying the deployment.
       #   MCP conformance, active suite —
       #     npx @modelcontextprotocol/conformance server --url http://127.0.0.1:<port>/mcp
       #       --suite active --requirements 2026-07-28
@@ -244,12 +258,26 @@ jobs:
       # the DB-backed property project is the one that needs the MySQL global setup this
       # lane already provides; it adds no job name.
       - name: Integration, contract, mcp and property projects
+        env:
+          # Only an explicit exit rehearsal rewrites the fixture, and its source is always 8.4.
+          # db-grants.integration writes it after restoring the unmodified backup-role dump.
+          IRIDIUM_FIXTURE_WRITE_UPGRADE: ${{ github.event_name == 'workflow_dispatch' && inputs.milestone_exit == 'M1' && matrix.mysql == 'mysql:8.4.11' && '1' || '0' }}
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project integration --project contract --project mcp --project property
           --reporter=default --reporter=blob
           --coverage
           --outputFile.blob=.vitest-reports/integration-${{ steps.image.outputs.slug }}.json
+
+      - name: Upload the M1 upgrade fixture
+        if: github.event_name == 'workflow_dispatch' && inputs.milestone_exit == 'M1' && matrix.mysql == 'mysql:8.4.11'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-fixture-v0.1.0
+          path: apps/server/test/fixtures/upgrade/v0.1.0/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Upload blob report
         if: always()
@@ -296,6 +324,10 @@ jobs:
 
       - name: Build the server
         run: pnpm turbo run build --filter=@iridium/server
+
+      # Graceful shutdown exercises the shipped Linux signal handler in container mode.
+      - name: Build the server image
+        run: docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .
 
       - name: Chaos project
         run: >-
@@ -473,7 +505,9 @@ jobs:
   mutation-scoped:
     needs: static
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Cache misses and milestone exits run the full mutation scope, as the nightly lane does.
+    # Allow setup, build and slower runners to finish a full fresh mutation run.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -484,8 +518,15 @@ jobs:
       # agree so this copy cannot drift.
       - name: Detect changes inside the mutate scope
         id: scope
+        env:
+          MILESTONE_EXIT: ${{ inputs.milestone_exit }}
         run: |
           set -euo pipefail
+          if [ "$MILESTONE_EXIT" = 'M1' ]; then
+            echo 'A milestone exit requires the full mutation scope.'
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "${{ github.event_name }}" = 'pull_request' ]; then
             base='${{ github.event.pull_request.base.sha }}'
           else
@@ -557,6 +598,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-workspace
+
+      # This is a fresh runner: guards import workspace exports and inspect the web/desktop
+      # bundles, while coverage remaps instrumented package exports through their sourcemaps.
+      - name: Build the report and guard inputs
+        run: pnpm turbo run build
 
       - name: Download the Vitest blob reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

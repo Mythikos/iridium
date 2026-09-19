@@ -22,6 +22,14 @@ export const TEST_SECRETS: Readonly<Record<string, string>> = {
   MCP_CURSOR_KEY: 'test-cursor-not-a-secret',
 };
 
+/** Passwords supplied by a fixture, including random material for production-mode tests. */
+export interface DatabasePasswords {
+  readonly root: string;
+  readonly app: string;
+  readonly migrator: string;
+  readonly backup: string;
+}
+
 /** MySQL role passwords for the container. Fake by construction, for the same reason. */
 export const TEST_DB_PASSWORDS = {
   root: 'test-root-not-a-secret',
@@ -47,6 +55,7 @@ export interface ServerEnvOptions {
   readonly port: number;
   /** The schema this process reads and writes. */
   readonly schema: string;
+  readonly passwords?: DatabasePasswords;
   /** `http://127.0.0.1:<port>`; also the `/collab` Origin allowlist entry. */
   readonly publicOrigin: string;
   /** `IRIDIUM_FAULT`, already rendered by `formatFaultEnv`. Omitted when empty. */
@@ -66,10 +75,10 @@ export interface ServerEnvOptions {
 /** `mysql://<role>:<password>@<host>:<port>/<schema>`. */
 export function databaseUrl(
   role: 'app' | 'migrator' | 'backup',
-  o: { host: string; port: number; schema: string },
+  o: { host: string; port: number; schema: string; passwords?: DatabasePasswords },
 ): string {
   const user = `iridium_${role}`;
-  const password = TEST_DB_PASSWORDS[role];
+  const password = (o.passwords ?? TEST_DB_PASSWORDS)[role];
   return `mysql://${user}:${encodeURIComponent(password)}@${o.host}:${String(o.port)}/${o.schema}`;
 }
 
@@ -79,7 +88,8 @@ export function databaseUrl(
  * project needs a process it can `SIGKILL` mid-transaction (10-testing-and-quality.md, mode table).
  */
 export function buildServerEnv(o: ServerEnvOptions): Record<string, string> {
-  const coordinates = { host: o.host, port: o.port, schema: o.schema };
+  const passwords = o.passwords ?? TEST_DB_PASSWORDS;
+  const coordinates = { host: o.host, port: o.port, schema: o.schema, passwords };
   const env: Record<string, string> = {
     NODE_ENV: 'test',
     BIND_ADDRESS: '127.0.0.1',
@@ -88,11 +98,11 @@ export function buildServerEnv(o: ServerEnvOptions): Record<string, string> {
     LOG_LEVEL: 'warn',
     LOG_FORMAT: 'json',
     DATABASE_URL: databaseUrl('app', coordinates),
-    DATABASE_PASSWORD: TEST_DB_PASSWORDS.app,
+    DATABASE_PASSWORD: passwords.app,
     DATABASE_MIGRATE_URL: databaseUrl('migrator', coordinates),
-    DATABASE_MIGRATE_PASSWORD: TEST_DB_PASSWORDS.migrator,
+    DATABASE_MIGRATE_PASSWORD: passwords.migrator,
     DATABASE_BACKUP_URL: databaseUrl('backup', coordinates),
-    DATABASE_BACKUP_PASSWORD: TEST_DB_PASSWORDS.backup,
+    DATABASE_BACKUP_PASSWORD: passwords.backup,
     ...TEST_SECRETS,
   };
 

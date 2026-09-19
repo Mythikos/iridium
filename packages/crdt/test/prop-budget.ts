@@ -51,5 +51,5 @@ export const PROP = {
   size: (env['IRIDIUM_PROP_SIZE'] ?? '=') as SizeForArbitrary,
   verbose: VerbosityLevel.Verbose,
   markInterruptAsFailure: true,
-  interruptAfterTimeLimit: 60_000,
+  interruptAfterTimeLimit: Number(env['IRIDIUM_PROP_INTERRUPT_MS'] ?? 60_000),
 };

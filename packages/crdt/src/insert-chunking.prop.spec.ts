@@ -24,7 +24,6 @@ import { createNoteDoc, getContent, projectMarkdown } from './doc.ts';
 import { CrdtError } from './errors.ts';
 import { insertChunked } from './insert-chunked.ts';
 import { scanHostileContent } from './scan.ts';
-import { isHighSurrogate, isLowSurrogate, utf8ByteLength } from './unicode.ts';
 
 const ORIGIN = { source: 'test' };
 const CHUNK_CAP = LIMITS.INSERT_CHUNK_MAX_BYTES;
@@ -46,7 +45,7 @@ const paste = fc
 
 function grow(units: readonly string[], targetBytes: number): string {
   const cycle = units.join('');
-  const cycleBytes = utf8ByteLength(cycle);
+  const cycleBytes = oracleUtf8Bytes(cycle);
   const pieces: string[] = [];
   let bytes = 0;
   while (bytes + cycleBytes <= targetBytes) {
@@ -56,7 +55,7 @@ function grow(units: readonly string[], targetBytes: number): string {
   for (const unit of units) {
     if (bytes >= targetBytes) break;
     pieces.push(unit);
-    bytes += utf8ByteLength(unit);
+    bytes += oracleUtf8Bytes(unit);
   }
   return pieces.join('');
 }
@@ -80,104 +79,172 @@ function captureChunks(text: Y.Text): string[] {
 /** The UTF-8 width of the code point a chunk starts with: what had to fit for the seam to move. */
 function firstCodePointBytes(text: string): number {
   const point = text.codePointAt(0);
-  return point === undefined ? 0 : utf8ByteLength(String.fromCodePoint(point));
+  return point === undefined ? 0 : oracleUtf8Bytes(String.fromCodePoint(point));
 }
 
-/** Code points, counted without splitting a pair — the unit a chunk boundary must respect. */
-function codePointCount(text: string): number {
-  let count = 0;
-  for (let index = 0; index < text.length; index++) {
-    if (isHighSurrogate(text.charCodeAt(index)) && isLowSurrogate(text.charCodeAt(index + 1))) {
-      index++;
-    }
-    count++;
+/** An independent oracle: production's Unicode helpers are themselves mutation targets. */
+function oracleUtf8Bytes(text: string): number {
+  let bytes = 0;
+  for (const character of text) {
+    const point = character.codePointAt(0) ?? 0;
+    bytes += point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
   }
-  return count;
+  return bytes;
+}
+
+/** JavaScript iteration counts code points without calling the implementation under test. */
+function codePointCount(text: string): number {
+  return Array.from(text).length;
 }
 
 describe('crdt.insert-chunking.prop [area:contracts]', () => {
   it.prop([paste], PROP)('emits no update above the single-update cap', (text) => {
     const doc = createNoteDoc();
-    const sizes: number[] = [];
-    doc.on('update', (update: Uint8Array) => {
-      sizes.push(update.byteLength);
-    });
+    try {
+      const sizes: number[] = [];
+      doc.on('update', (update: Uint8Array) => {
+        sizes.push(update.byteLength);
+      });
 
-    insertChunked(getContent(doc), 0, text, ORIGIN);
+      insertChunked(getContent(doc), 0, text, ORIGIN);
 
-    expect(Math.max(0, ...sizes)).toBeLessThanOrEqual(LIMITS.YJS_UPDATE_MAX_BYTES);
+      expect(Math.max(0, ...sizes)).toBeLessThanOrEqual(LIMITS.YJS_UPDATE_MAX_BYTES);
+    } finally {
+      doc.destroy();
+    }
   });
 
   it.prop([paste], PROP)('inserts exactly the input, chunked at code-point boundaries', (text) => {
     const doc = createNoteDoc();
-    const content = getContent(doc);
-    const chunks = captureChunks(content);
+    try {
+      const content = getContent(doc);
+      const chunks = captureChunks(content);
 
-    insertChunked(content, 0, text, ORIGIN);
+      insertChunked(content, 0, text, ORIGIN);
 
-    expect(chunks.join('')).toBe(text);
-    expect(projectMarkdown(doc)).toBe(text);
-    expect(scanHostileContent(doc)).toStrictEqual({ ok: true });
+      expect(chunks.join('')).toBe(text);
+      expect(projectMarkdown(doc)).toBe(text);
+      expect(scanHostileContent(doc)).toStrictEqual({ ok: true });
+    } finally {
+      doc.destroy();
+    }
   });
 
   it.prop([paste], PROP)('never splits a surrogate pair and never fragments needlessly', (text) => {
     const doc = createNoteDoc();
-    const content = getContent(doc);
-    const chunks = captureChunks(content);
+    try {
+      const content = getContent(doc);
+      const chunks = captureChunks(content);
 
-    insertChunked(content, 0, text, ORIGIN);
+      insertChunked(content, 0, text, ORIGIN);
 
-    for (const chunk of chunks) {
-      expect(utf8ByteLength(chunk)).toBeLessThanOrEqual(CHUNK_CAP);
+      for (const chunk of chunks) {
+        expect(oracleUtf8Bytes(chunk)).toBeLessThanOrEqual(CHUNK_CAP);
+      }
+      // A chunk that is not the last one is closed only because the next code point would not fit.
+      const seams = chunks.slice(1).map((next, index) => ({ chunk: chunks[index] ?? '', next }));
+      for (const { chunk, next } of seams) {
+        expect(oracleUtf8Bytes(chunk) + firstCodePointBytes(next)).toBeGreaterThan(CHUNK_CAP);
+      }
+      // Every chunk is whole code points: a seam inside a pair would count two where the joined text
+      // counts one, so the sums can only agree when no boundary split a surrogate pair.
+      expect(codePointCount(chunks.join(''))).toBe(
+        chunks.reduce((sum, chunk) => sum + codePointCount(chunk), 0),
+      );
+    } finally {
+      doc.destroy();
     }
-    // A chunk that is not the last one is closed only because the next code point would not fit.
-    const seams = chunks.slice(1).map((next, index) => ({ chunk: chunks[index] ?? '', next }));
-    for (const { chunk, next } of seams) {
-      expect(utf8ByteLength(chunk) + firstCodePointBytes(next)).toBeGreaterThan(CHUNK_CAP);
-    }
-    // Every chunk is whole code points: a seam inside a pair would count two where the joined text
-    // counts one, so the sums can only agree when no boundary split a surrogate pair.
-    expect(codePointCount(chunks.join(''))).toBe(
-      chunks.reduce((sum, chunk) => sum + codePointCount(chunk), 0),
-    );
   });
 
   it.prop([paste, fc.nat()], PROP)(
     'inserts at an interior index without disturbing its neighbours',
     (text, at) => {
       const doc = createNoteDoc();
-      const content = getContent(doc);
-      const before = 'head\n';
-      const after = '\ntail';
-      doc.transact(() => {
-        content.insert(0, before + after);
-      }, ORIGIN);
-      const index = at % (before.length + 1);
+      try {
+        const content = getContent(doc);
+        const before = 'head\n';
+        const after = '\ntail';
+        doc.transact(() => {
+          content.insert(0, before + after);
+        }, ORIGIN);
+        const index = at % (before.length + 1);
 
-      insertChunked(content, index, text, ORIGIN);
+        insertChunked(content, index, text, ORIGIN);
 
-      const original = before + after;
-      expect(projectMarkdown(doc)).toBe(original.slice(0, index) + text + original.slice(index));
+        const original = before + after;
+        expect(projectMarkdown(doc)).toBe(original.slice(0, index) + text + original.slice(index));
+      } finally {
+        doc.destroy();
+      }
     },
   );
 
+  it('refuses nested chunking before changing content or inheriting the outer origin', () => {
+    const doc = createNoteDoc();
+    const updates: Uint8Array[] = [];
+    doc.on('update', (update: Uint8Array) => updates.push(update));
+    try {
+      expect(() =>
+        doc.transact(
+          () => insertChunked(getContent(doc), 0, 'x'.repeat(CHUNK_CAP + 1), ORIGIN),
+          'outer',
+        ),
+      ).toThrow(expect.objectContaining({ code: 'nested-transaction' }));
+      expect(projectMarkdown(doc)).toBe('');
+      expect(updates).toEqual([]);
+    } finally {
+      doc.destroy();
+    }
+  });
+
+  it('rechecks ownership before each chunk and leaves only the already emitted prefix on failure', () => {
+    const doc = createNoteDoc();
+    const updates: Array<{ bytes: number; origin: unknown }> = [];
+    doc.on('update', (update: Uint8Array, origin: unknown) =>
+      updates.push({ bytes: update.byteLength, origin }),
+    );
+    let checks = 0;
+    try {
+      expect(() =>
+        insertChunked(getContent(doc), 0, 'x'.repeat(CHUNK_CAP * 2), ORIGIN, () => {
+          checks += 1;
+          if (checks === 2) throw new Error('owner lost');
+        }),
+      ).toThrow('owner lost');
+      expect(checks).toBe(2);
+      expect(projectMarkdown(doc)).toBe('x'.repeat(CHUNK_CAP));
+      expect(updates).toEqual([{ bytes: expect.any(Number), origin: ORIGIN }]);
+      expect(updates[0]?.bytes).toBeLessThanOrEqual(LIMITS.YJS_UPDATE_MAX_BYTES);
+    } finally {
+      doc.destroy();
+    }
+  });
+
   it('inserts nothing and opens no transaction for an empty string', () => {
     const doc = createNoteDoc();
-    let transactions = 0;
-    doc.on('update', () => {
-      transactions++;
-    });
+    try {
+      let transactions = 0;
+      doc.on('update', () => {
+        transactions++;
+      });
 
-    insertChunked(getContent(doc), 0, '', ORIGIN);
+      insertChunked(getContent(doc), 0, '', ORIGIN);
 
-    expect(transactions).toBe(0);
-    expect(projectMarkdown(doc)).toBe('');
+      expect(transactions).toBe(0);
+      expect(projectMarkdown(doc)).toBe('');
+    } finally {
+      doc.destroy();
+    }
   });
 
   it('refuses a Y.Text that is not integrated into a document', () => {
     const doc = createNoteDoc();
-    const detached = getContent(doc).clone();
+    try {
+      const detached = getContent(doc).clone();
 
-    expect(() => insertChunked(detached, 0, 'text', ORIGIN)).toThrow(CrdtError);
+      expect(() => insertChunked(detached, 0, 'text', ORIGIN)).toThrow(CrdtError);
+    } finally {
+      doc.destroy();
+    }
   });
 });

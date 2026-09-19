@@ -29,7 +29,10 @@
  * beside each row for the same reason -- but no migration issues it, because the schema-level grant
  * already covers it.
  */
+import { createHash } from 'node:crypto';
+
 import { sql, type Kysely } from 'kysely';
+import { z } from 'zod';
 
 import { currentSchema } from './migration-helpers.ts';
 import type { DbLogger } from './version-floor.ts';
@@ -69,6 +72,11 @@ export const GRANT_MATRIX: readonly GrantRow[] = Object.freeze([
   dml('user_credentials'),
   dml('password_setup_tokens'),
   dml('sessions'),
+  {
+    table: 'session_revocation_commands',
+    app: [p('SELECT'), p('INSERT'), p('UPDATE', ['result', 'delivered_at'])],
+    backup: BACKUP_TABLE,
+  },
   dml('login_throttle'),
   dml('access_tokens'),
   dml('access_token_vaults'),
@@ -82,6 +90,11 @@ export const GRANT_MATRIX: readonly GrantRow[] = Object.freeze([
   dml('nodes'),
   dml('trash_entries'),
   dml('notes'),
+  {
+    table: 'collab_owner_fence',
+    app: [p('SELECT'), p('UPDATE', ['generation'])],
+    backup: BACKUP_TABLE,
+  },
   dml('note_docs'),
   dml('note_projections'),
   dml('note_search'),
@@ -174,9 +187,34 @@ export const GLOBAL_GRANTS: Readonly<Record<'app' | 'backup', readonly string[]>
   ]),
 });
 
+/**
+ * The canonical dump options whose privilege requirements the M1 shipped-client compatibility gate
+ * verifies against both supported MySQL lines (OPS-26). The M7 backup CLI consumes this same contract
+ * when that command lands; today the reader is `db-grants.integration`.
+ *
+ * @internal
+ */
+export const MYSQLDUMP_ARGV: readonly string[] = Object.freeze([
+  '--single-transaction',
+  '--hex-blob',
+  '--max-allowed-packet=1G',
+  '--routines',
+  '--events',
+  '--skip-triggers',
+  '--set-gtid-purged=OFF',
+  '--source-data=2',
+  '--default-character-set=utf8mb4',
+  '--databases',
+  'iridium',
+]);
 /** The tables migration `0034_grants` covers: everything that exists when it runs. */
 export const GRANTS_0034_TABLES: readonly string[] = Object.freeze(
-  GRANT_MATRIX.map((row) => row.table).filter((table) => !table.startsWith('oauth_')),
+  GRANT_MATRIX.map((row) => row.table).filter(
+    (table) =>
+      !table.startsWith('oauth_') &&
+      table !== 'session_revocation_commands' &&
+      table !== 'collab_owner_fence',
+  ),
 );
 
 function quoteIdentifier(name: string): string {
@@ -216,6 +254,79 @@ export type GrantApplication =
       readonly missing: readonly string[];
     };
 
+const GRANT_PROVENANCE = z.discriminatedUnion('applied', [
+  z.object({ applied: z.literal(true), fingerprint: z.string() }),
+  z.object({
+    applied: z.literal(false),
+    fingerprint: z.string(),
+    skipped: z.enum(['no_grant_option', 'missing_accounts']),
+  }),
+]);
+
+function provenanceKey(row: GrantRow): string {
+  // The longest matrix table name plus this prefix fits schema_meta's VARCHAR(32) key.
+  return `acl.${row.table}`;
+}
+
+function grantFingerprint(row: GrantRow): string {
+  // The schema is deliberately omitted: a copied database keeps the same grant requirements.
+  return createHash('sha256').update(renderGrant('', row)).digest('hex');
+}
+
+async function recordApplication<DB>(
+  db: Kysely<DB>,
+  rows: readonly GrantRow[],
+  result: GrantApplication,
+): Promise<GrantApplication> {
+  if (rows.length === 0) return result;
+  const values = rows.map((row) => {
+    const metadata = result.applied
+      ? { applied: true, fingerprint: grantFingerprint(row) }
+      : { applied: false, skipped: result.skipped, fingerprint: grantFingerprint(row) };
+    return sql`(${provenanceKey(row)}, ${JSON.stringify(metadata)})`;
+  });
+  await sql`
+    INSERT INTO schema_meta (\`key\`, value) VALUES ${sql.join(values)} AS incoming
+    ON DUPLICATE KEY UPDATE value = incoming.value
+  `.execute(db);
+  return result;
+}
+
+/** Durable application evidence, distinct from Kysely's record that a migration completed. */
+export interface GrantProvenanceStatus {
+  readonly unverified: readonly string[];
+  readonly skipped: readonly { readonly table: string; readonly reason: string }[];
+}
+
+/** Reads only canonical table records; missing, malformed or obsolete evidence is never verified. */
+export async function readGrantProvenance<DB>(db: Kysely<DB>): Promise<GrantProvenanceStatus> {
+  const records = await sql<{ key: string; value: string }>`
+    SELECT \`key\`, value FROM schema_meta
+    WHERE \`key\` IN (${sql.join(GRANT_MATRIX.map((row) => provenanceKey(row)))})
+  `.execute(db);
+  const indexed = new Map(records.rows.map((row) => [row.key, row.value]));
+  const unverified: string[] = [];
+  const skipped: { table: string; reason: string }[] = [];
+  for (const row of GRANT_MATRIX) {
+    const serialized = indexed.get(provenanceKey(row));
+    let decoded: unknown = null;
+    if (serialized !== undefined) {
+      try {
+        decoded = JSON.parse(serialized);
+      } catch {
+        // Operator-editable metadata is a boundary: malformed evidence means unverified.
+      }
+    }
+    const parsed = GRANT_PROVENANCE.safeParse(decoded);
+    if (!parsed.success || parsed.data.fingerprint !== grantFingerprint(row)) {
+      unverified.push(row.table);
+    } else if (!parsed.data.applied) {
+      skipped.push({ table: row.table, reason: parsed.data.skipped });
+    }
+  }
+  return { unverified, skipped };
+}
+
 /**
  * MySQL 8's answer to a `GRANT` naming an account that does not exist: `GRANT` stopped creating
  * accounts in 8.0, and the statement fails with `ER_CANT_CREATE_USER_WITH_GRANT` (1410) before it
@@ -249,9 +360,10 @@ export async function hasGrantOption<DB>(db: Kysely<DB>): Promise<boolean> {
  *
  * `GRANT` is idempotent, so a re-run of an interrupted migration is a no-op rather than an error.
  * Two conditions make the migration record itself as applied with a logged warning instead of
- * issuing the statements, and in both the DBA applies the generated `docs/ops/db-grants.sql` once the
- * condition is gone while `/readyz` reports `grants: unverified` until `iridium doctor --db-roles`
- * confirms the effective privileges: the migrating account lacks `GRANT OPTION`, or the roles
+ * issuing the statements. The DBA applies the generated `docs/ops/db-grants.sql` once the condition
+ * is gone. Readiness probes the effective critical privileges and retains `grants: unverified` for
+ * historical skip metadata; a completed schema migration is not proof of grant application.
+ * The migrating account lacks `GRANT OPTION`, or the roles
  * `init/01_roles.sh` creates do not exist yet on this server (a database provisioned without the
  * init script — the CI end-to-end lanes connect as root to a bare service container and are the
  * standing example). Failing the migration instead would make the schema's readiness depend on an
@@ -262,13 +374,14 @@ export async function applyGrants<DB>(
   tables: readonly string[],
   logger?: DbLogger,
 ): Promise<GrantApplication> {
+  const wanted = new Set(tables);
+  const rows = GRANT_MATRIX.filter((row) => wanted.has(row.table));
   if (!(await hasGrantOption(db))) {
     logger?.warn(
       { skipped: 'no_grant_option', tables: tables.length },
-      'grants skipped: the migrating account holds no GRANT OPTION. Apply docs/ops/db-grants.sql as a DBA, ' +
-        'or run `iridium migrate grants --print` to emit the exact statements.',
+      'grants skipped: the migrating account holds no GRANT OPTION. Apply docs/ops/db-grants.sql as a DBA; readiness retains the skipped grant provenance.',
     );
-    return { applied: false, skipped: 'no_grant_option' };
+    return recordApplication(db, rows, { applied: false, skipped: 'no_grant_option' });
   }
 
   const schema = await currentSchema(db);
@@ -282,20 +395,32 @@ export async function applyGrants<DB>(
       // eslint-disable-next-line no-await-in-loop -- see above
       await sql.raw(statement).execute(db);
     } catch (error) {
+      // GRANT OPTION on an unrelated schema is not authority for this schema.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'errno' in error &&
+        (error.errno === 1044 || error.errno === 1142 || error.errno === 1227)
+      ) {
+        logger?.warn(
+          { skipped: 'no_grant_option', tables: tables.length },
+          'grants skipped: the migrating account cannot grant these table privileges; apply docs/ops/db-grants.sql as a DBA.',
+        );
+        return recordApplication(db, rows, { applied: false, skipped: 'no_grant_option' });
+      }
       if (!isMissingAccountError(error)) throw error;
       // Every statement targets the same account, so the first refusal is the whole answer.
       const missing = [`'${DB_ROLES.app.user}'@'${DB_ROLES.app.host}'`];
       logger?.warn(
         { skipped: 'missing_accounts', missing, tables: tables.length },
         'grants skipped: the account they target does not exist on this server. Create the roles with ' +
-          'infra/docker/mysql/init/01_roles.sh (or as a DBA), then apply docs/ops/db-grants.sql or run ' +
-          '`iridium migrate grants`.',
+          'infra/docker/mysql/init/01_roles.sh (or as a DBA), then apply docs/ops/db-grants.sql. Readiness retains the skipped grant provenance.',
       );
-      return { applied: false, skipped: 'missing_accounts', missing };
+      return recordApplication(db, rows, { applied: false, skipped: 'missing_accounts', missing });
     }
   }
   // No `FLUSH PRIVILEGES`: `GRANT` updates the in-memory grant tables itself, and the statement
   // needs `RELOAD`, which the migrator role deliberately does not hold (03-data-model.md section 2).
   // Only `init/01_roles.sh` flushes, and it runs as root.
-  return { applied: true, statements: statements.length };
+  return recordApplication(db, rows, { applied: true, statements: statements.length });
 }

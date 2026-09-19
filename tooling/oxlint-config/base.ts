@@ -73,7 +73,8 @@ export default defineConfig({
         'vitest/expect-expect': 'error',
         'vitest/no-conditional-expect': 'error',
         'vitest/require-to-throw-message': 'error',
-        'vitest/valid-expect': 'error',
+        // Vitest accepts an optional diagnostic message after the actual value.
+        'vitest/valid-expect': ['error', { maxArgs: 2 }],
         // oxlint 1.82 has no `no-restricted-syntax`; the sleep ban is expressed on the global instead.
         'no-restricted-globals': [
           'error',

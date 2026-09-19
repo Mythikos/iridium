@@ -128,3 +128,13 @@ export function milestoneIndex(milestone: string): number {
 export function earlierMilestone(a: string, b: string): string {
   return milestoneIndex(a) <= milestoneIndex(b) ? a : b;
 }
+
+/** Explicit first-delivery annotation in an inventory assertion, never an incidental milestone mention. */
+export function inventoryMilestone(assertion: string): string | undefined {
+  const match = /\*\*(M\d+)(?:\s+exit)?\*\*|\b[Ss]ince\s+(M\d+)\b|^\s*(M\d+)\b/.exec(assertion);
+  const value = match?.[1] ?? match?.[2] ?? match?.[3];
+  if (value !== undefined && !/^M[0-8]$/.test(value)) {
+    throw new Error(`Unsupported inventory milestone: ${value}`);
+  }
+  return value;
+}

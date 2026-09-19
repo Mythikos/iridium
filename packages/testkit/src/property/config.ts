@@ -50,10 +50,32 @@ const SIZES: Record<string, fc.SizeForArbitrary> = {
   max: 'max',
   '=': '=',
   '+1': '+1',
+  '+2': '+2',
   '-1': '-1',
 };
 
 export const PROP_SIZE: fc.SizeForArbitrary = SIZES[process.env['IRIDIUM_PROP_SIZE'] ?? '='] ?? '=';
+
+/**
+ * The budget's own type, declared here rather than borrowed as `fc.Parameters<unknown>`.
+ *
+ * `fc.Parameters<T>` is generic in the tuple the property generates, through exactly two members —
+ * `examples?: T[]` and `reporter?: (details: RunDetails<T>) => void`. A budget annotated
+ * `fc.Parameters<unknown>` therefore cannot be handed to `test.prop([a, b])(…, PROP)`, whose
+ * parameter is `fc.Parameters<[A, B]>`: under `strictFunctionTypes` the reporter is contravariant
+ * and under `exactOptionalPropertyTypes` `unknown[]` is not an `[A, B][]`. Naming only the members
+ * the budget actually sets — none of them generic — makes one `PROP` assignable to every
+ * `fc.Parameters<Ts>`, which is what lets a property file pass it straight through.
+ * `isolatedDeclarations` forbids relying on inference here, so the type is written out.
+ */
+export interface PropertyBudget {
+  /** Present only when `IRIDIUM_PROP_SEED` is set (the mutation lane; spike S5). */
+  readonly seed?: number;
+  readonly verbose: fc.VerbosityLevel;
+  readonly markInterruptAsFailure: boolean;
+  readonly numRuns: number;
+  readonly interruptAfterTimeLimit: number;
+}
 
 const shared = {
   ...seedFrom(process.env['IRIDIUM_PROP_SEED']),
@@ -68,27 +90,28 @@ const shared = {
 } as const;
 
 /** `*.prop.spec.ts` in the `unit` project: pure logic and the in-memory model mirrors. */
-export const PROP: fc.Parameters<unknown> = {
+export const PROP: PropertyBudget = {
   ...shared,
   /** PR 200, nightly 5 000 (`nightly.yml` sets the variable). */
   numRuns: Number(process.env['IRIDIUM_PROP_RUNS'] ?? 200),
-  interruptAfterTimeLimit: 60_000,
+  interruptAfterTimeLimit: Number(process.env['IRIDIUM_PROP_INTERRUPT_MS'] ?? 60_000),
 };
 
 /**
  * The DB-backed budget: fast-check's run parameters plus the command bound that `fc.commands` takes
  * separately (`fc.commands(arbitraries, { maxCommands: PROP_DB.maxCommands })`).
  */
-export interface DbPropertyBudget extends fc.Parameters<unknown> {
+export interface DbPropertyBudget extends PropertyBudget {
   readonly maxCommands: number;
 }
 
 /** `apps/server/test/property/**`: the same models driven against real MySQL. */
 export const PROP_DB: DbPropertyBudget = {
   ...shared,
-  /** PR 20, nightly 200. */
-  numRuns: Number(process.env['IRIDIUM_PROP_DB_RUNS'] ?? 20),
+  /** M1 exit: PR 200, nightly 5 000 (12-milestones.md section 5.4). */
+  numRuns: Number(process.env['IRIDIUM_PROP_DB_RUNS'] ?? 200),
   /** PR 60, nightly 300 — passed to `fc.commands` as `maxCommands`, always bounded and stated. */
   maxCommands: Number(process.env['IRIDIUM_PROP_DB_COMMANDS'] ?? 60),
-  interruptAfterTimeLimit: 600_000,
+  interruptAfterTimeLimit:
+    Number(process.env['IRIDIUM_PROP_DB_RUNS'] ?? 200) > 200 ? 3_600_000 : 600_000,
 };

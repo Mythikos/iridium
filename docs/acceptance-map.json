@@ -17,6 +17,304 @@
     "M7",
     "M8"
   ],
+  "exitCriteria": {
+    "M0": [
+      "deps.single-instance.guard",
+      "authz.route-policy.boot.guard",
+      "config.env.unit",
+      "tokens.format.unit",
+      "tokens.format.prop",
+      "tokens.verify.unit",
+      "authz.matrix.unit",
+      "contracts.ids.unit",
+      "contracts.ids.prop",
+      "contracts.paths.unit",
+      "contracts.paths.prop",
+      "crdt.codec.prop",
+      "crdt.dominates.prop",
+      "crdt.prefix-suffix-diff.prop",
+      "crdt.guards.unit",
+      "migrations.integration",
+      "db.dialect-floor.guard",
+      "migrations.parity.integration",
+      "db.version-floor.integration",
+      "readyz.integration",
+      "desktop.web-preferences.guard",
+      "desktop.launch.e2e",
+      "gen.drift.guard"
+    ],
+    "M1": [
+      "admin.reset-password.integration",
+      "audit.bounded-failures.integration",
+      "audit.vocabulary.unit",
+      "authz.archived-vault.integration",
+      "healthz.integration",
+      "metrics.integration",
+      "notes.initialize.integration",
+      "security.headers.integration",
+      "shutdown.drain.integration",
+      "db.grants-provenance.unit",
+      "db.grants-readiness.unit",
+      "db.session-policy.unit",
+      "db.grants-provenance.integration",
+      "db.lock-timeout.integration",
+      "collab.awareness-windows.unit",
+      "auth.user-agent.unit",
+      "collab.commit-reconcile.integration",
+      "testkit.child-server.unit",
+      "crdt.frame.unit",
+      "projection.text-monotonic.integration",
+      "kernel.smoke.integration",
+      "collab.convergence.integration",
+      "collab.restart-no-duplication.integration",
+      "collab.baseline-on-connect.integration",
+      "collab.owner-lease.unit",
+      "collab.owner-lease.integration",
+      "collab.second-process-refused.chaos",
+      "collab.viewer-enforcement.integration",
+      "collab.live-revocation.integration",
+      "collab.durable-ack.chaos",
+      "collab.graceful-shutdown.chaos",
+      "collab.backpressure.chaos",
+      "collab.admission-budget.integration",
+      "collab.unload-after-veto.integration",
+      "collab.awareness-identity.integration",
+      "collab.limits.integration",
+      "collab.lf-invariant.guard",
+      "collab.content-invalid.chaos",
+      "collab.initial-state-only-path.guard",
+      "collab.no-reinit.guard",
+      "routes.test-namespace-absent.integration",
+      "persistence.model.prop",
+      "convergence.model.prop",
+      "collab.clientid-stable.chaos",
+      "crdt.dominates.prop",
+      "authz.matrix.unit",
+      "token.effective-permissions.prop",
+      "security.csrf.integration",
+      "security.ws-origin.integration",
+      "tickets.batch-and-limits.integration",
+      "audit.chain.integration",
+      "db-grants.integration",
+      "db.auth-plugin.integration",
+      "readyz.integration",
+      "logging-redaction.integration",
+      "setpw-link.integration",
+      "openapi.contract",
+      "openapi.coverage.contract",
+      "schemathesis.light.contract"
+    ],
+    "M2": [
+      "authz.read-core.unit",
+      "links.index.integration",
+      "search-index.contract",
+      "obsidian.detect.unit",
+      "obsidian.basename-resolution.unit",
+      "tree.structural-concurrency.integration",
+      "tree.stale-resurrection.integration",
+      "hierarchy.model.prop",
+      "contracts.paths.unit",
+      "contracts.paths.prop",
+      "tree.invalid-move.integration",
+      "tree.rename-impact.unit",
+      "tree.rename-impact.integration",
+      "vaults.settings.integration",
+      "revisions.restore.integration",
+      "revisions.thinning.integration",
+      "projection.monotonic.integration",
+      "projection.title-after-rename.integration",
+      "content.read-model.integration",
+      "content.etag.integration",
+      "content.fresh-flag.integration",
+      "content.no-ydoc.unit",
+      "content.lines-and-heading.unit",
+      "search.acl.integration",
+      "search.snippets.integration",
+      "search.staleness-hint.integration",
+      "attachments.security.integration",
+      "attachments.unreferenced-report.integration",
+      "authz.rest-viewer.integration",
+      "authz.vault-isolation.integration",
+      "markdown.commonmark.unit",
+      "markdown.golden.unit",
+      "markdown.xss-corpus.unit",
+      "markdown.sanitize.prop",
+      "markdown.pathological.unit",
+      "markdown.frontmatter.prop",
+      "markdown.links.prop",
+      "markdown.no-rewrite.prop",
+      "markdown.search-query.prop",
+      "openapi.contract",
+      "openapi.coverage.contract",
+      "problem-details.contract",
+      "schemathesis.light.contract",
+      "lock-order.integration",
+      "jobs.scheduler.integration",
+      "tree.paths.integration",
+      "collab.vault-channel.integration"
+    ],
+    "M3": [
+      "bridge.no-token-leak.unit",
+      "bridge.stdout-discipline.unit",
+      "mcp.no-write-imports.unit",
+      "mcp.dual-era.contract",
+      "mcp.tools-schema.contract",
+      "mcp.scopes.mcp",
+      "mcp.isolation.mcp",
+      "mcp.revocation.mcp",
+      "mcp.cursor.mcp",
+      "mcp.cursor.unit",
+      "cursor.prop",
+      "mcp.output-schema.mcp",
+      "content.read-parity.integration",
+      "mcp.rate-limit.mcp",
+      "mcp.resources.mcp",
+      "mcp.fail-closed.mcp",
+      "mcp.auth.mcp",
+      "mcp.factory-error.mcp",
+      "mcp.instructions.mcp",
+      "mcp.conformance.mcp",
+      "mcp.inspector-smoke.mcp",
+      "bridge.parity.contract",
+      "access-log.integration",
+      "token.effective-permissions.prop",
+      "authz.rest-token.integration",
+      "oauth.discovery-split.contract",
+      "oauth.metadata.contract",
+      "oauth.authorization-code.integration",
+      "oauth.pkce.unit",
+      "oauth.redirect-uri.unit",
+      "oauth.scope-mapping.unit",
+      "oauth.cimd.unit",
+      "oauth.token-endpoint.integration",
+      "oauth.refresh-rotation.integration",
+      "oauth.revoke-endpoint.integration",
+      "oauth.consent.integration",
+      "oauth.consent-page.integration",
+      "oauth.dcr.integration",
+      "oauth.audience.contract",
+      "oauth.insufficient-scope.contract",
+      "oauth.revocation.mcp",
+      "oauth.principal-parity.prop",
+      "oauth.sweep.integration"
+    ],
+    "M4": [
+      "editor.ycollab.two-docs.component",
+      "editor.remote-cursors.component",
+      "editor.undo-isolation.component",
+      "editor.formatting-source-only.component",
+      "editor.frontmatter.component",
+      "editor.view-lifecycle.component",
+      "editor.readonly-compartment.component",
+      "status-pill.transitions.component",
+      "preview.inertness.component",
+      "preview.worker-timeout.component",
+      "tree.keyboard.component",
+      "tree.dnd.component",
+      "rename-impact.dialog.component",
+      "tabs.preview-and-pinned.component",
+      "switcher.quick-open.component",
+      "palette.registry.component",
+      "tokens.dialog.component",
+      "authorized-apps.component",
+      "ui.unsupported-browser.component",
+      "a11y.axe.component",
+      "three-editors.e2e",
+      "saved-indicator.e2e",
+      "viewer-readonly.e2e",
+      "revocation-while-open.e2e",
+      "disconnect-pause.e2e",
+      "restore-revision.e2e",
+      "tabs-lifecycle.e2e",
+      "undo-isolation.e2e",
+      "tree-live-updates.e2e",
+      "rename-impact.e2e",
+      "search-operators.e2e",
+      "history-named-version.e2e",
+      "security.hostile-markdown.e2e",
+      "host.contract.e2e",
+      "host.contract.component",
+      "oauth.connector.e2e",
+      "perf.workspace.e2e"
+    ],
+    "M5": [
+      "desktop.tls-pin.e2e",
+      "desktop.web-preferences.guard",
+      "desktop.fuses.guard",
+      "desktop.preload-surface.guard",
+      "ipc.origin.guard",
+      "contracts.desktop-ipc.unit",
+      "desktop.ipc-contract.e2e",
+      "desktop.hardening.e2e",
+      "desktop.sign-in.e2e",
+      "desktop.server-profiles.e2e",
+      "desktop.open-note.e2e",
+      "desktop.three-instances.e2e",
+      "desktop.viewer-readonly.e2e",
+      "desktop.revocation-while-open.e2e",
+      "desktop.durable-save.e2e",
+      "desktop.hostile-markdown.e2e",
+      "desktop.deep-link-fuzz.e2e",
+      "deep-links.prop",
+      "desktop.attachments-no-token-in-renderer.e2e",
+      "desktop.update-manual.e2e",
+      "desktop.artifact-names.guard",
+      "desktop.macos-secure-storage.e2e",
+      "cli.desktop-updates-verify.integration",
+      "desktop.a11y-keyboard-only.e2e",
+      "desktop.host-contract.e2e",
+      "release.packaged-smoke.e2e",
+      "desktop.ipc-websocket-fallback.e2e"
+    ],
+    "M6": [
+      "attachments.dedupe.integration",
+      "mirror.integration",
+      "transfer.isolation.integration",
+      "transfer.fixtures.integration",
+      "markdown.roundtrip.prop",
+      "import.report.integration",
+      "import.commit.integration",
+      "import.unsafe-paths.unit",
+      "export.manifest.integration",
+      "export.stream.integration",
+      "content.read-parity.integration",
+      "export.access-control.integration",
+      "import-report.e2e",
+      "export-roundtrip.e2e",
+      "desktop.export-roundtrip.e2e",
+      "attachments.e2e",
+      "mirror.readonly.integration"
+    ],
+    "M7": [
+      "admin.users.integration",
+      "admin.vaults.integration",
+      "admin.tokens.integration",
+      "admin.sessions.integration",
+      "admin.settings.integration",
+      "admin.jobs.integration",
+      "admin.releases.integration",
+      "admin.oauth-clients.integration",
+      "admin.oauth-consents.integration",
+      "admin.system.integration",
+      "audit.export.integration",
+      "admin.surface-matrix.integration",
+      "admin.step-up.integration",
+      "oauth-client-list.component",
+      "admin.e2e",
+      "agent-activity.integration",
+      "vault-manager.audit.integration"
+    ],
+    "M8": [
+      "ops.alerts.unit",
+      "ops.backup-restore.drill",
+      "ops.restore-verify.chaos",
+      "ops.pitr.chaos",
+      "ops.upgrade-rehearsal.drill",
+      "ops.key-rotation.drill",
+      "proxied-stack.headers.mcp",
+      "ops.cross-line-restore.drill"
+    ]
+  },
   "entries": [
     {
       "rowId": "concurrent-editing",
@@ -322,7 +620,8 @@
       "sinceMilestone": "M0",
       "tests": [
         "save-state.machine.prop",
-        "crdt.dominates.prop"
+        "crdt.dominates.prop",
+        "crdt.durability.unit"
       ]
     },
     {
@@ -338,7 +637,8 @@
       "layer": "L3",
       "sinceMilestone": "M1",
       "tests": [
-        "collab.baseline-on-connect.integration"
+        "collab.baseline-on-connect.integration",
+        "collab.deletion-durability.integration"
       ]
     },
     {
@@ -680,7 +980,7 @@
     {
       "hpId": "HP-1",
       "property": "Saved truthfulness",
-      "statement": "The client shows saved only when a MySQL transaction containing every local update has COMMITTED (innodb_flush_log_at_trx_commit=1) and the server has broadcast a state vector that dominates the client's whole local vector (skeleton A19, deviation F2). A failed or crashed persistence never produces a persisted message for the affected updates."
+      "statement": "The client shows saved only when a MySQL transaction containing every local update has COMMITTED (innodb_flush_log_at_trx_commit=1) and the server has broadcast a state vector that dominates the client's whole local vector and a canonical delete-set fingerprint equal to the client's (skeleton A19, deviation F2). A failed or crashed persistence never produces a persisted message for the affected updates."
     },
     {
       "hpId": "HP-2",
@@ -749,7 +1049,7 @@
     {
       "name": "collab.lf-invariant.guard",
       "asserts": "no code path writes \\r into Y.Text; normalizeSource is the only producer of content for initialize",
-      "how": "ripgrep for \\r literals in apps/server/src/notes, transfer, collab ; the corpus-wide note_projections.markdown NOT LIKE '%\\r%' assertion is DB-backed and lives in transfer.fixtures.integration"
+      "how": "oxc-parser 0.148.0 scans decoded TypeScript string/template literals in apps/server/src/notes, transfer, collab, correctly separating regexes, nested templates and physical source line endings ; the corpus-wide note_projections.markdown NOT LIKE '%\\r%' assertion is DB-backed and lives in transfer.fixtures.integration"
     },
     {
       "name": "limits.single-source.guard",
@@ -803,32 +1103,32 @@
     },
     {
       "name": "guards.no-mocks-outside-unit.guard",
-      "asserts": "vi.mock(, vi.spyOn( on first-party modules, and msw appear only in unit/component test files",
+      "asserts": "M0 — vi.mock(, vi.spyOn( on first-party modules, and msw appear only in unit/component test files",
       "how": "ripgrep with a path allowlist"
     },
     {
       "name": "guards.no-sleep.guard",
-      "asserts": "no setTimeout-based sleep, no page.waitForTimeout, no delay( in test files",
+      "asserts": "M0 — no setTimeout-based sleep, no page.waitForTimeout, no delay( in test files",
       "how": "ripgrep; the fix is expect.poll, ManualClock or a Toxiproxy toxic"
     },
     {
       "name": "guards.no-direct-date.guard",
-      "asserts": "Date.now()/new Date()/bare setTimeout absent from apps/server/src outside ops/clock.ts",
+      "asserts": "M0 — Date.now()/new Date()/bare setTimeout absent from apps/server/src outside ops/clock.ts",
       "how": "ripgrep"
     },
     {
       "name": "guards.seq-is-number.guard",
-      "asserts": "no BigInt(, no bigint annotation and no numeric …n literal under apps/server/src/collab/, apps/server/src/notes/ or apps/server/src/db/schema.ts, except in a comparison against Kysely's numUpdatedRows",
+      "asserts": "M0 — no BigInt(, no bigint annotation and no numeric …n literal under apps/server/src/collab/, apps/server/src/notes/ or apps/server/src/db/schema.ts, except in a comparison against Kysely's numUpdatedRows",
       "how": "ripgrep with that single allowlist. Every sequence counter — note_docs.head_seq, snapshot_through_seq, projected_seq, note_updates.seq, note_revisions.seq, note_projections.revision — is a JS number end to end (03-data-model.md §1.3, D05-15), so numUpdatedRows is the only bigint in the persistence path and the CAS assertion compares against 1n. Mixing the two representations is a runtime TypeError (number + bigint) inside the one write path that produces the durable acknowledgement, which makes this a data-loss-adjacent invariant rather than a style rule"
     },
     {
       "name": "guards.fault-registry.guard",
-      "asserts": "@iridium/testkit/faults/points.ts and apps/server/src/ops/faults.ts declare the same point names",
+      "asserts": "M1 — @iridium/testkit/faults/points.ts and apps/server/src/ops/faults.ts declare the same point names",
       "how": "imports both and compares sorted key lists"
     },
     {
       "name": "guards.acceptance-map.guard",
-      "asserts": "the acceptance map is complete and honest (the seven rules above), enforced only for layers whose sinceMilestone has arrived per docs/milestones/CURRENT",
+      "asserts": "the acceptance map is complete and honest (the seven rules above), enforced for layers whose sinceMilestone is at or below the effective test target defined above",
       "how": "parses docs/acceptance-map.json, docs/milestones/CURRENT and every spec file's tags in static (rules 1–4, 6 and 7); re-runs in merge-reports over reports/host-contract/*.json for rule 5"
     },
     {
@@ -843,18 +1143,18 @@
     },
     {
       "name": "guards.error-shape.guard",
-      "asserts": "every ProblemDetails.code used in apps/server/src exists in the contracts enum and appears in openapi.json",
+      "asserts": "M1 — every ProblemDetails.code used in apps/server/src exists in the contracts enum and appears in openapi.json",
       "how": "imports the enum, ripgreps usages"
     },
     {
       "name": "guards.i18n.guard",
-      "asserts": "no user-visible string literal in packages/ui/src outside i18n/en.ts; every key in en.ts is used",
+      "asserts": "M4 — no user-visible string literal in packages/ui/src outside i18n/en.ts; every key in en.ts is used",
       "how": "ripgrep + knip-style reachability"
     },
     {
       "name": "guards.no-raw-sql-in-tests.guard",
-      "asserts": "the only raw sql tagged template in a test file is inside packages/testkit/src/db/corrupt.ts",
-      "how": "ripgrep with a single-path allowlist"
+      "asserts": "M0 — specs/support contain no raw Kysely sql tags or sql.raw calls, and no direct statically resolved mutating SQL through callback, MysqlAdmin or shipped-client transports; deliberate writes use named operations in packages/testkit/src/db/corrupt.ts, while db/inspect.ts is read-only",
+      "how": "AST scan with import/alias and lexical-binding resolution, string/loop regressions, no spec allowlist, and a nonempty read-only inspection-seam proof"
     },
     {
       "name": "guards.no-inner-html.guard",
@@ -863,18 +1163,23 @@
     },
     {
       "name": "guards.no-test-auth.guard",
-      "asserts": "apps/server/src/auth/** contains no branch keyed on NODE_ENV, IRIDIUM_E2E or IRIDIUM_FAULT",
+      "asserts": "M1 — apps/server/src/auth/** contains no branch keyed on NODE_ENV, IRIDIUM_E2E or IRIDIUM_FAULT",
       "how": "ripgrep"
     },
     {
+      "name": "guards.release-policy.guard",
+      "asserts": "M1 — product tags match the tagged server version and exited milestone; artifact jobs begin at M1/M3/M5/M8 and retain verification prerequisites; a new migration requires a visible [migration] flag in the exact current server changelog section",
+      "how": "imports the pure release policy through Node, checks actual workflow wiring with negative fixtures, and inspects disposable Git histories including the first product release, package tags, historical flags, uncommitted notes and deleted migrations"
+    },
+    {
       "name": "guards.mutation-lane.guard",
-      "asserts": "@typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
+      "asserts": "M0 — @typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
       "how": "parses every workspace manifest"
     },
     {
       "name": "docs.spikes.spec",
-      "asserts": "every spike that a reached milestone references exists as docs/spikes/S<nn>-<slug>.md, carries all eight template headings, has a Result of pass or fail and never open, and — when the result is fail — names the pull request that executed the recorded fallback",
-      "how": "reads the spike register of 12-milestones.md §4.4 and the note files, both from the filesystem; the milestone axis is docs/milestones/CURRENT, the same file guards.acceptance-map.guard reads, so a spike that runs at M2 is not demanded at M1. Its name is fixed outside this section's layer convention — see \"The spike-register check\" below"
+      "asserts": "every spike that a reached milestone references exists as docs/spikes/S<nn>-<slug>.md, carries all eight template headings, has a Result of pass or fail and never open, and — when the result is fail — names the pull request or commit that executed the recorded fallback (the change that landed the decision; while main is worked without pull requests that is the milestone commit, written in once it exists)",
+      "how": "reads the spike register of 12-milestones.md §4.4 and the note files, both from the filesystem; the milestone axis is the same effective test target that guards.acceptance-map.guard uses, so a spike that runs at M2 is not demanded at M1. Its name is fixed outside this section's layer convention — see \"The spike-register check\" below"
     }
   ],
   "hostContractHarnesses": [
@@ -1751,13 +2056,14 @@
     },
     "a11y.keyboard-only.e2e": {
       "layer": "L6",
-      "sinceMilestone": null,
+      "sinceMilestone": "M4",
       "project": "chromium",
       "file": "apps/e2e/web/a11y.keyboard-only.e2e.spec.ts",
-      "tag": null,
-      "asserts": null,
+      "tag": "[area:ui]",
+      "asserts": "M4 — The complete shared-UI keyboard path for create, rename, move, trash and restore, including keyboard drag; every command remains reachable without a pointer (12 §8.2, §13.4).",
       "inventories": [
         "E2E inventory (web)",
+        "Inventory completeness — Client, editor and desktop",
         "Superseded spellings (canonical)",
         "the Location convention"
       ]
@@ -1971,7 +2277,7 @@
     },
     "attachments.dedupe.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/attachments.dedupe.integration.spec.ts",
       "tag": null,
@@ -2022,12 +2328,13 @@
     },
     "audit.archive.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/audit.archive.integration.spec.ts",
-      "tag": null,
-      "asserts": "chain verifies under 8 concurrent writers on two chains; a tampered row is detected at the exact last_id; iridium audit export JSONL/CSV round-trips; archiving moves rows without breaking verification; the closed vocabulary is exhaustive (every AuditAction value is produced by at least one test — a table test over the enum)",
+      "tag": "[area:audit]",
+      "asserts": "M2 — The M2 export-then-archive command moves rows without breaking chain verification or losing the exported history (12 §6.2).",
       "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin",
         "Server suite by area (Audit)",
         "the Location convention"
       ]
@@ -2057,6 +2364,17 @@
         "the Location convention"
       ]
     },
+    "audit.chain.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/audit/chain.unit.spec.ts",
+      "tag": "[area:audit]",
+      "asserts": "M1: independent signatures cover exact stored optional fields, target truncation and historical keys; the writer locks before append and advances the same chain to the returned insert ID; bounded verifier pages reject tampering, missing keys and inconsistent heads. SQL transport is scripted; concurrency and grants remain integration proofs.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "audit.export.integration": {
       "layer": "L3",
       "sinceMilestone": "M7",
@@ -2067,6 +2385,39 @@
       "inventories": [
         "Server suite by area (Audit)",
         "the Location convention"
+      ]
+    },
+    "audit.key-readiness.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/audit.key-readiness.integration.spec.ts",
+      "tag": "[area:audit]",
+      "asserts": "M1 — Missing or invalid promoted keys refuse session creation and roll back audited business writes until recovery.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "audit.keys.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/audit/keys.unit.spec.ts",
+      "tag": "[area:audit]",
+      "asserts": "M1 — Versioned key selection rejects absent and malformed promoted keys.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "audit.plugin.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/audit/plugin.unit.spec.ts",
+      "tag": "[area:audit]",
+      "asserts": "M1 — Readiness initialization and recovery keep unresolved signing unavailable.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "audit.trash-race.chaos": {
@@ -2087,7 +2438,7 @@
       "project": "unit",
       "file": null,
       "tag": "[area:audit]",
-      "asserts": "the AuditAction vocabulary is closed, every value has a documented shape, and canonical JSON is byte-identical between the row and the export",
+      "asserts": "Every current closed-vocabulary action is accepted; writer, stored-row canonical preimage and chain verifier agree on bytes. Export adapter equivalence is M2, when the export command is implemented.",
       "inventories": [
         "Inventory completeness — Audit, access log, jobs and admin"
       ]
@@ -2107,11 +2458,11 @@
     },
     "auth.login-timing.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "unit",
       "file": null,
       "tag": "[area:auth]",
-      "asserts": "the single login path runs a dummy verify for an unknown account, so a response time does not distinguish existence",
+      "asserts": "M1 — the single login path runs a dummy verify for an unknown account, so a response time does not distinguish existence",
       "inventories": [
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m"
       ]
@@ -2130,14 +2481,36 @@
     },
     "auth.logout.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/auth.logout.integration.spec.ts",
       "tag": "[area:auth]",
-      "asserts": "logging out clears the __Host- cookie, deletes the row, and closes that session's /collab connections",
+      "asserts": "M1 — logging out clears the __Host- cookie, deletes the row, and closes that session's /collab connections",
       "inventories": [
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "the Location convention"
+      ]
+    },
+    "auth.password-commit.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/auth/password-commit.unit.spec.ts",
+      "tag": "[area:auth]",
+      "asserts": "M1 — Credential recheck and user locking prevent a verified old password from committing after reset.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "auth.password-flows.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/auth/password-flows.unit.spec.ts",
+      "tag": "[area:auth]",
+      "asserts": "M1: successful and refused credential flows use the actual services over scripted SQL, including password verification, setup-link consumption, transactional session issuance and audited failures.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "auth.pepper-rotation.integration": {
@@ -2165,11 +2538,11 @@
     },
     "auth.policy.blocklist-hash.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "unit",
       "file": null,
       "tag": "[area:auth]",
-      "asserts": "the bundled top-100k breached-password list is consulted by hash prefix, entirely offline, and never logs or transmits the candidate",
+      "asserts": "M1 — the bundled top-100k breached-password list is consulted by hash prefix, entirely offline, and never logs or transmits the candidate",
       "inventories": [
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m"
       ]
@@ -2185,6 +2558,17 @@
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "Server suite by area (Auth — credentials)",
         "Superseded spellings (canonical)"
+      ]
+    },
+    "auth.routes.behavior.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/auth/routes.behavior.unit.spec.ts",
+      "tag": "[area:auth]",
+      "asserts": "M1: authenticated route hooks and actual handlers preserve response fields, cookie and bearer semantics, session lifecycle and policy ordering over scripted SQL and audit I/O.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "auth.session-verify-parity.unit": {
@@ -2226,27 +2610,40 @@
     },
     "auth.step-up.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/auth.step-up.integration.spec.ts",
-      "tag": null,
-      "asserts": "__Host- cookie attributes exactly as specified; idle-sliding and absolute expiry via ManualClock; desktop bearer sessions are not accepted as cookies and vice versa; step-up expires after 10 min and is required on every route marked step-up (data-driven from app.routes())",
+      "tag": "[area:auth]",
+      "asserts": "M1 — [area:auth] — The ten-minute step-up window expires using the injected clock and every M1 route marked step-up requires it (12 §5.2).",
       "inventories": [
+        "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "Server suite by area (Auth — sessions)",
         "the Location convention"
       ]
     },
     "auth.throttle.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/auth.throttle.integration.spec.ts",
-      "tag": null,
-      "asserts": "NIST-style policy (length, denylist, no composition rules); needsRehash and pepper-version drift re-hash transparently; DB-backed throttling counts per account and per IP and does not lock out on successful logins; set-password links are single-use, 24 h, hashed, and consumed atomically; a consumed link is unusable even with a valid password",
+      "tag": "[area:auth]",
+      "asserts": "M1 — [area:auth] — The real account/IP login limits, insurance path, successful-login reset, and Retry-After semantics of the M1 credential path (12 §5.2).",
       "inventories": [
+        "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "Server suite by area (Auth — credentials)",
         "Superseded spellings (canonical)",
         "the Location convention"
+      ]
+    },
+    "auth.user-agent.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:auth]",
+      "asserts": "bounded UTF-8 audit-header truncation preserves whole code points and never scans the discarded suffix",
+      "inventories": [
+        "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m"
       ]
     },
     "authorized-apps.component": {
@@ -2262,11 +2659,11 @@
     },
     "authz-bus.contract": {
       "layer": "L8",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "contract",
       "file": "apps/server/test/contract/authz-bus.contract.spec.ts",
       "tag": "[area:seams]",
-      "asserts": "the parameterised AuthzBus suite of decision ARCH-19, run against the in-process implementation and required to pass unchanged for any future one",
+      "asserts": "M1 — the parameterised AuthzBus suite of decision ARCH-19, run against the in-process implementation and required to pass unchanged for any future one",
       "inventories": [
         "Inventory completeness — Ops, restore, release and the seam contract suites",
         "the Location convention"
@@ -2309,6 +2706,17 @@
         "the Location convention"
       ]
     },
+    "authz.mutations.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/authz/mutations.unit.spec.ts",
+      "tag": "[area:authz]",
+      "asserts": "M1: REST revocations fence apply and drain admitted edits before COMMIT, publish every effect before release, and reconcile uncertain outcomes against each live connection before reopening admission.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "authz.no-mcp-admin-implied.guard": {
       "layer": "L1",
       "sinceMilestone": "M3",
@@ -2323,18 +2731,18 @@
     },
     "authz.performance.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "unit",
       "file": null,
       "tag": "[area:authz]",
-      "asserts": "[area:authz] — the authorize() micro-budget: under 50 µs per call and no I/O, which is stable enough to assert because the function is pure and takes its epoch tuple and membership set by parameter (authz.seams.unit is what makes the number meaningful). The measurement is written to reports/perf/*.jsonl",
+      "asserts": "M1 — [area:authz] — the authorize() micro-budget: under 50 µs per call and no I/O, which is stable enough to assert because the function is pure and takes its epoch tuple and membership set by parameter (authz.seams.unit is what makes the number meaningful). The measurement is written to reports/perf/*.jsonl",
       "inventories": [
         "Inventory completeness — Authorization, tokens and sessions (tag [hp:HP-3] unless sta"
       ]
     },
     "authz.read-core.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[hp:HP-3]",
@@ -2358,7 +2766,7 @@
     },
     "authz.rest-viewer.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/authz.rest-viewer.integration.spec.ts",
       "tag": null,
@@ -2402,13 +2810,35 @@
         "Inventory completeness — Authorization, tokens and sessions (tag [hp:HP-3] unless sta"
       ]
     },
+    "authz.session-command-fence.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/authz/session-command-fence.unit.spec.ts",
+      "tag": "[area:authz]",
+      "asserts": "M1: synchronous overlapping user/global fences prevent admission, detect identity-read races, and resume waiters only after every applicable command settles.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "authz.session-revocations.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/authz/session-revocations.unit.spec.ts",
+      "tag": "[area:authz]",
+      "asserts": "M1: the serving owner drains admitted writes, executes durable CLI commands under its generation lock, resolves an uncertain COMMIT from the command row, and joins delivery before acknowledging completion.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "authz.step-up.order.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "unit",
       "file": null,
       "tag": "[area:authz]",
-      "asserts": "[area:authz] — step-up is evaluated after authentication and before permission, so a step-up prompt never leaks a resource's existence",
+      "asserts": "M1 — [area:authz] — step-up is evaluated after authentication and before permission, so a step-up prompt never leaks a resource's existence",
       "inventories": [
         "Inventory completeness — Authorization, tokens and sessions (tag [hp:HP-3] unless sta"
       ]
@@ -2426,7 +2856,7 @@
     },
     "authz.vault-isolation.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/authz.vault-isolation.integration.spec.ts",
       "tag": null,
@@ -2450,18 +2880,18 @@
     },
     "bridge.cli.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[area:bridge]",
-      "asserts": "argument and environment parsing, --help/--version, and a usage error on an unknown flag",
+      "asserts": "M3 — argument and environment parsing, --help/--version, and a usage error on an unknown flag",
       "inventories": [
         "Inventory completeness — MCP and the stdio bridge (06-mcp-and-agent-access.md owns th"
       ]
     },
     "bridge.no-token-leak.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[area:bridge]",
@@ -2485,7 +2915,7 @@
     },
     "bridge.stdout-discipline.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[area:bridge]",
@@ -2496,11 +2926,11 @@
     },
     "bridge.token-sources.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[area:bridge]",
-      "asserts": "the documented precedence of token sources, and that a missing token fails before the upstream connection is opened",
+      "asserts": "M3 — the documented precedence of token sources, and that a missing token fails before the upstream connection is opened",
       "inventories": [
         "Inventory completeness — MCP and the stdio bridge (06-mcp-and-agent-access.md owns th"
       ]
@@ -2541,13 +2971,35 @@
         "the Location convention"
       ]
     },
+    "cli.live-revocation.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/cli.live-revocation.integration.spec.ts",
+      "tag": "[area:authz]",
+      "asserts": "M1: a separate CLI process submits scoped and global revocation commands, waits for the serving owner to commit and deliver them, increments each affected user epoch once, and also works by acquiring the owner lease when no server is running.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "close-policy.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:collab]",
+      "asserts": "M1 — every CollabCloseReason decides re-attach, dormancy or a session probe; the two policies of rate-limited; the re-attach ladder's 5 s floor, 60 s ceiling, monotonicity and jitter",
+      "inventories": [
+        "Inventory completeness — Client, editor and desktop"
+      ]
+    },
     "collab.admission-budget.integration": {
       "layer": "L3",
       "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/collab.admission-budget.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Chaos and durability procedures (CH-10)",
         "Server suite by area (Collaboration)",
@@ -2556,15 +3008,26 @@
     },
     "collab.admission.chaos": {
       "layer": "L5",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "chaos",
       "file": "apps/server/test/chaos/collab.admission.chaos.spec.ts",
       "tag": "[hp:HP-5]",
-      "asserts": "CH-10's churn half — 50 open/close cycles across 20 notes with 4 workers leave the loaded-document count at 0 with no leak and collab_documents_loaded equal to getDocumentsCount(). The admission limit itself is collab.admission-budget.integration; this file owns behaviour under churn",
+      "asserts": "M1 — CH-10's churn half — 50 open/close cycles across 20 notes with 4 workers leave the loaded-document count at 0 with no leak and collab_documents_loaded equal to getDocumentsCount(). The admission limit itself is collab.admission-budget.integration; this file owns behaviour under churn",
       "inventories": [
         "Chaos and durability procedures (CH-10)",
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
+      ]
+    },
+    "collab.auth-hook.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:collab]",
+      "asserts": "M1: ticket/session identity, post-fence and stale-epoch permission revalidation, real denial distinctions, and retryable unavailable storage failures.",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search"
       ]
     },
     "collab.awareness-identity.integration": {
@@ -2573,7 +3036,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.awareness-identity.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "Superseded spellings (canonical)",
@@ -2590,6 +3053,17 @@
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
+      ]
+    },
+    "collab.awareness-windows.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[hp:HP-5]",
+      "asserts": "Bounded per-socket document counters expire idle windows and own one cleanup timer",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions"
       ]
     },
     "collab.backpressure.chaos": {
@@ -2627,13 +3101,25 @@
         "the Location convention"
       ]
     },
+    "collab.commit-reconcile.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/collab.commit-reconcile.integration.spec.ts",
+      "tag": "[hp:HP-2]",
+      "asserts": "After a durable COMMIT the test drops its result while the process survives; no early acknowledgement, terminal failure or duplicate state",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search",
+        "the Location convention"
+      ]
+    },
     "collab.compaction-failure.chaos": {
       "layer": "L5",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "chaos",
       "file": "apps/server/test/chaos/collab.compaction-failure.chaos.spec.ts",
       "tag": "[area:content]",
-      "asserts": "CH-11: with FAULT.compactThrow armed, durability is unaffected (persisted arrives, the client reaches saved) while projected does not, note_docs.projected_seq is unchanged, the read routes and MCP get_note serve the last committed projection with the correct ETag and a stale indication, and /readyz stays 200 because a projection lag is not an outage. Clearing the fault and requesting flush {} brings projected_seq to head_seq with note_search and note_links written in the same transaction",
+      "asserts": "M1 — CH-11: with FAULT.compactThrow armed, durability is unaffected (persisted arrives, the client reaches saved) while projected does not, note_docs.projected_seq is unchanged, the read routes and MCP get_note serve the last committed projection with the correct ETag and a stale indication, and /readyz stays 200 because a projection lag is not an outage. Clearing the fault and requesting flush {} brings projected_seq to head_seq with note_search and note_links written in the same transaction",
       "inventories": [
         "Chaos and durability procedures (CH-11)",
         "Inventory completeness — Collaboration, content read model and search",
@@ -2677,6 +3163,17 @@
         "the Location convention"
       ]
     },
+    "collab.deletion-durability.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/collab.deletion-durability.integration.spec.ts",
+      "tag": "[hp:HP-1]",
+      "asserts": "M1 — A pure deletion leaves the Yjs struct vector unchanged but remains unsaved after transport acceptance until its real MySQL COMMIT; the prior committed text stays readable and the unload warning stays active until durability is acknowledged.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "collab.durable-ack.chaos": {
       "layer": "L5",
       "sinceMilestone": "M1",
@@ -2718,12 +3215,13 @@
     },
     "collab.flush.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/collab.flush.integration.spec.ts",
-      "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "tag": "[area:collab]",
+      "asserts": "M1 — flush {} is rate-limited per session, creates no content update, and completes the requested committed checkpoint/projection (12 §5.2).",
       "inventories": [
+        "Inventory completeness — Collaboration, content read model and search",
         "Server suite by area (Collaboration)",
         "the Location convention"
       ]
@@ -2768,21 +3266,43 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.isolation.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "the Location convention"
+      ]
+    },
+    "collab.kysely-store.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/kysely-store.unit.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M1 — Persistence SQL adapters preserve CAS, retention and checkpoint semantics across absent, corrupt and refused rows.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "collab.latches.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/collab.latches.integration.spec.ts",
+      "tag": "[hp:HP-3]",
+      "asserts": "M1: membership changes, epoch refresh, and token revalidation retain independent invalid-content and oversize write latches, including late attachment notices.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "collab.lf-invariant.guard": {
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "guard",
-      "file": null,
-      "tag": null,
-      "asserts": "no code path writes \\r into Y.Text; normalizeSource is the only producer of content for initialize",
+      "file": "apps/server/test/guards/collab.lf-invariant.guard.spec.ts",
+      "tag": "[hp:HP-4]",
+      "asserts": "M1: scans server note, transfer and collaboration sources for carriage-return producers, excluding tests and comments; adversarial fixtures cover equivalent escape spellings. Runtime hostile-state refusal and repair remain in the integration and chaos suites.",
       "inventories": [
-        "Guard tests"
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "collab.limits.integration": {
@@ -2791,7 +3311,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.limits.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "the Location convention"
@@ -2839,7 +3359,7 @@
       "project": "chaos",
       "file": "apps/server/test/chaos/collab.oversize.chaos.spec.ts",
       "tag": "[hp:HP-5]",
-      "asserts": "CH-13: crossing the 1 000 000 UTF-16 soft cap by collaborative edit produces size-exceeded, sets notes.oversize=1 at compaction and makes the note read-only until it is reduced; the 2 097 152 hard cap is refused 413 note_oversized at create, import, restore and repair before any Yjs state is built; a single update above 1 MiB closes the connection too-large and a frame above the 2 MiB maxPayload never reaches the application",
+      "asserts": "CH-13: crossing the 1 000 000 UTF-16 soft cap by collaborative edit produces size-exceeded, sets notes.oversize=1 at compaction and makes the note read-only until it is reduced; the 2 097 152 hard cap is enforced before note initialization or a repair write; an oversized JSON create request first hits the independent 1 MiB body cap (413 payload_too_large), while hostile collaborative state above the hard cap is refused by the real repair CLI without changing its durable head; a single update above 1 MiB closes the connection too-large and a frame above the 2 MiB maxPayload never reaches the application",
       "inventories": [
         "Chaos and durability procedures (CH-13)",
         "Inventory completeness — Collaboration, content read model and search",
@@ -2852,11 +3372,22 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.owner-lease.integration.spec.ts",
       "tag": "[hp:HP-2]",
-      "asserts": "the boot lease: exactly one GET_LOCK('iridium_collab_owner', 0) per boot on a dedicated connection never returned to the pool and never inside a row-locking transaction; /readyz reports collab_owner_lease; a denied lease refuses /collab with 4503 no-owner-lease while REST reads still answer; the lease is handed over on release; RELEASE_LOCK follows the writer drain and the last unload",
+      "asserts": "the boot lease: exactly one GET_LOCK(ownerLockName, 0) per boot on a dedicated connection never returned to the pool and never inside a row-locking transaction; /readyz reports collab_owner_lease; a denied lease refuses /collab with 4503 no-owner-lease and product REST requests with 503 not_ready, while operational endpoints remain available; the lease is handed over on release; RELEASE_LOCK follows the writer drain and the last unload",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "Server suite by area (Collaboration)",
         "the Location convention"
+      ]
+    },
+    "collab.owner-lease.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:collab]",
+      "asserts": "canonical schema scoping, fixed-length names, dedicated-connection lifecycle, failed acquisition cleanup, and release racing acquisition",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search"
       ]
     },
     "collab.participants.integration": {
@@ -2865,10 +3396,32 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.participants.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "the Location convention"
+      ]
+    },
+    "collab.persistence-hook.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[hp:HP-2]",
+      "asserts": "M1: V2 document load, baseline/store/unload semantics, exact fenced document lifetimes, and transient storage failure versus missing/corrupt state refusals.",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search"
+      ]
+    },
+    "collab.persistence.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/index.unit.spec.ts",
+      "tag": "[hp:HP-1]",
+      "asserts": "M1 — Attachment provenance, baseline absence, duplicate attachment and connection latches preserve persistence ownership. Shutdown retains each captured writer lifetime and joins admitted work; ownership cleanup cannot turn discarded pending work into a clean drain.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "collab.reconnect.oversize-delta.integration": {
@@ -2973,7 +3526,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.token-sync.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "the Location convention"
@@ -2997,7 +3550,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/collab.unload-after-veto.integration.spec.ts",
       "tag": null,
-      "asserts": "the boot lease GET_LOCK('iridium_collab_owner', 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
+      "asserts": "the boot lease GET_LOCK(ownerLockName, 0) is held on a dedicated connection while the process serves, released only after the drain, and a process without it refuses /collab with 4503 no-owner-lease while /readyz reports collab_owner_lease: false; a forged awareness user.id closes the connection awareness-spoof (the frame is built by hand with lib0 encoding) and names/colours are never read from awareness; every limit of skeleton A.1 that lives on the socket is refused at the stated place with the stated close reason — the loaded-document budget through startServer({ limits: { maxLoadedDocs: 8 } }), never by opening 2 001 documents; flush {} is rate-limited per session and never writes; the participant map is server-supplied; onTokenSync re-validation closes a connection whose membership vanished; the unload veto holds on all four of its conditions (queue non-empty, transaction in flight, writer retrying/failed/backpressure, no note_revisions row at head_seq) and the writer completes the vetoed unload itself once it drains",
       "inventories": [
         "Server suite by area (Collaboration)",
         "the Location convention"
@@ -3012,6 +3565,28 @@
       "asserts": null,
       "inventories": [
         "named by an acceptance-map entry only"
+      ]
+    },
+    "collab.update-log-prune.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/prune.unit.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M1 — Pruning keeps the snapshot boundary replayable across configured retention, batching and failures.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "collab.upgrade-cleanup.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:collab]",
+      "asserts": "M1: early HTTP refusal closes an unaccepted WebSocket upgrade even when the peer remains half-open; real TCP resets during asynchronous admission and after protocol handoff remain owned, preserve server health and release all sockets at shutdown.",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search"
       ]
     },
     "collab.vault-channel.integration": {
@@ -3040,14 +3615,26 @@
     },
     "compat.n-minus-1.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/compat.n-minus-1.integration.spec.ts",
-      "tag": null,
-      "asserts": "GET /meta shape; a client sending an X-Iridium-Client-Version below minClientVersion receives the documented refusal on write routes and a readable body; a client at apiVersion N-1 still works on every route marked additive",
+      "tag": "[area:ops]",
+      "asserts": "M2 — The first successor to v0.1.0 compares the committed previous-release wire baselines and /meta apiVersion; removal or tightened validation fails. Extend the same proof with OAuth at M3 and desktop checksum surfaces at M5 (Compatibility contract; 12 §6.2).",
       "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites",
         "Server suite by area (Compatibility)",
         "the Location convention"
+      ]
+    },
+    "config.cgroup-cpu.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/config/cgroup-cpu.unit.spec.ts",
+      "tag": "[area:ops]",
+      "asserts": "M1 — Real cgroup v2 and v1 quota parsing clamps worker ceilings to valid positive available CPU counts.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "config.env.unit": {
@@ -3206,6 +3793,17 @@
         "Superseded spellings (canonical)"
       ]
     },
+    "convergence.memory-model.prop": {
+      "layer": "L4",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/convergence.memory-model.prop.spec.ts",
+      "tag": "[spec:concurrent-editing]",
+      "asserts": "M1 — Pure multi-peer model exercises the same interleavings and foreign-author undo ownership.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "convergence.model.prop": {
       "layer": "L4",
       "sinceMilestone": "M1",
@@ -3215,6 +3813,17 @@
       "asserts": null,
       "inventories": [
         "named by an acceptance-map entry only"
+      ]
+    },
+    "crdt.codec-update-vector.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/crdt/src/codec-update-vector.unit.spec.ts",
+      "tag": "[area:crdt]",
+      "asserts": "M1 — Committed V1 updates expose an independent state-vector oracle.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "crdt.codec.prop": {
@@ -3237,6 +3846,28 @@
       "asserts": null,
       "inventories": [
         "Property and model suites"
+      ]
+    },
+    "crdt.durability.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/crdt/src/durability.unit.spec.ts",
+      "tag": "[hp:HP-1]",
+      "asserts": "M1 — The fixed-size delete-set fingerprint matches an independent empty-set golden, excludes insertion clocks, distinguishes pure deletion, and survives replay order, garbage collection, format1/2 compaction, duplicate replay and undo/redo.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "crdt.frame.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/crdt/src/frame.unit.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M1 — [area:collab] raw frame headers and awareness entries preserve duplicate ids and null removals; truncated frames, unsafe integers and trailing bytes are rejected",
+      "inventories": [
+        "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
       ]
     },
     "crdt.guards.unit": {
@@ -3280,6 +3911,28 @@
       "file": "packages/crdt/src/scan.prop.spec.ts",
       "tag": "[hp:HP-4]",
       "asserts": "[hp:HP-4] — the content-invalid scan finds every \\r and every attribute run, is linear in document size, and reports no false positive on valid text",
+      "inventories": [
+        "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
+      ]
+    },
+    "crdt.sync.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/crdt/src/sync.unit.spec.ts",
+      "tag": "[area:crdt]",
+      "asserts": "M1 — The public sync encoder emits valid Yjs step-one and step-two frames.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "crdt.undo.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/crdt/src/undo.unit.spec.ts",
+      "tag": "[area:contracts]",
+      "asserts": "createUndoManager (07-client-applications.md §5.2) undoes and redoes local edits, merges edits inside the caller's capture window and splits them at stopCapturing(), and never places a remote update on the undo stack. Since M1",
       "inventories": [
         "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
       ]
@@ -3331,6 +3984,74 @@
       "asserts": "no statement Iridium executes uses a construct outside the MySQL 8.4.11 floor, and none uses a construct 8.4 merely deprecates",
       "inventories": [
         "Guard tests"
+      ]
+    },
+    "db.grants-provenance.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/db.grants-provenance.integration.spec.ts",
+      "tag": "[area:db]",
+      "asserts": "Forward migration preserves history; role revokes and DBA-managed skipped grants produce truthful readiness",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions",
+        "the Location convention"
+      ]
+    },
+    "db.grants-provenance.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:db]",
+      "asserts": "Applied and skipped grants retain per-table provenance and precise failure classification",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions"
+      ]
+    },
+    "db.grants-readiness.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:db]",
+      "asserts": "Effective privilege failures fail readiness; skipped or absent evidence warns after a successful rollback probe",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions"
+      ]
+    },
+    "db.lock-timeout.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/db.lock-timeout.integration.spec.ts",
+      "tag": "[area:db]",
+      "asserts": "Held-row waits return server lock-timeout before the driver deadline on both serving pools",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions",
+        "the Location convention"
+      ]
+    },
+    "db.query-deadline.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/db/query-deadline.unit.spec.ts",
+      "tag": "[area:db]",
+      "asserts": "M1: bounded acquisitions release late arrivals; native SQL timeouts destroy the physical connection, settle queued work once, preserve unknown COMMIT failures and keep pool occupancy exact.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "db.session-policy.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:db]",
+      "asserts": "Serving lock waits fit below the query deadline at every supported budget",
+      "inventories": [
+        "Inventory completeness — M1 independent-review regressions"
       ]
     },
     "db.version-floor.integration": {
@@ -3574,13 +4295,14 @@
     },
     "desktop.native-menu.e2e": {
       "layer": "L7",
-      "sinceMilestone": null,
+      "sinceMilestone": "M5",
       "project": "electron",
       "file": "apps/e2e/electron/desktop.native-menu.e2e.spec.ts",
-      "tag": null,
-      "asserts": null,
+      "tag": "[area:desktop]",
+      "asserts": "M5 — Every native-menu item resolves to the same CommandId and permission state as the shared palette (12 §9.2, §13.4).",
       "inventories": [
         "E2E inventory (electron)",
+        "Inventory completeness — Client, editor and desktop",
         "the Location convention"
       ]
     },
@@ -3600,13 +4322,14 @@
     },
     "desktop.perf.e2e": {
       "layer": "L7",
-      "sinceMilestone": null,
+      "sinceMilestone": "M5",
       "project": "electron",
       "file": "apps/e2e/electron/desktop.perf.e2e.spec.ts",
-      "tag": null,
-      "asserts": null,
+      "tag": "[area:desktop]",
+      "asserts": "M5 — Cold launch to workspace-ready is below 3 seconds on the reference runner; PR timing is advisory and the nightly perf lane blocks (Client performance budgets; 12 §9.2).",
       "inventories": [
         "E2E inventory (electron)",
+        "Inventory completeness — Client, editor and desktop",
         "the Location convention"
       ]
     },
@@ -3691,7 +4414,7 @@
     },
     "desktop.tls-pin.e2e": {
       "layer": "L7",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M5",
       "project": "electron",
       "file": "apps/e2e/electron/desktop.tls-pin.e2e.spec.ts",
       "tag": null,
@@ -3717,11 +4440,11 @@
     },
     "desktop.update-required.e2e": {
       "layer": "L7",
-      "sinceMilestone": null,
+      "sinceMilestone": "M5",
       "project": "electron",
       "file": "apps/e2e/electron/desktop.update-required.e2e.spec.ts",
       "tag": "[area:compat]",
-      "asserts": "a /meta with a raised minClientVersion blocks the workspace, explains the update, and still offers \"Export my text\"; the desktop branch of the blocking screen shows the download link, the file name and the SHA-256 for the running platform and architecture instead of an \"Download update\" control, because at 1.0 raising minClientVersion is the hard cut-over lever and a manual download is what it leads to",
+      "asserts": "M5 — a /meta with a raised minClientVersion blocks the workspace, explains the update, and still offers \"Export my text\"; the desktop branch of the blocking screen shows the download link, the file name and the SHA-256 for the running platform and architecture instead of an \"Download update\" control, because at 1.0 raising minClientVersion is the hard cut-over lever and a manual download is what it leads to",
       "inventories": [
         "Inventory completeness — Client, editor and desktop",
         "the Location convention"
@@ -3779,12 +4502,13 @@
     },
     "doctor.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/doctor.integration.spec.ts",
-      "tag": null,
-      "asserts": "/readyz is fail-closed on each of its checks independently (DB ping, migrations current, storage writable, writer backlog age, worker pool, the collab_owner_lease check of collab.owner-lease.integration, and the mysql_version check — ok on both supported images, warn under IRIDIUM_ALLOW_UNTESTED_MYSQL=true, with the check-name set still equal to ReadyzCheckName); /metrics exposes every metric name the alert rules reference (a table test against infra/monitoring/alerts.yml); migrations produce a schema identical to a fresh build (kysely-codegen diff) on both required images, and migrations.parity.integration additionally asserts the two engines produce the same schema — equal information_schema.COLUMNS and STATISTICS rows, equal TABLE_COLLATION, and SHOW COLLATION LIKE 'utf8mb4_0900_as_ci' returning one row on each; config.env.unit rejects an unknown IRIDIUM_ key, boots on an environment carrying every reserved harness name of D10-5, loads _FILE secrets, prints the redacted summary and parses every documented default — which is the only place the production values of the capacity limits are asserted (COLLAB_MAX_LOADED_DOCS 2 000, COLLAB_MAX_STATE_BYTES_TOTAL 1 GiB): reaching them in a live test would mean 2 001 document loads, so the behaviour is proven at an overridden budget in collab.admission-budget.integration and CH-10 and the number is proven here; routes.test-namespace-absent.integration asserts the whole /__test__ prefix returns 404 under NODE_ENV=production, that the control routes exist and arm faults under NODE_ENV=test, and that the route-policy boot assertion refuses to start when a /__test__ route lacks config.auth = 'test-only'; iridium doctor detects each invariant violation that corruptDeliberately can create; logging-redaction.integration boots with a pino destination captured in memory, exercises login, token use, a collab session, an import and an error path, then scans every line against the irid_[a-z]{3}_ regex, /Bearer /, Cookie/Set-Cookie, the fixture note's unique marker and a base64 prefix of a known Yjs update (skeleton A49)",
+      "tag": "[area:ops]",
+      "asserts": "M2 — The complete M2 structural/content invariant checker detects every deliberate corruption; M1 argon2, Yjs-instance and repair-content commands keep their existing separate proofs (12 §6.2, §12.8).",
       "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites",
         "Server suite by area (Ops)",
         "the Location convention"
       ]
@@ -3930,7 +4654,7 @@
     },
     "export.manifest.integration": {
       "layer": "L3",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/export.manifest.integration.spec.ts",
       "tag": null,
@@ -4005,62 +4729,62 @@
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "the acceptance map is complete and honest (the seven rules above), enforced only for layers whose sinceMilestone has arrived per docs/milestones/CURRENT",
+      "asserts": "the acceptance map is complete and honest (the seven rules above), enforced for layers whose sinceMilestone is at or below the effective test target defined above",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.error-shape.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "every ProblemDetails.code used in apps/server/src exists in the contracts enum and appears in openapi.json",
+      "asserts": "M1 — every ProblemDetails.code used in apps/server/src exists in the contracts enum and appears in openapi.json",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.fault-registry.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "@iridium/testkit/faults/points.ts and apps/server/src/ops/faults.ts declare the same point names",
+      "asserts": "M1 — @iridium/testkit/faults/points.ts and apps/server/src/ops/faults.ts declare the same point names",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.i18n.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M4",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "no user-visible string literal in packages/ui/src outside i18n/en.ts; every key in en.ts is used",
+      "asserts": "M4 — no user-visible string literal in packages/ui/src outside i18n/en.ts; every key in en.ts is used",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.mutation-lane.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "@typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
+      "asserts": "M0 — @typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.no-direct-date.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "Date.now()/new Date()/bare setTimeout absent from apps/server/src outside ops/clock.ts",
+      "asserts": "M0 — Date.now()/new Date()/bare setTimeout absent from apps/server/src outside ops/clock.ts",
       "inventories": [
         "Guard tests"
       ]
@@ -4079,44 +4803,44 @@
     },
     "guards.no-mocks-outside-unit.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "vi.mock(, vi.spyOn( on first-party modules, and msw appear only in unit/component test files",
+      "asserts": "M0 — vi.mock(, vi.spyOn( on first-party modules, and msw appear only in unit/component test files",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.no-raw-sql-in-tests.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "the only raw sql tagged template in a test file is inside packages/testkit/src/db/corrupt.ts",
+      "asserts": "M0 — specs/support contain no raw Kysely sql tags or sql.raw calls, and no direct statically resolved mutating SQL through callback, MysqlAdmin or shipped-client transports; deliberate writes use named operations in packages/testkit/src/db/corrupt.ts, while db/inspect.ts is read-only",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.no-sleep.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "no setTimeout-based sleep, no page.waitForTimeout, no delay( in test files",
+      "asserts": "M0 — no setTimeout-based sleep, no page.waitForTimeout, no delay( in test files",
       "inventories": [
         "Guard tests"
       ]
     },
     "guards.no-test-auth.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "apps/server/src/auth/** contains no branch keyed on NODE_ENV, IRIDIUM_E2E or IRIDIUM_FAULT",
+      "asserts": "M1 — apps/server/src/auth/** contains no branch keyed on NODE_ENV, IRIDIUM_E2E or IRIDIUM_FAULT",
       "inventories": [
         "Guard tests"
       ]
@@ -4143,13 +4867,24 @@
         "Guard tests"
       ]
     },
-    "guards.seq-is-number.guard": {
+    "guards.release-policy.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "no BigInt(, no bigint annotation and no numeric …n literal under apps/server/src/collab/, apps/server/src/notes/ or apps/server/src/db/schema.ts, except in a comparison against Kysely's numUpdatedRows",
+      "asserts": "M1 — product tags match the tagged server version and exited milestone; artifact jobs begin at M1/M3/M5/M8 and retain verification prerequisites; a new migration requires a visible [migration] flag in the exact current server changelog section",
+      "inventories": [
+        "Guard tests"
+      ]
+    },
+    "guards.seq-is-number.guard": {
+      "layer": "L1",
+      "sinceMilestone": "M0",
+      "project": "guard",
+      "file": null,
+      "tag": null,
+      "asserts": "M0 — no BigInt(, no bigint annotation and no numeric …n literal under apps/server/src/collab/, apps/server/src/notes/ or apps/server/src/db/schema.ts, except in a comparison against Kysely's numUpdatedRows",
       "inventories": [
         "Guard tests"
       ]
@@ -4263,19 +4998,20 @@
     },
     "import.resume.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/import.resume.integration.spec.ts",
-      "tag": null,
-      "asserts": "a half-committed import is never visible; commit is idempotent under retry; export streams without buffering the whole ZIP (asserted by RSS delta on a 500 MB fixture)",
+      "tag": "[spec:portability-and-safety]",
+      "asserts": "M6 — [spec:portability-and-safety] — The resumable M6 import keeps partial work invisible and commits idempotently after interruption (12 §10.2).",
       "inventories": [
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli",
         "Server suite by area (Transfer)",
         "the Location convention"
       ]
     },
     "import.unsafe-paths.unit": {
       "layer": "L1",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "unit",
       "file": null,
       "tag": null,
@@ -4299,11 +5035,11 @@
     },
     "job-claim.contract": {
       "layer": "L8",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "contract",
       "file": "apps/server/test/contract/job-claim.contract.spec.ts",
       "tag": "[area:seams]",
-      "asserts": "the jobs.locked_by claim protocol: one winner, lease expiry, re-entrancy refusal, and no lost job when a holder dies",
+      "asserts": "M2 — the jobs.locked_by claim protocol: one winner, lease expiry, re-entrancy refusal, and no lost job when a holder dies",
       "inventories": [
         "Inventory completeness — Ops, restore, release and the seam contract suites",
         "the Location convention"
@@ -4311,12 +5047,13 @@
     },
     "jobs.partitions.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/jobs.partitions.integration.spec.ts",
-      "tag": null,
-      "asserts": "every job is idempotent, re-entrant-safe (a second invocation while the first runs is a no-op), bounded per run, and driven by ManualClock; POST /admin/jobs/:type/run is audited",
+      "tag": "[area:jobs]",
+      "asserts": "M2 — The M2 access-log partition job creates ahead, prunes only expired partitions, and is bounded, idempotent and safe under competing claims (12 §6.2).",
       "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin",
         "Server suite by area (Jobs)",
         "Superseded spellings (canonical)",
         "the Location convention"
@@ -4336,12 +5073,13 @@
     },
     "jobs.session-sweep.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/jobs.session-sweep.integration.spec.ts",
-      "tag": null,
-      "asserts": "every job is idempotent, re-entrant-safe (a second invocation while the first runs is a no-op), bounded per run, and driven by ManualClock; POST /admin/jobs/:type/run is audited",
+      "tag": "[area:jobs]",
+      "asserts": "M2 — The M2 session/ticket sweep expires sessions, setup links and ticket entries using the injected clock; the M3 OAuth retention rules extend it later (12 §6.2, §7.2).",
       "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin",
         "Server suite by area (Jobs)",
         "Superseded spellings (canonical)",
         "the Location convention"
@@ -4362,15 +5100,15 @@
     },
     "jobs.update-log-prune.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/jobs.update-log-prune.integration.spec.ts",
-      "tag": null,
-      "asserts": "every job is idempotent, re-entrant-safe (a second invocation while the first runs is a no-op), bounded per run, and driven by ManualClock; POST /admin/jobs/:type/run is audited",
+      "tag": "[area:jobs]",
+      "asserts": "M1 — The configured retention and bounded prune job preserve replayability at the snapshot boundary.",
       "inventories": [
+        "Inventory completeness — M1 completion regressions.",
         "Server suite by area (Jobs)",
-        "Superseded spellings (canonical)",
-        "the Location convention"
+        "Superseded spellings (canonical)"
       ]
     },
     "kernel.smoke.integration": {
@@ -4387,11 +5125,11 @@
     },
     "keys-rotate.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M7",
       "project": "integration",
       "file": "apps/server/test/integration/keys-rotate.integration.spec.ts",
       "tag": "[area:ops]",
-      "asserts": "[area:ops] — every keys rotate target is idempotent, exits 3 rather than overwriting, writes nothing to the database itself, and the next boot records schema_meta plus the audit event",
+      "asserts": "M7 — [area:ops] — every keys rotate target is idempotent, exits 3 rather than overwriting, writes nothing to the database itself, and the next boot records schema_meta plus the audit event",
       "inventories": [
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "the Location convention"
@@ -4444,7 +5182,7 @@
     },
     "links.index.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/links.index.integration.spec.ts",
       "tag": "[area:links]",
@@ -4492,11 +5230,11 @@
     },
     "markdown.body-text-map.prop": {
       "layer": "L4",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
-      "asserts": "body_text carries no markup, and every offset in it maps back to a source offset, so a snippet can always be located in the original",
+      "asserts": "M2 — body_text carries no markup, and every offset in it maps back to a source offset, so a snippet can always be located in the original",
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
@@ -4595,11 +5333,11 @@
     },
     "markdown.offsets.prop": {
       "layer": "L4",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
-      "asserts": "every mdast node's start_offset/end_offset slices back to the exact source text, for arbitrary generated documents",
+      "asserts": "M2 — every mdast node's start_offset/end_offset slices back to the exact source text, for arbitrary generated documents",
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
@@ -4617,18 +5355,18 @@
     },
     "markdown.pipeline-version.guard": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "guard",
       "file": null,
       "tag": "[area:markdown]",
-      "asserts": "[area:markdown] — PIPELINE_VERSION is bumped in the same commit as any change under packages/markdown/src/{parse,project,sanitize}/, asserted from the git diff",
+      "asserts": "M2 — [area:markdown] — PIPELINE_VERSION is bumped in the same commit as any change under packages/markdown/src/{parse,project,sanitize}/, asserted from the git diff",
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
     "markdown.roundtrip.prop": {
       "layer": "L4",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "unit",
       "file": null,
       "tag": null,
@@ -4723,12 +5461,13 @@
     },
     "mcp.discover.mcp": {
       "layer": "L8",
-      "sinceMilestone": null,
+      "sinceMilestone": "M3",
       "project": "mcp",
       "file": "apps/server/test/mcp/mcp.discover.mcp.spec.ts",
-      "tag": null,
-      "asserts": "detailed in \"Contract and conformance suites\"",
+      "tag": "[area:mcp]",
+      "asserts": "M3 — Discovery advertises exactly the committed tools/resources/completions capabilities on both mounts and both supported protocol eras, with no unsupported subscription capability (Contract and conformance suites; 12 §7.2).",
       "inventories": [
+        "Inventory completeness — MCP and the stdio bridge (06-mcp-and-agent-access.md owns th",
         "Server suite by area (MCP)",
         "the Location convention"
       ]
@@ -4848,7 +5587,7 @@
     },
     "mcp.no-write-imports.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[area:mcp]",
@@ -4968,23 +5707,24 @@
     },
     "mcp.verifier.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M3",
       "project": "unit",
       "file": null,
       "tag": "[hp:HP-3]",
-      "asserts": "the bearer verifier maps every credential state to exactly one outcome and never returns a principal for an unknown prefix",
+      "asserts": "M3 — the bearer verifier maps every credential state to exactly one outcome and never returns a principal for an unknown prefix",
       "inventories": [
         "Inventory completeness — MCP and the stdio bridge (06-mcp-and-agent-access.md owns th"
       ]
     },
     "meta.apiversion.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/meta.apiversion.integration.spec.ts",
-      "tag": null,
-      "asserts": "GET /meta shape; a client sending an X-Iridium-Client-Version below minClientVersion receives the documented refusal on write routes and a readable body; a client at apiVersion N-1 still works on every route marked additive",
+      "tag": "[area:ops]",
+      "asserts": "M1 — The real M1 /meta shape reports the wire version and minimum client version; an older client receives the documented write refusal with a readable body (12 §5.2).",
       "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites",
         "Server suite by area (Compatibility)",
         "Superseded spellings (canonical)",
         "the Location convention"
@@ -5030,7 +5770,7 @@
     },
     "mirror.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/mirror.integration.spec.ts",
       "tag": "[area:transfer]",
@@ -5050,6 +5790,28 @@
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli",
         "the Location convention"
+      ]
+    },
+    "note-session.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[hp:HP-1]",
+      "asserts": "M1 — against a faked provider: the ticket handshake, the baseline request after every synced and its single re-request (D05-05), the 15 s dominance deadline, the role-upgrade re-attach on the same Y.Doc (A20), the close policies, the oversize delta, the ticket getter's retries on 429, disposal, and the registry's reference counting and 60 s release",
+      "inventories": [
+        "Inventory completeness — Client, editor and desktop"
+      ]
+    },
+    "notes.fresh-capacity.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/notes.fresh-capacity.integration.spec.ts",
+      "tag": "[area:contracts]",
+      "asserts": "M1 — A fresh read respects admission capacity while committed Markdown remains readable.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "notes.initialize.integration": {
@@ -5073,6 +5835,28 @@
       "asserts": "M2 — the closing set is left clean when a trash fails: a trash transaction made to throw by a failing withVaultLock leaves the closing set empty, so gateway.isClosing(noteId) is false and a fresh onAuthenticate on note:<id> succeeds instead of being refused note-closing. The committed path is asserted by tree.structural-concurrency.integration; this file owns the rollback, which is the case a live-server test cannot reach without a fault point",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search"
+      ]
+    },
+    "notes.repair-content.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/notes.repair-content.integration.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M1 — Real hostile frames yield fresh-read 409, recoverable dry-run checkpoints, audited repair, and continued saving by the original client.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "notes.repair.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/notes/repair.unit.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M1 — Repair waits for accepted updates and checkpoints their exact durable sequence; dry-run preserves text and actor attribution while creating only that checkpoint.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "oauth-client-list.component": {
@@ -5328,7 +6112,7 @@
     },
     "obsidian.basename-resolution.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
@@ -5339,7 +6123,7 @@
     },
     "obsidian.detect.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
@@ -5374,7 +6158,7 @@
     },
     "ops.alerts.unit": {
       "layer": "L1",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M8",
       "project": "unit",
       "file": null,
       "tag": "[area:ops]",
@@ -5420,6 +6204,17 @@
         "the Location convention"
       ]
     },
+    "ops.openapi-inputs.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:ops]",
+      "asserts": "M1 — live OpenAPI inputs retain boolean enums, strong If-Match syntax, UUIDv7 patterns, name constraints and custom formats for the Unicode/path and credential-CRC refinements",
+      "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites"
+      ]
+    },
     "ops.pitr.chaos": {
       "layer": "L5",
       "sinceMilestone": "M8",
@@ -5443,13 +6238,24 @@
         "the Location convention"
       ]
     },
+    "ops.shutdown.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/ops/shutdown.unit.spec.ts",
+      "tag": "[hp:HP-2]",
+      "asserts": "M1 — Synchronous lifetime capture precedes every asynchronous drain phase, reentrant signals join one execution, and the unchanged hard deadline retains undrained identities without releasing resources early.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "ops.trust-proxy.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/ops.trust-proxy.integration.spec.ts",
       "tag": "[area:ops]",
-      "asserts": "X-Forwarded-For and X-Request-Id are honoured only from the configured proxy CIDR; a spoofed header from elsewhere is ignored for rate limiting and for logging",
+      "asserts": "M1 — X-Forwarded-For and X-Request-Id are honoured only from the configured proxy CIDR; a spoofed header from elsewhere is ignored for rate limiting and for logging",
       "inventories": [
         "Inventory completeness — Ops, restore, release and the seam contract suites",
         "the Location convention"
@@ -5457,7 +6263,7 @@
     },
     "ops.upgrade-rehearsal.drill": {
       "layer": "L5",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M8",
       "project": "chaos",
       "file": "apps/server/test/chaos/ops.upgrade-rehearsal.drill.spec.ts",
       "tag": "[area:ops]",
@@ -5492,6 +6298,17 @@
         "the Location convention"
       ]
     },
+    "persistence.memory-model.prop": {
+      "layer": "L4",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/persistence.memory-model.prop.spec.ts",
+      "tag": "[spec:durable-saving]",
+      "asserts": "M1 — Pure persistence state machine mirrors the MySQL command model.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "persistence.model.prop": {
       "layer": "L4",
       "sinceMilestone": "M1",
@@ -5505,11 +6322,11 @@
     },
     "persistence.performance.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/persistence.performance.integration.spec.ts",
       "tag": "[hp:HP-1]",
-      "asserts": "the writer micro-budget: a single coalesced update commits in under 15 ms at innodb_flush_log_at_trx_commit=1, asserted as a p95 over 200 commits with the 3× runner tolerance the test records; the measurement is written to reports/perf/*.jsonl",
+      "asserts": "M1 — the writer micro-budget: a single coalesced update commits in under 15 ms at innodb_flush_log_at_trx_commit=1, asserted as a p95 over 200 commits with the 3× runner tolerance the test records; the measurement is written to reports/perf/*.jsonl",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
@@ -5588,11 +6405,11 @@
     },
     "projection.performance.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/projection.performance.integration.spec.ts",
       "tag": "[area:content]",
-      "asserts": "the projection micro-budget: a 100 KB note projects in under 250 ms in the piscina worker, measured through the real pool rather than by calling project() directly, with the measurement written to reports/perf/*.jsonl",
+      "asserts": "M2 — the projection micro-budget: a 100 KB note projects in under 250 ms in the piscina worker, measured through the real pool rather than by calling project() directly, with the measurement written to reports/perf/*.jsonl",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
@@ -5607,6 +6424,18 @@
       "asserts": "the WHERE revision < ? guard rejects an out-of-order write (injected by running two compactions concurrently), and the out-of-order re-run case passes on both required images with the row-alias upsert form — the VALUES() function is deprecated on 8.4 and 9.7 alike and is banned by db.dialect-floor.guard, so the rewrite is proven behaviourally here and not only token-checked there; heading_title and note_search.title update on rename; a pathological note lands in status='too_complex' with raw Markdown still served; iridium reindex --pipeline-version is resumable and throttled",
       "inventories": [
         "Server suite by area (Projections)",
+        "the Location convention"
+      ]
+    },
+    "projection.text-monotonic.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/projection.text-monotonic.integration.spec.ts",
+      "tag": null,
+      "asserts": "M1 — real MySQL insert, newer strict write updates every text/metadata field together, stale and strict-equal jobs preserve the row, non-strict equal-revision rebuild refreshes it",
+      "inventories": [
+        "Server suite by area (Text projection)",
         "the Location convention"
       ]
     },
@@ -5648,11 +6477,11 @@
     },
     "rate-limit-store.contract": {
       "layer": "L8",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "contract",
       "file": "apps/server/test/contract/rate-limit-store.contract.spec.ts",
       "tag": "[area:seams]",
-      "asserts": "bucket arithmetic, refill, burst and Retry-After values, independent of the implementation",
+      "asserts": "M1 — bucket arithmetic, refill, burst and Retry-After values, independent of the implementation",
       "inventories": [
         "Inventory completeness — Ops, restore, release and the seam contract suites",
         "the Location convention"
@@ -5707,6 +6536,28 @@
         "E2E inventory (web)",
         "Inventory completeness — Client, editor and desktop",
         "the Location convention"
+      ]
+    },
+    "rest.ownership.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/rest/ownership.unit.spec.ts",
+      "tag": "[area:rest]",
+      "asserts": "M1: mutating requests capture ownership before authentication, retain that generation across a queued read and takeover, and fail closed when no current admission fence exists.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "rest.responses.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/rest.responses.integration.spec.ts",
+      "tag": "[area:contracts]",
+      "asserts": "M1 — Every M1 documented HTTP refusal and response body is observed on the real route.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "rest.route-index.contract": {
@@ -5804,6 +6655,17 @@
         "Property and model suites"
       ]
     },
+    "save-state.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[hp:HP-1]",
+      "asserts": "M1 — the two mappings save-state.machine.prop cannot check: the close-reason table of 05-collaboration-and-durability.md as the client decides it, and which SaveStateInput field each SaveEvent moves",
+      "inventories": [
+        "Inventory completeness — Client, editor and desktop"
+      ]
+    },
     "saved-indicator.e2e": {
       "layer": "L6",
       "sinceMilestone": "M4",
@@ -5816,9 +6678,20 @@
         "the Location convention"
       ]
     },
-    "search-index.contract": {
+    "schemathesis.light.contract": {
       "layer": "L8",
       "sinceMilestone": "M1",
+      "project": "contract",
+      "file": "apps/server/test/contract/schemathesis.light.contract.spec.ts",
+      "tag": "[area:contracts]",
+      "asserts": "M1: all checks and all four phases at fifty examples per shipped operation against a freshly seeded production image, using a non-admin editor; admin and test-only routes excluded. M2 extends this same gate to its routes (D12-20). Sanitized JUnit retained and every fixture resource removed.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "search-index.contract": {
+      "layer": "L8",
+      "sinceMilestone": "M2",
       "project": "contract",
       "file": "apps/server/test/contract/search-index.contract.spec.ts",
       "tag": "[area:seams]",
@@ -5842,7 +6715,7 @@
     },
     "search.acl.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/search.acl.integration.spec.ts",
       "tag": null,
@@ -5854,11 +6727,11 @@
     },
     "search.performance.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/search.performance.integration.spec.ts",
       "tag": "[area:search]",
-      "asserts": "the search micro-budget: query build plus FULLTEXT over the generated corpus-5k fixture completes in under 200 ms, with the measurement written to reports/perf/*.jsonl. The fixture is shared with the k6 read-heavy scenario so the two numbers are comparable",
+      "asserts": "M2 — the search micro-budget: query build plus FULLTEXT over the generated corpus-5k fixture completes in under 200 ms, with the measurement written to reports/perf/*.jsonl. The fixture is shared with the k6 read-heavy scenario so the two numbers are comparable",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
@@ -5914,11 +6787,11 @@
     },
     "search.snippets.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M2",
       "project": "unit",
       "file": null,
       "tag": "[area:search]",
-      "asserts": "snippet windows anchor to real line numbers, never split a grapheme, and escape every markup character they carry",
+      "asserts": "M2 — snippet windows anchor to real line numbers, never split a grapheme, and escape every markup character they carry",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search"
       ]
@@ -5938,11 +6811,11 @@
     },
     "security.credential-flood.integration": {
       "layer": "L3",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "integration",
       "file": "apps/server/test/integration/security.credential-flood.integration.spec.ts",
       "tag": "[area:security]",
-      "asserts": "[area:security] — a flood of malformed credentials costs one dummy verify each, never exhausts the pool, and is throttled per IP without locking a real account out",
+      "asserts": "M1 — [area:security] — a flood of malformed credentials costs one dummy verify each, never exhausts the pool, and is throttled per IP without locking a real account out",
       "inventories": [
         "Inventory completeness — Authentication and credentials (04-auth-and-access-control.m",
         "the Location convention"
@@ -5986,15 +6859,37 @@
         "the Location convention"
       ]
     },
+    "security.ip-range.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/security/ip-range.unit.spec.ts",
+      "tag": "[area:security]",
+      "asserts": "M1 — Strict IPv4/IPv6 parsing and partial CIDR prefixes keep trusted-proxy and metrics allowlists exact.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "security.problem-details.unit": {
       "layer": "L1",
-      "sinceMilestone": null,
+      "sinceMilestone": "M0",
       "project": "unit",
       "file": "packages/contracts/src/problem-details.unit.spec.ts",
       "tag": "[area:contracts]",
-      "asserts": "every ProblemDetails.code has a title and a documented status, and the constructor cannot be called with a code outside the enum",
+      "asserts": "M0 — every ProblemDetails.code has a title and a documented status, and the constructor cannot be called with a code outside the enum",
       "inventories": [
         "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
+      ]
+    },
+    "security.problem.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/security/problem.unit.spec.ts",
+      "tag": "[area:security]",
+      "asserts": "M1 — Malformed thrown values and validation records cannot escape the problem-details boundary or forge inherited Fastify codes.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "security.rate-limits.integration": {
@@ -6072,6 +6967,17 @@
         "the Location convention"
       ]
     },
+    "stateless-codec.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:collab]",
+      "asserts": "M1 — the client's baseline and flush frames decode with the server's decoder from @iridium/contracts; the 09-api-reference.md §3.9 message-to-input mapping is checked against the contracts' source table; ignored versus reported decode failures follow the contracts' failure vocabulary; persisted.sv round-trips through base64 and a vector whose bytes do not re-encode to themselves is refused; mandatory persisted.ds is exactly 64 lowercase hexadecimal characters, and missing or malformed witnesses are refused before client state changes",
+      "inventories": [
+        "Inventory completeness — Client, editor and desktop"
+      ]
+    },
     "status-pill.transitions.component": {
       "layer": "L2",
       "sinceMilestone": "M4",
@@ -6132,6 +7038,106 @@
         "Superseded spellings (canonical)"
       ]
     },
+    "testkit.child-server.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": null,
+      "tag": null,
+      "asserts": "failed startup kills the owned process, awaits stdio close, and retains stdout/stderr and the original cause; successful startup uses the built binary with serve --child",
+      "inventories": [
+        "Server suite by area (Child process lifecycle)",
+        "the Location convention"
+      ]
+    },
+    "testkit.container-server.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M1",
+      "project": "integration",
+      "file": "apps/server/test/integration/testkit.container-server.integration.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1 — The shipped production container seeds, saves, survives SIGKILL and drains under SIGTERM.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.db-probes.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M0",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.db-probes.unit.spec.ts",
+      "tag": "[area:testing]",
+      "asserts": "M0 — Named SQL probes preserve caller transactions, parameter binding, callback overloads, native errors/results and operation-only logs; unsafe identifiers and non-product grant scripts are refused before I/O.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.origin-ws.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.origin-ws.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1: real loopback source bindings preserve Origin and expose distinct peer IPs for physical WebSocket load under unchanged per-IP limits.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.provider-handshake.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.provider-handshake.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1: actual provider handshakes discard retired ticket successes and failures across close, detach and destroy; only the current authenticated generation starts sync. Awareness queries publish only the local client identity while retaining cached peer presence.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.schemathesis.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.schemathesis.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1: the fuzz adapter preserves required budgets, reports failures, redacts fixture credentials and closes every owned resource through setup and execution failures.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.socket-lifecycle.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.socket-lifecycle.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1: real Node WebSocket destroy/supersede while CONNECTING retains the old error owner until close, leaves no listeners or TCP peers, and permits a replacement protocol ping/pong without uncaught errors.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.tickets.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.tickets.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1 — Concurrent ticket batches refill once, expire using the advertised lifetime including request latency, and invalidate without discarding a newer replacement.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.toxiproxy.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.toxiproxy.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1 — Fault control validates proxy documents, refuses failed arming or cleanup, and encodes toxic names safely.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "three-editors.e2e": {
       "layer": "L6",
       "sinceMilestone": "M4",
@@ -6146,11 +7152,11 @@
     },
     "ticket-store.contract": {
       "layer": "L8",
-      "sinceMilestone": null,
+      "sinceMilestone": "M1",
       "project": "contract",
       "file": "apps/server/test/contract/ticket-store.contract.spec.ts",
       "tag": "[area:seams]",
-      "asserts": "single use, TTL, {sessionId, userId} binding and batch limits, independent of the implementation",
+      "asserts": "M1 — single use, TTL, {sessionId, userId} binding and batch limits, independent of the implementation",
       "inventories": [
         "Inventory completeness — Ops, restore, release and the seam contract suites",
         "the Location convention"
@@ -6340,7 +7346,7 @@
     },
     "transfer.fixtures.integration": {
       "layer": "L3",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/transfer.fixtures.integration.spec.ts",
       "tag": null,
@@ -6353,7 +7359,7 @@
     },
     "transfer.isolation.integration": {
       "layer": "L3",
-      "sinceMilestone": "M1",
+      "sinceMilestone": "M6",
       "project": null,
       "file": null,
       "tag": null,
@@ -6509,11 +7515,11 @@
     },
     "ui.theme.component": {
       "layer": "L2",
-      "sinceMilestone": null,
+      "sinceMilestone": "M4",
       "project": "component",
       "file": null,
       "tag": "[area:ui]",
-      "asserts": "light, dark and system resolution, prefers-reduced-motion, and that no component reads a colour outside the token set",
+      "asserts": "M4 — light, dark and system resolution, prefers-reduced-motion, and that no component reads a colour outside the token set",
       "inventories": [
         "Inventory completeness — Client, editor and desktop"
       ]
@@ -6543,7 +7549,7 @@
     },
     "vault-isolation.e2e": {
       "layer": "L6",
-      "sinceMilestone": "M4",
+      "sinceMilestone": "M2",
       "project": "chromium",
       "file": "apps/e2e/web/vault-isolation.e2e.spec.ts",
       "tag": null,

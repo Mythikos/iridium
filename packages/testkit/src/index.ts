@@ -22,10 +22,22 @@
  * - the msw handler skeleton;
  * - the Vitest global-setup and per-worker setup files the root `vitest.config.ts` references.
  *
- * The M1 additions each have their seam named where they will land: `NoteClient` on
- * `loadCollabClient()`, and the `TestServer` members that need a SQL client (`db`, `dbRoot`,
- * `seed`, `tickets`, `sessions`, `mcp`, `client`, `vaultChannel`) on the product routes that create
- * the state they read.
+ * What M1 adds (12-milestones.md §5.2, the `@iridium/testkit` row):
+ *
+ * - `NoteClient` over `@iridium/collab-client`'s real `NoteSession`, with the waiters, the
+ *   transition, stateless and close logs, and the hand-built frames a spoofing test needs;
+ * - `seed.kernel()` — the M1 cast, vault `V` and note `N`, created through the product's own CLI and
+ *   routes, so the seed is itself a smoke test;
+ * - `startServer({ limits })`, `srv.client()`, `srv.seed`, `srv.sessions`, `srv.tickets`, `srv.cli()`
+ *   on top of M0's `kill`/`restart`/`faults`;
+ * - `toDominate`, the HP-1 matcher, and the shared property arbitraries;
+ * - named database probes in `db/corrupt.ts` and read-only metadata observations in `db/inspect.ts`,
+ *   using only caller-owned executors/transports and no product schema imports.
+ *
+ * Still seams rather than code, each with the milestone that fills it: the `TestServer` members that
+ * need a product database type (`db`, `dbRoot`) or later protocol support (`vaultChannel`, `mcp`),
+ * plus the later shared `assertNoteInvariants` and `countQueries` helpers. These do not require a
+ * second database connection path in the testkit.
  */
 
 // --- paths ------------------------------------------------------------------
@@ -41,6 +53,41 @@ export {
   TESTKIT_PACKAGE_ROOT,
   requireExistingPath,
 } from './paths.ts';
+
+// --- deliberate database probes ---------------------------------------------
+export type {
+  AdminCorruption,
+  CallbackWriteProbe,
+  DeliberateCorruption,
+  MysqlWriteProbe,
+} from './db/corrupt.ts';
+export {
+  corruptCallbackDeliberately,
+  corruptDeliberately,
+  corruptMysqlDeliberately,
+  corruptShippedMysqlDeliberately,
+  probeShippedMysqlWrite,
+} from './db/corrupt.ts';
+export type { DatabaseProbeCell } from './db/inspect.ts';
+export {
+  inspectAdvisoryLock,
+  inspectApplicationPrivileges,
+  inspectConnectionIdentity,
+  inspectCreationCounts,
+  inspectGrantCriticalState,
+  inspectGuardedIndexes,
+  inspectMigrationHistory,
+  inspectRoleAuthentication,
+  inspectRoleGrants,
+  inspectSchemaColumnCount,
+  inspectSchemaColumns,
+  inspectSchemaFingerprint,
+  inspectSchemaTables,
+  inspectSessionLockTimeouts,
+  inspectTablesWithoutPrimaryKey,
+  inspectTransportValue,
+  inspectVisibleConnectionCount,
+} from './db/inspect.ts';
 
 // --- environment ------------------------------------------------------------
 export type { TestEnv, TestEnvMysql, TestEnvOptions } from './env/start-test-env.ts';
@@ -103,17 +150,28 @@ export type {
   RestPrincipalOptions,
   ServerDatabase,
   ServerMode,
+  ServerNoteClientOptions,
+  SessionHelpers,
   StartServerOptions,
   TestServer,
+  TicketHelpers,
 } from './server/start-server.ts';
 export { startServer } from './server/start-server.ts';
+export type { BuildAppLimits, LimitOverrideName, LimitsOverrides } from './server/limits.ts';
+export {
+  LIMIT_ENV_OVERRIDE_KEYS,
+  LIMIT_OVERRIDE_ENV,
+  LIMIT_OVERRIDE_ENV_KEYS,
+  collabBootLimits,
+  limitsEnv,
+} from './server/limits.ts';
 export type { BuildApp, InProcessServer, TestAppInstance } from './server/in-process.ts';
 export { loadBuildApp, startInProcessServer } from './server/in-process.ts';
 export type { ChildServer, ChildServerOptions } from './server/child.ts';
 export { startChildServer } from './server/child.ts';
 export type { CliOptions, CliResult, MigrateOptions } from './server/cli.ts';
 export { SERVER_NOT_BUILT_HINT, migrateSchema, runIridiumCli } from './server/cli.ts';
-export type { ServerEnvOptions } from './server/env.ts';
+export type { DatabasePasswords, ServerEnvOptions } from './server/env.ts';
 export {
   DEFAULT_DATABASE_NAME,
   TEMPLATE_SCHEMA,
@@ -142,17 +200,78 @@ export {
   CLIENT_HEADER,
   CLIENT_VERSION_HEADER,
   DEFAULT_CLIENT_VERSION,
+  FETCH_SITE_HEADER,
+  ORIGIN_HEADER as REST_ORIGIN_HEADER,
   isUnsafeMethod,
   restClient,
 } from './clients/rest-client.ts';
+
+// --- sessions, tickets and seeding -------------------------------------------
+export type { Credentials, DesktopSignIn, SignedInSession, WebSignIn } from './auth/sessions.ts';
+export {
+  CURRENT_SESSION_PATH,
+  REAUTHENTICATE_PATH,
+  SESSIONS_PATH,
+  revokeOwnSession,
+  signInDesktop,
+  signInWeb,
+  signOut,
+  stepUp,
+} from './auth/sessions.ts';
+export type { RestTicketSourceOptions } from './auth/tickets.ts';
+export {
+  COLLAB_TICKETS_PATH,
+  fixedTicketSource,
+  issueTickets,
+  restTicketSource,
+} from './auth/tickets.ts';
+export type {
+  SeedApi,
+  SeedApiOptions,
+  SeedRole,
+  SeededAdmin,
+  SeededNote,
+  SeededUser,
+  SeededVault,
+} from './seed/seed.ts';
+export {
+  SEED_EMAIL_DOMAIN,
+  SEED_PASSWORD,
+  createSeedApi,
+  setPasswordTokenFrom,
+} from './seed/seed.ts';
+export type { KernelSeed } from './seed/kernel.ts';
+export {
+  KERNEL_LOCAL_PARTS,
+  KERNEL_NOTE_MARKDOWN,
+  KERNEL_NOTE_NAME,
+  KERNEL_VAULT_NAME,
+  seedKernel,
+} from './seed/kernel.ts';
 export type {
   OriginWebSocketOptions,
   TestWebSocket,
   TestWebSocketConstructor,
 } from './clients/origin-ws.ts';
 export { ORIGIN_HEADER, createOriginWebSocket, openOriginWebSocket } from './clients/origin-ws.ts';
-export type { CollabClientSurface, NoteClientOptions } from './clients/note-client.ts';
-export { loadCollabClient, noteClientWebSocket } from './clients/note-client.ts';
+export type {
+  CollabProvider,
+  CollabSocket,
+  NoteAck,
+  NoteClient,
+  NoteClientClose,
+  NoteClientOptions,
+  SaveStateTarget,
+} from './clients/note-client.ts';
+export { createNoteClient, noteClientWebSocket } from './clients/note-client.ts';
+export type { AwarenessEntry } from './clients/awareness-frame.ts';
+export {
+  MESSAGE_TYPE_AWARENESS,
+  MESSAGE_TYPE_STATELESS,
+  awarenessFrame,
+  encodeAwarenessUpdate,
+  statelessFrame,
+} from './clients/awareness-frame.ts';
 
 // --- faults -----------------------------------------------------------------
 export type {
@@ -188,6 +307,7 @@ export {
   escapeJsonPointerSegment,
   registerOpenApiMatcher,
 } from './matchers/to-match-openapi.ts';
+export { registerDominanceMatcher } from './matchers/to-dominate.ts';
 
 // --- harness utilities ------------------------------------------------------
 export type { Deferred, WaitOptions } from './harness/deadline.ts';
@@ -243,6 +363,31 @@ export {
   problemDetails,
 } from './msw/handlers.ts';
 
-// --- property budgets -------------------------------------------------------
-export type { DbPropertyBudget } from './property/config.ts';
+// --- property budgets and arbitraries ---------------------------------------
+export type { DbPropertyBudget, PropertyBudget } from './property/config.ts';
 export { PROP, PROP_DB, PROP_SIZE } from './property/config.ts';
+export type { HostileStringOptions, TextInsertion } from './property/arbitraries.ts';
+export { HOSTILE_UNITS, hostileString, noteText, textInsertion } from './property/arbitraries.ts';
+
+export { probeRejectedMysqlRolePlugin, type MysqlRolePluginProbe } from './env/mysql-probes.ts';
+export {
+  startShippedMysqlClient,
+  type ShippedMysqlClient,
+  type ShippedMysqlClientOptions,
+  type DatabaseRole,
+} from './env/shipped-mysql-client.ts';
+
+// Shared-socket and ticket I/O seams for connected harnesses.
+export { CollabTicketError, createCollabSocket, warnsBeforeUnload } from '@iridium/collab-client';
+
+export {
+  createVaultClient,
+  type VaultClient,
+  type VaultClientOptions,
+} from './clients/vault-client.ts';
+
+export {
+  runSchemathesis,
+  type SchemathesisOptions,
+  type SchemathesisResult,
+} from './contract/schemathesis.ts';

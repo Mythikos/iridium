@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "catalog:",
+    "@hocuspocus/provider": "catalog:",
     "@iridium/api-client": "workspace:*",
     "@iridium/collab-client": "workspace:*",
     "@iridium/contracts": "workspace:*",
@@ -33,6 +34,7 @@
     "ajv": "catalog:",
     "ajv-formats": "catalog:",
     "fast-check": "catalog:",
+    "kysely": "catalog:",
     "msw": "catalog:",
     "testcontainers": "catalog:",
     "ws": "catalog:"

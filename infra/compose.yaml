@@ -46,6 +46,10 @@ configs:
     content: |
       aXJpZGl1bS1kZXYtY3Vyc29yLS1kby1ub3QtdXNlISE=
 
+  dev_metrics_token:
+    content: |
+      iridium-dev-metrics-not-a-secret
+
 volumes:
   mysql-data: {}
   mysql-conf: {}
@@ -159,6 +163,7 @@ services:
       AUTH_PASSWORD_PEPPER_V1_FILE: /run/secrets/auth_password_pepper_v1
       AUDIT_HMAC_KEY_V1_FILE: /run/secrets/audit_hmac_key_v1
       MCP_CURSOR_KEY_V1_FILE: /run/secrets/mcp_cursor_key_v1
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
     configs:
       - source: dev_db_app_password
         target: /run/secrets/db_app_password
@@ -174,6 +179,9 @@ services:
         mode: 0444
       - source: dev_mcp_cursor_key_v1
         target: /run/secrets/mcp_cursor_key_v1
+        mode: 0444
+      - source: dev_metrics_token
+        target: /run/secrets/metrics_token
         mode: 0444
     volumes:
       - attachments-data:/data/attachments

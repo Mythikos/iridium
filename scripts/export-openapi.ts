@@ -15,11 +15,15 @@
  * `EnvSchema`, which requires the key.
  *
  * **Undocumented routes are reported.** `@fastify/swagger` documents routes registered after it, and
- * at M0 nothing registers it inside the plugin tree, so the export registers it after `buildApp` and
- * the M0 route set (`/healthz`, `/readyz`, `/metrics`, `/`, `/app/*`) is not in the document. The
- * step prints that list with the remedy rather than emitting an artefact that silently claims the
- * server has no routes. From M1 the `rest` plugin registers `@fastify/swagger` as its first statement
- * (see `apps/server/src/ops/openapi.ts`), this branch stops running, and the list goes empty.
+ * from M1 the `rest` plugin registers it as its own first statement (`apps/server/src/ops/openapi.ts`),
+ * so every route of the plugin tree reaches the document. What remains on the list is what a route
+ * deliberately hid: the `/collab` upgrade, which is a WebSocket and not an operation, and the Swagger
+ * UI's own bundle, which §2.17 lists as a static surface. The step prints the list rather than
+ * emitting an artefact whose omissions nobody can see.
+ *
+ * The comparison is made in the **document's** spelling: `stripBasePath` removes `/api/v1` from every
+ * documented path and renders `:param` as `{param}`, so a registered url is normalised the same way
+ * before it is looked up.
  */
 import { buildApp } from '../apps/server/src/app.ts';
 import { applyOpenApiPlugin, hasOpenApi } from '../apps/server/src/index.ts';
@@ -79,6 +83,23 @@ function methodPath(method: string, path: string): string {
   return `${method.toUpperCase()} ${path}`;
 }
 
+/**
+ * The path prefix `@fastify/swagger` strips from every documented url.
+ *
+ * The document's single server is `{publicOrigin}/api/v1`, and `stripBasePath` (the default) removes
+ * that pathname from each route's url before writing it into `paths`. A comparison that did not do
+ * the same would report every `/api/v1` route as undocumented.
+ */
+const DOCUMENT_BASE_PATH = '/api/v1';
+
+/** A registered url in the document's spelling: the base path stripped, `:param` as `{param}`. */
+function asDocumentPath(url: string): string {
+  const stripped = url.startsWith(`${DOCUMENT_BASE_PATH}/`)
+    ? url.slice(DOCUMENT_BASE_PATH.length)
+    : url;
+  return stripped.replaceAll(/:([^/]+)/g, '{$1}');
+}
+
 const DOCUMENTABLE_METHODS = new Set(['get', 'put', 'post', 'patch', 'delete', 'head', 'options']);
 
 function documentedOperations(document: unknown): Set<string> {
@@ -122,7 +143,12 @@ export async function exportOpenApiDocument(): Promise<{
     const document = readOpenApiDocument(app);
     const documented = documentedOperations(document);
     const undocumented = [...registeredOperations(app.routes())]
-      .filter((operation) => !documented.has(operation))
+      .map((operation) => {
+        const [method = '', url = ''] = operation.split(' ');
+        return methodPath(method, asDocumentPath(url));
+      })
+      // A `HEAD` twin is synthesised from its `GET` and is never a documented operation of its own.
+      .filter((operation) => !operation.startsWith('HEAD ') && !documented.has(operation))
       .toSorted((a, b) => a.localeCompare(b));
     return { document, undocumented };
   } finally {
@@ -141,8 +167,10 @@ export const step: Step = {
       undocumented.length === 0
         ? []
         : [
-            `${String(undocumented.length)} registered route(s) are not in the document, because ` +
-              '`@fastify/swagger` is not yet registered inside `applyRestPlugin` (M1):',
+            `${String(undocumented.length)} registered route(s) are not in the document. Each ` +
+              'declares `schema.hide` deliberately — the `/collab` upgrade is a WebSocket and not an ' +
+              "operation, and the Swagger UI's own bundle is a static surface of " +
+              '09-api-reference.md §2.17 rather than a route of the API:',
             ...undocumented.map((operation) => `  ${operation}`),
           ];
     return {

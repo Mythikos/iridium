@@ -37,6 +37,8 @@ export const LOG_EVENTS = [
   'collab.limit.exceeded',
   'collab.admission.refused',
   'collab.state_vector.oversize',
+  'collab.owner_lease.denied',
+  'collab.hook.error',
   // Persistence
   'persist.committed',
   'persist.failed',

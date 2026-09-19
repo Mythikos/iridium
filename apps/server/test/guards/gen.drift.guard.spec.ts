@@ -3,7 +3,7 @@
  * 12-milestones.md §4.3 and §4.6; 01-vision-scope-and-principles.md's "Enforced by" list).
  *
  * Every generated artefact in this repository is **committed**: the OpenAPI document, the api-client
- * `paths.d.ts`, the MCP tool schema, the desktop IPC typings, the msw handler skeleton,
+ * `paths.d.ts`, the MCP tool schema, the desktop IPC typings, the msw handler skeleton, both database grant snapshots,
  * `docs/non-goals.json` and `docs/acceptance-map.json`. Committing them is what lets a reviewer read
  * a wire change as a diff and what lets `guards.non-goals.guard` and `guards.acceptance-map.guard`
  * assert against a file instead of against a build. It is also what creates the one failure mode this
@@ -31,7 +31,7 @@
  * but importing it would climb out of `apps/server` — the thing `db.dialect-floor.guard` reaches a
  * workspace package to avoid, and something `turbo boundaries` has an opinion about. The list is
  * therefore restated from the plan's guard row and asserted to be *exactly* the set the pipeline
- * reports, so a pipeline that starts writing an eighth artefact fails here until the row, the map and
+ * reports, so a pipeline that starts writing another artefact fails here until the row, the map and
  * this list agree. That is the same two-part discipline the non-goal guard has with §4.4.
  *
  * **A note on `pnpm gen && git diff --exit-code`.** That is the shell form the guard table's "How"
@@ -51,7 +51,7 @@ const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const PIPELINE = join(REPO_ROOT, 'scripts', 'gen.ts');
 
 /**
- * The pipeline runs nine steps, three of which spawn a pinned tool of their own, so it is given far
+ * The pipeline runs ten steps, three of which spawn a pinned tool of their own, so it is given far
  * more than the `guard` project's 30-second default. The budget is generous rather than tight on
  * purpose: a drift gate that fails as a timeout teaches a contributor to re-run it, not to fix it.
  */
@@ -63,8 +63,10 @@ const PIPELINE_TIMEOUT_MS = 240_000;
  * hand-written and only *compared*, so it is not an artefact the report names.
  */
 const COMMITTED_ARTEFACTS: readonly string[] = [
+  'apps/server/test/fixtures/db-grants.snapshot.sql',
   'docs/acceptance-map.json',
   'docs/non-goals.json',
+  'docs/ops/db-grants.sql',
   'packages/api-client/src/generated/paths.d.ts',
   'packages/contracts/mcp/tools.schema.json',
   'packages/contracts/openapi/openapi.json',

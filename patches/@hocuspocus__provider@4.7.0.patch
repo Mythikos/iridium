@@ -1,0 +1,1423 @@
+diff --git a/src/HocuspocusProviderWebsocket.ts b/src/HocuspocusProviderWebsocket.ts
+index ba06a9b..0442f30 100644
+--- a/src/HocuspocusProviderWebsocket.ts
++++ b/src/HocuspocusProviderWebsocket.ts
+@@ -1,5 +1,5 @@
+ import { WsReadyStates } from "@hocuspocus/common";
+-import { retry } from "@lifeomic/attempt";
++import { defaultCalculateDelay, retry } from "@lifeomic/attempt";
+ import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
+ import * as encoding from "lib0/encoding";
+ import * as time from "lib0/time";
+@@ -212,10 +212,13 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 	receivedOnOpenPayload?: Event | undefined = undefined;
+ 
+ 	async onOpen(event: Event) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (!current()) return;
+ 		this.status = WebSocketStatus.Connected;
+-		this.emit("status", { status: WebSocketStatus.Connected });
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++		if (!current()) return;
+ 
+-		this.cancelWebsocketRetry = undefined;
+ 		this.receivedOnOpenPayload = event;
+ 	}
+ 
+@@ -247,12 +250,14 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 		}
+ 	}
+ 
+-	detach(provider: HocuspocusProvider) {
++	detach(provider: HocuspocusProvider, notifyServer = true) {
+ 		const key = provider.effectiveName;
+ 		if (this.configuration.providerMap.has(key)) {
+-			provider.send(CloseMessage, {
+-				documentName: key,
+-			});
++			if (notifyServer) {
++				provider.send(CloseMessage, {
++					documentName: key,
++				});
++			}
+ 			this.configuration.providerMap.delete(key);
+ 		}
+ 	}
+@@ -268,69 +273,127 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 	}
+ 
+ 	cancelWebsocketRetry?: () => void;
++	private websocketRetryPromise?: Promise<unknown>;
++	private reconnectTimeout?: ReturnType<typeof setTimeout>;
++	private isDestroyed = false;
+ 
+ 	async connect() {
+-		if (this.status === WebSocketStatus.Connected) {
+-			return;
+-		}
+-
+-		// Always cancel any previously initiated connection retryer instances
+-		if (this.cancelWebsocketRetry) {
+-			this.cancelWebsocketRetry();
+-			this.cancelWebsocketRetry = undefined;
+-		}
+-
++		if (this.isDestroyed) return;
++		// HTTP 101 is not retry completion: the first protocol message still owns this attempt.
++		if (this.status === WebSocketStatus.Connected) return this.websocketRetryPromise;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
+ 		this.receivedOnOpenPayload = undefined;
+ 		this.shouldConnect = true;
+-
+-		const abortableRetry = () => {
+-			let cancelAttempt = false;
+-
+-			const retryPromise = retry(this.createWebSocketConnection.bind(this), {
+-				delay: this.configuration.delay,
+-				initialDelay: this.configuration.initialDelay,
+-				factor: this.configuration.factor,
+-				maxAttempts: this.configuration.maxAttempts,
+-				minDelay: this.configuration.minDelay,
+-				maxDelay: this.configuration.maxDelay,
+-				jitter: this.configuration.jitter,
+-				timeout: this.configuration.timeout,
+-				handleTimeout: this.configuration.handleTimeout,
++		const configuration = this.configuration;
++		let cancelled = false;
++		let pauseTimer: ReturnType<typeof setTimeout> | undefined;
++		let finishPause: (() => void) | undefined;
++		const pause = (milliseconds: number): Promise<void> => new Promise<void>((resolvePause) => {
++			finishPause = () => {
++				clearTimeout(pauseTimer);
++				pauseTimer = undefined;
++				finishPause = undefined;
++				resolvePause();
++			};
++			pauseTimer = setTimeout(finishPause, milliseconds);
++		});
++		const cancel = () => {
++			if (cancelled) return;
++			cancelled = true;
++			finishPause?.();
++			if (this.cancelWebsocketRetry === cancel) {
++				this.rejectConnectionAttempt(Object.assign(new Error("Connection attempt cancelled"), {
++					code: "ATTEMPT_ABORTED",
++				}));
++			}
++		};
++		this.cancelWebsocketRetry = cancel;
++		const run = async () => {
++			if (!Number.isInteger(configuration.initialDelay) || configuration.initialDelay < 0) {
++				throw new Error("Value for initialDelay must be an integer greater than or equal to 0");
++			}
++			if (configuration.initialDelay) await pause(configuration.initialDelay);
++			if (cancelled || !this.shouldConnect || this.isDestroyed) return;
++			return retry(this.createWebSocketConnection.bind(this), {
++				delay: configuration.delay,
++				initialDelay: 0,
++				factor: configuration.factor,
++				maxAttempts: configuration.maxAttempts,
++				minDelay: configuration.minDelay,
++				maxDelay: configuration.maxDelay,
++				jitter: configuration.jitter,
++				timeout: configuration.timeout,
++				handleTimeout: configuration.handleTimeout,
++				// Keep the library's retry policy, but own its delay so cancellation settles now.
++				calculateDelay: () => 0,
++				handleError: async (_error, context, options) => {
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++					if (context.aborted || context.attemptsRemaining === 0) return;
++					const delay = defaultCalculateDelay({
++						...context, attemptNum: context.attemptNum + 1,
++					}, options);
++					if (delay) await pause(delay);
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++				},
+ 				beforeAttempt: (context) => {
+-					if (!this.shouldConnect || cancelAttempt) {
+-						context.abort();
+-					}
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
+ 				},
+-			}).catch((error: any) => {
+-				// If we aborted the connection attempt then don’t report a failure
+-				// ref: https://github.com/lifeomic/attempt/blob/master/src/index.ts#L136
+-				if (error?.code !== "ATTEMPT_ABORTED") {
+-					// connect() is fire-and-forget; rethrowing becomes an unhandled rejection.
+-					this.emit("maxAttemptsFailed", { error });
+-				}
+ 			});
+-
+-			return {
+-				retryPromise,
+-				cancelFunc: () => {
+-					cancelAttempt = true;
+-				},
+-			};
+ 		};
++		const retryPromise: Promise<unknown> = run().catch((error) => {
++			if (!cancelled && error?.code !== "ATTEMPT_ABORTED") {
++				this.shouldConnect = false;
++				this.emit("maxAttemptsFailed", { error });
++			}
++		}).finally(() => {
++			finishPause?.();
++			// An obsolete completion must never release a newer retry owner's handle.
++			if (this.cancelWebsocketRetry === cancel) {
++				cancel();
++				this.cancelWebsocketRetry = undefined;
++				this.cleanupWebSocket();
++				if (this.status !== WebSocketStatus.Disconnected) {
++					const generation = this.identifier;
++					this.status = WebSocketStatus.Disconnected;
++					this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation && !this.cancelWebsocketRetry, "status", { status: WebSocketStatus.Disconnected });
++				}
++			}
++			if (this.websocketRetryPromise === retryPromise) this.websocketRetryPromise = undefined;
++		});
++		if (this.cancelWebsocketRetry === cancel) this.websocketRetryPromise = retryPromise;
++		return retryPromise;
++	}
+ 
+-		const { retryPromise, cancelFunc } = abortableRetry();
+-		this.cancelWebsocketRetry = cancelFunc;
++	private clearReconnectTimeout() {
++		if (this.reconnectTimeout !== undefined) clearTimeout(this.reconnectTimeout);
++		this.reconnectTimeout = undefined;
++	}
+ 
+-		return retryPromise;
++	private ownsSocket(socket: HocusPocusWebSocket | null) {
++		return socket !== null && this.webSocket === socket && this.shouldConnect && !this.isDestroyed;
++	}
++
++	private emitWhileCurrent(current: () => boolean, event: string, ...args: any[]) {
++		// A callback may synchronously retire this transport; never dispatch its continuation to a successor.
++		this.callbacks[event]?.forEach((callback) => {
++			if (current()) callback.apply(this, args);
++		});
+ 	}
+ 
+ 	// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+ 	attachWebSocketListeners(ws: HocusPocusWebSocket, reject: Function) {
+ 		const { identifier } = ws;
+-		const onMessageHandler = (payload: any) => this.emit("message", payload);
+-		const onCloseHandler = (payload: any) =>
+-			this.emit("close", { event: payload });
+-		const onOpenHandler = (payload: any) => this.emit("open", payload);
++		const generation = this.identifier;
++		const onMessageHandler = (payload: any) => {
++			if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "message", payload);
++		};
++		const onCloseHandler = (payload: any) => {
++			if (this.webSocket === ws) this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation, "close", { event: payload });
++		};
++		const onOpenHandler = (payload: any) => {
++			if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "open", payload);
++		};
+ 		const onErrorHandler = (err: any) => {
+ 			reject(err);
+ 		};
+@@ -350,21 +413,29 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 	}
+ 
+ 	cleanupWebSocket() {
+-		if (!this.webSocket) {
+-			return;
+-		}
+-		const { identifier } = this.webSocket;
+-		const handlers = this.webSocketHandlers[identifier];
+-
+-		Object.keys(handlers).forEach((name) => {
+-			this.webSocket?.removeEventListener(name, handlers[name]);
+-			delete this.webSocketHandlers[identifier];
+-		});
+-		this.webSocket.close();
+-		this.webSocket = null;
+-	}
+-
+-	createWebSocketConnection() {
++        const socket = this.webSocket;
++        if (!socket) return;
++        this.webSocket = null;
++        const { identifier } = socket;
++        const handlers = this.webSocketHandlers[identifier];
++        Object.keys(handlers).forEach((name) => {
++            if (name !== "error") socket.removeEventListener(name, handlers[name]);
++        });
++        delete this.webSocketHandlers[identifier];
++        // Node's ws emits an error asynchronously when a CONNECTING socket is closed.
++        // Keep that retired attempt's rejection handler until its own close, never the new socket's.
++        const release = () => {
++            socket.removeEventListener("error", handlers.error);
++            socket.removeEventListener("close", release);
++        };
++        if (socket.readyState === 3) release();
++        else {
++            socket.addEventListener("close", release);
++            socket.close();
++        }
++    }
++
++    createWebSocketConnection() {
+ 		return new Promise((resolve, reject) => {
+ 			if (this.webSocket) {
+ 				this.messageQueue = [];
+@@ -382,20 +453,18 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 
+ 			this.webSocket = ws;
+ 
+-			// Reset the status
++			// Publish the attempt before status listeners can synchronously disconnect it.
++			this.connectionAttempt = { resolve, reject };
+ 			this.status = WebSocketStatus.Connecting;
+-			this.emit("status", { status: WebSocketStatus.Connecting });
+-
+-			// Store resolve/reject for later use
+-			this.connectionAttempt = {
+-				resolve,
+-				reject,
+-			};
++			this.emitWhileCurrent(() => this.ownsSocket(ws), "status", { status: WebSocketStatus.Connecting });
+ 		});
+ 	}
+ 
+ 	onMessage(event: MessageEvent) {
++		const socket = this.webSocket;
++		if (!this.ownsSocket(socket)) return;
+ 		this.resolveConnectionAttempt();
++		if (!this.ownsSocket(socket)) return;
+ 
+ 		this.lastMessageReceived = time.getUnixTime();
+ 
+@@ -427,15 +496,22 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 	}
+ 
+ 	resolveConnectionAttempt() {
+-		if (this.connectionAttempt) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (this.connectionAttempt && current()) {
+ 			this.connectionAttempt.resolve();
+ 			this.connectionAttempt = null;
++			this.cancelWebsocketRetry = undefined;
+ 
+ 			this.status = WebSocketStatus.Connected;
+-			this.emit("status", { status: WebSocketStatus.Connected });
+-			this.emit("connect");
+-			this.messageQueue.forEach((message) => this.send(message));
+-			this.messageQueue = [];
++			this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++			if (!current()) return;
++			this.emitWhileCurrent(current, "connect");
++			if (!current()) return;
++			this.messageQueue.forEach((message) => {
++				if (current()) this.send(message);
++			});
++			if (current()) this.messageQueue = [];
+ 		}
+ 	}
+ 
+@@ -508,6 +584,9 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 
+ 	disconnect() {
+ 		this.shouldConnect = false;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
++		this.cancelWebsocketRetry = undefined;
+ 
+ 		if (this.webSocket === null) {
+ 			return;
+@@ -564,6 +643,8 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 	}
+ 
+ 	onClose({ event }: onCloseParameters) {
++		const identifier = this.identifier;
++		const current = () => !this.isDestroyed && this.identifier === identifier;
+ 		this.closeTries = 0;
+ 		this.cleanupWebSocket();
+ 
+@@ -580,31 +661,33 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
+ 
+ 		// Let’s update the connection status.
+ 		this.status = WebSocketStatus.Disconnected;
+-		this.emit("status", { status: WebSocketStatus.Disconnected });
+-		this.emit("disconnect", { event });
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Disconnected });
++		this.emitWhileCurrent(current, "disconnect", { event });
+ 
+ 		// trigger connect if no retry is running and we want to have a connection
+-		if (!this.cancelWebsocketRetry && this.shouldConnect) {
+-			setTimeout(() => {
+-				this.connect();
++		if (current() && !this.cancelWebsocketRetry && this.shouldConnect) {
++			this.clearReconnectTimeout();
++			this.reconnectTimeout = setTimeout(() => {
++				this.reconnectTimeout = undefined;
++				if (this.shouldConnect && !this.isDestroyed && !this.cancelWebsocketRetry && this.status === WebSocketStatus.Disconnected) {
++					this.connect();
++				}
+ 			}, this.configuration.delay);
+ 		}
+ 	}
+ 
+ 	destroy() {
++		if (this.isDestroyed) return;
++		this.isDestroyed = true;
+ 		this.emit("destroy");
+ 
+ 		clearInterval(this.intervals.connectionChecker);
+ 
+-		// If there is still a connection attempt outstanding then we should stop
+-		// it before calling disconnect, otherwise it will be rejected in the onClose
+-		// handler and trigger a retry
+-		this.stopConnectionAttempt();
+-
+ 		this.disconnect();
+ 
+ 		this.removeAllListeners();
+ 
+ 		this.cleanupWebSocket();
++		this.status = WebSocketStatus.Disconnected;
+ 	}
+ }
+diff --git a/src/HocuspocusProvider.ts b/src/HocuspocusProvider.ts
+index e2cf7ba..d4169d9 100644
+--- a/src/HocuspocusProvider.ts
++++ b/src/HocuspocusProvider.ts
+@@ -1,12 +1,13 @@
+ import {
+ 	awarenessStatesToArray,
++	WsReadyStates,
+ 	makeRoutingKey,
+ 	parseRoutingKey,
+ } from "@hocuspocus/common";
+ import { Awareness, removeAwarenessStates } from "y-protocols/awareness";
+ import * as Y from "yjs";
+ import EventEmitter from "./EventEmitter.ts";
+-import type { CompleteHocuspocusProviderWebsocketConfiguration } from "./HocuspocusProviderWebsocket.ts";
++import type { CompleteHocuspocusProviderWebsocketConfiguration, HocuspocusWebSocket } from "./HocuspocusProviderWebsocket.ts";
+ import { HocuspocusProviderWebsocket } from "./HocuspocusProviderWebsocket.ts";
+ import { IncomingMessage } from "./IncomingMessage.ts";
+ import { MessageReceiver } from "./MessageReceiver.ts";
+@@ -176,6 +177,8 @@ export class HocuspocusProvider extends EventEmitter {
+ 
+ 	private _isAttached = false;
+ 
++	private connectionGeneration = 0;
++
+ 	/**
+ 	 * Outgoing document updates buffered for the current `flushDelay` window.
+ 	 */
+@@ -372,20 +375,35 @@ export class HocuspocusProvider extends EventEmitter {
+ 	}
+ 
+ 	async sendToken() {
++		await this.sendTokenForGeneration(this.connectionGeneration, this.configuration.websocketProvider.webSocket);
++	}
++
++	private isCurrentConnection(generation: number, socket: HocuspocusWebSocket | null): boolean {
++		return generation === this.connectionGeneration && this._isAttached && socket !== null &&
++			socket === this.configuration.websocketProvider.webSocket && socket.readyState === WsReadyStates.Open &&
++			this.configuration.websocketProvider.shouldConnect;
++	}
++
++	private async sendTokenForGeneration(generation: number, socket: HocuspocusWebSocket | null): Promise<boolean> {
+ 		let token: string | null;
+ 		try {
+ 			token = await this.getToken();
+ 		} catch (error) {
+-			this.permissionDeniedHandler(
+-				`Failed to get token during sendToken(): ${error}`,
+-			);
+-			return;
++			if (!this.isCurrentConnection(generation, socket)) return false;
++			this.permissionDeniedHandler(`Failed to get token during sendToken(): ${error}`);
++			return false;
+ 		}
+ 
+-		this.send(AuthenticationMessage, {
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		const messageSender = new MessageSender(AuthenticationMessage, {
+ 			token: token ?? "",
+ 			documentName: this.effectiveName,
+ 		});
++		this.emit("outgoingMessage", { message: messageSender.message });
++		// An observer may retire the physical transport before the frame is actually sent.
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		messageSender.send(this.configuration.websocketProvider);
++		return true;
+ 	}
+ 
+ 	private get batchingEnabled(): boolean {
+@@ -535,11 +553,15 @@ export class HocuspocusProvider extends EventEmitter {
+ 	}
+ 
+ 	async onOpen(event: Event) {
++		const generation = ++this.connectionGeneration;
++		const socket = this.configuration.websocketProvider.webSocket;
+ 		this.isAuthenticated = false;
+ 
+ 		this.emit("open", { event });
+-		await this.sendToken();
+-		this.startSync();
++		if (
++			(await this.sendTokenForGeneration(generation, socket)) &&
++			this.isCurrentConnection(generation, socket)
++		) this.startSync();
+ 	}
+ 
+ 	async getToken() {
+@@ -592,6 +614,7 @@ export class HocuspocusProvider extends EventEmitter {
+ 	}
+ 
+ 	onClose() {
++		this.connectionGeneration += 1;
+ 		this.isAuthenticated = false;
+ 		this.synced = false;
+ 
+@@ -617,6 +640,7 @@ export class HocuspocusProvider extends EventEmitter {
+ 	}
+ 
+ 	destroy() {
++		this.connectionGeneration += 1;
+ 		this.emit("destroy");
+ 
+ 		if (this.intervals.forceSync) {
+@@ -654,7 +678,8 @@ export class HocuspocusProvider extends EventEmitter {
+ 		window.removeEventListener("pagehide", this.boundPageHide);
+ 	}
+ 
+-	detach() {
++	detach(notifyServer = true) {
++		this.connectionGeneration += 1;
+ 		this.configuration.websocketProvider.off(
+ 			"connect",
+ 			this.configuration.onConnect,
+@@ -688,7 +713,7 @@ export class HocuspocusProvider extends EventEmitter {
+ 		);
+ 		this.configuration.websocketProvider.off("destroy", this.forwardDestroy);
+ 
+-		this.configuration.websocketProvider.detach(this);
++		this.configuration.websocketProvider.detach(this, notifyServer);
+ 
+ 		this._isAttached = false;
+ 	}
+diff --git a/dist/hocuspocus-provider.esm.js b/dist/hocuspocus-provider.esm.js
+index b654a5c..a59cc9b 100644
+--- a/dist/hocuspocus-provider.esm.js
++++ b/dist/hocuspocus-provider.esm.js
+@@ -2,7 +2,7 @@ import { WsReadyStates, awarenessStatesToArray, makeRoutingKey, parseRoutingKey,
+ import * as awarenessProtocol from "y-protocols/awareness";
+ import { Awareness, encodeAwarenessUpdate, removeAwarenessStates } from "y-protocols/awareness";
+ import * as Y from "yjs";
+-import { retry } from "@lifeomic/attempt";
++import { defaultCalculateDelay, retry } from "@lifeomic/attempt";
+ import { createDecoder, peekVarString, readVarInt, readVarString, readVarUint, readVarUint8Array } from "lib0/decoding";
+ import * as encoding from "lib0/encoding";
+ import { createEncoder, length, toUint8Array, writeVarString, writeVarUint, writeVarUint8Array } from "lib0/encoding";
+@@ -129,6 +129,7 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 	constructor(configuration) {
+ 		super();
+ 		this.messageQueue = [];
++		this.isDestroyed = false;
+ 		this.configuration = {
+ 			url: "",
+ 			autoConnect: true,
+@@ -188,9 +189,12 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (this.shouldConnect) this.connect();
+ 	}
+ 	async onOpen(event) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (!current()) return;
+ 		this.status = WebSocketStatus.Connected;
+-		this.emit("status", { status: WebSocketStatus.Connected });
+-		this.cancelWebsocketRetry = void 0;
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++		if (!current()) return;
+ 		this.receivedOnOpenPayload = event;
+ 	}
+ 	attach(provider) {
+@@ -203,10 +207,10 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (this.status === WebSocketStatus.Disconnected && this.shouldConnect) this.connect();
+ 		if (this.receivedOnOpenPayload && this.status === WebSocketStatus.Connected) provider.onOpen(this.receivedOnOpenPayload);
+ 	}
+-	detach(provider) {
++	detach(provider, notifyServer = true) {
+ 		const key = provider.effectiveName;
+ 		if (this.configuration.providerMap.has(key)) {
+-			provider.send(CloseMessage, { documentName: key });
++			if (notifyServer) provider.send(CloseMessage, { documentName: key });
+ 			this.configuration.providerMap.delete(key);
+ 		}
+ 	}
+@@ -218,46 +222,114 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (!this.configuration.autoConnect) this.shouldConnect = false;
+ 	}
+ 	async connect() {
+-		if (this.status === WebSocketStatus.Connected) return;
+-		if (this.cancelWebsocketRetry) {
+-			this.cancelWebsocketRetry();
+-			this.cancelWebsocketRetry = void 0;
+-		}
+-		this.receivedOnOpenPayload = void 0;
++		if (this.isDestroyed) return;
++		// HTTP 101 is not retry completion: the first protocol message still owns this attempt.
++		if (this.status === WebSocketStatus.Connected) return this.websocketRetryPromise;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
++		this.receivedOnOpenPayload = undefined;
+ 		this.shouldConnect = true;
+-		const abortableRetry = () => {
+-			let cancelAttempt = false;
+-			return {
+-				retryPromise: retry(this.createWebSocketConnection.bind(this), {
+-					delay: this.configuration.delay,
+-					initialDelay: this.configuration.initialDelay,
+-					factor: this.configuration.factor,
+-					maxAttempts: this.configuration.maxAttempts,
+-					minDelay: this.configuration.minDelay,
+-					maxDelay: this.configuration.maxDelay,
+-					jitter: this.configuration.jitter,
+-					timeout: this.configuration.timeout,
+-					handleTimeout: this.configuration.handleTimeout,
+-					beforeAttempt: (context) => {
+-						if (!this.shouldConnect || cancelAttempt) context.abort();
+-					}
+-				}).catch((error) => {
+-					if (error?.code !== "ATTEMPT_ABORTED") this.emit("maxAttemptsFailed", { error });
+-				}),
+-				cancelFunc: () => {
+-					cancelAttempt = true;
+-				}
++		const configuration = this.configuration;
++		let cancelled = false;
++		let pauseTimer;
++		let finishPause;
++		const pause = (milliseconds) => new Promise((resolvePause) => {
++			finishPause = () => {
++				clearTimeout(pauseTimer);
++				pauseTimer = undefined;
++				finishPause = undefined;
++				resolvePause();
+ 			};
++			pauseTimer = setTimeout(finishPause, milliseconds);
++		});
++		const cancel = () => {
++			if (cancelled) return;
++			cancelled = true;
++			finishPause?.();
++			if (this.cancelWebsocketRetry === cancel) {
++				this.rejectConnectionAttempt(Object.assign(new Error("Connection attempt cancelled"), {
++					code: "ATTEMPT_ABORTED",
++				}));
++			}
++		};
++		this.cancelWebsocketRetry = cancel;
++		const run = async () => {
++			if (!Number.isInteger(configuration.initialDelay) || configuration.initialDelay < 0) {
++				throw new Error("Value for initialDelay must be an integer greater than or equal to 0");
++			}
++			if (configuration.initialDelay) await pause(configuration.initialDelay);
++			if (cancelled || !this.shouldConnect || this.isDestroyed) return;
++			return retry(this.createWebSocketConnection.bind(this), {
++				delay: configuration.delay,
++				initialDelay: 0,
++				factor: configuration.factor,
++				maxAttempts: configuration.maxAttempts,
++				minDelay: configuration.minDelay,
++				maxDelay: configuration.maxDelay,
++				jitter: configuration.jitter,
++				timeout: configuration.timeout,
++				handleTimeout: configuration.handleTimeout,
++				// Keep the library's retry policy, but own its delay so cancellation settles now.
++				calculateDelay: () => 0,
++				handleError: async (_error, context, options) => {
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++					if (context.aborted || context.attemptsRemaining === 0) return;
++					const delay = defaultCalculateDelay({
++						...context, attemptNum: context.attemptNum + 1,
++					}, options);
++					if (delay) await pause(delay);
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++				},
++				beforeAttempt: (context) => {
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++				},
++			});
+ 		};
+-		const { retryPromise, cancelFunc } = abortableRetry();
+-		this.cancelWebsocketRetry = cancelFunc;
++		const retryPromise = run().catch((error) => {
++			if (!cancelled && error?.code !== "ATTEMPT_ABORTED") {
++				this.shouldConnect = false;
++				this.emit("maxAttemptsFailed", { error });
++			}
++		}).finally(() => {
++			finishPause?.();
++			// An obsolete completion must never release a newer retry owner's handle.
++			if (this.cancelWebsocketRetry === cancel) {
++				cancel();
++				this.cancelWebsocketRetry = undefined;
++				this.cleanupWebSocket();
++				if (this.status !== WebSocketStatus.Disconnected) {
++					const generation = this.identifier;
++					this.status = WebSocketStatus.Disconnected;
++					this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation && !this.cancelWebsocketRetry, "status", { status: WebSocketStatus.Disconnected });
++				}
++			}
++			if (this.websocketRetryPromise === retryPromise) this.websocketRetryPromise = undefined;
++		});
++		if (this.cancelWebsocketRetry === cancel) this.websocketRetryPromise = retryPromise;
+ 		return retryPromise;
+ 	}
++
++	clearReconnectTimeout() {
++		if (this.reconnectTimeout !== undefined) clearTimeout(this.reconnectTimeout);
++		this.reconnectTimeout = undefined;
++	}
++
++	ownsSocket(socket) {
++		return socket !== null && this.webSocket === socket && this.shouldConnect && !this.isDestroyed;
++	}
++
++	emitWhileCurrent(current, event, ...args) {
++		// A callback may synchronously retire this transport; never dispatch its continuation to a successor.
++		this.callbacks[event]?.forEach((callback) => {
++			if (current()) callback.apply(this, args);
++		});
++	}
+ 	attachWebSocketListeners(ws, reject) {
+ 		const { identifier } = ws;
+-		const onMessageHandler = (payload) => this.emit("message", payload);
+-		const onCloseHandler = (payload) => this.emit("close", { event: payload });
+-		const onOpenHandler = (payload) => this.emit("open", payload);
++		const generation = this.identifier;
++		const onMessageHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "message", payload); };
++		const onCloseHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation, "close", { event: payload }); };
++		const onOpenHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "open", payload); };
+ 		const onErrorHandler = (err) => {
+ 			reject(err);
+ 		};
+@@ -273,17 +345,29 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		});
+ 	}
+ 	cleanupWebSocket() {
+-		if (!this.webSocket) return;
+-		const { identifier } = this.webSocket;
+-		const handlers = this.webSocketHandlers[identifier];
+-		Object.keys(handlers).forEach((name) => {
+-			this.webSocket?.removeEventListener(name, handlers[name]);
+-			delete this.webSocketHandlers[identifier];
+-		});
+-		this.webSocket.close();
+-		this.webSocket = null;
+-	}
+-	createWebSocketConnection() {
++        const socket = this.webSocket;
++        if (!socket) return;
++        this.webSocket = null;
++        const { identifier } = socket;
++        const handlers = this.webSocketHandlers[identifier];
++        Object.keys(handlers).forEach((name) => {
++            if (name !== "error") socket.removeEventListener(name, handlers[name]);
++        });
++        delete this.webSocketHandlers[identifier];
++        // Node's ws emits an error asynchronously when a CONNECTING socket is closed.
++        // Keep that retired attempt's rejection handler until its own close, never the new socket's.
++        const release = () => {
++            socket.removeEventListener("error", handlers.error);
++            socket.removeEventListener("close", release);
++        };
++        if (socket.readyState === 3) release();
++        else {
++            socket.addEventListener("close", release);
++            socket.close();
++        }
++    }
++
++    createWebSocketConnection() {
+ 		return new Promise((resolve, reject) => {
+ 			if (this.webSocket) {
+ 				this.messageQueue = [];
+@@ -296,16 +380,16 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 			ws.identifier = this.identifier;
+ 			this.attachWebSocketListeners(ws, reject);
+ 			this.webSocket = ws;
++			this.connectionAttempt = { resolve, reject };
+ 			this.status = WebSocketStatus.Connecting;
+-			this.emit("status", { status: WebSocketStatus.Connecting });
+-			this.connectionAttempt = {
+-				resolve,
+-				reject
+-			};
++			this.emitWhileCurrent(() => this.ownsSocket(ws), "status", { status: WebSocketStatus.Connecting });
+ 		});
+ 	}
+ 	onMessage(event) {
++		const socket = this.webSocket;
++		if (!this.ownsSocket(socket)) return;
+ 		this.resolveConnectionAttempt();
++		if (!this.ownsSocket(socket)) return;
+ 		this.lastMessageReceived = time.getUnixTime();
+ 		const data = new Uint8Array(event.data);
+ 		if (data.length === 1 && data[0] === MessageType.Ping) {
+@@ -324,14 +408,21 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		this.send(encoding.toUint8Array(encoder));
+ 	}
+ 	resolveConnectionAttempt() {
+-		if (this.connectionAttempt) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (this.connectionAttempt && current()) {
+ 			this.connectionAttempt.resolve();
+ 			this.connectionAttempt = null;
++			this.cancelWebsocketRetry = void 0;
+ 			this.status = WebSocketStatus.Connected;
+-			this.emit("status", { status: WebSocketStatus.Connected });
+-			this.emit("connect");
+-			this.messageQueue.forEach((message) => this.send(message));
+-			this.messageQueue = [];
++			this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++			if (!current()) return;
++			this.emitWhileCurrent(current, "connect");
++			if (!current()) return;
++			this.messageQueue.forEach((message) => {
++				if (current()) this.send(message);
++			});
++			if (current()) this.messageQueue = [];
+ 		}
+ 	}
+ 	stopConnectionAttempt() {
+@@ -368,6 +459,9 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 	}
+ 	disconnect() {
+ 		this.shouldConnect = false;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
++		this.cancelWebsocketRetry = void 0;
+ 		if (this.webSocket === null) return;
+ 		try {
+ 			this.webSocket.close();
+@@ -404,23 +498,31 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		else this.addToQueue(message);
+ 	}
+ 	onClose({ event }) {
++		const identifier = this.identifier;
++		const current = () => !this.isDestroyed && this.identifier === identifier;
+ 		this.closeTries = 0;
+ 		this.cleanupWebSocket();
+ 		if (this.connectionAttempt) this.rejectConnectionAttempt(/* @__PURE__ */ new Error(`WebSocket closed before the connection was established (code: ${event?.code}, reason: ${event?.reason || "none"})`));
+ 		this.status = WebSocketStatus.Disconnected;
+-		this.emit("status", { status: WebSocketStatus.Disconnected });
+-		this.emit("disconnect", { event });
+-		if (!this.cancelWebsocketRetry && this.shouldConnect) setTimeout(() => {
+-			this.connect();
+-		}, this.configuration.delay);
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Disconnected });
++		this.emitWhileCurrent(current, "disconnect", { event });
++		if (current() && !this.cancelWebsocketRetry && this.shouldConnect) {
++			this.clearReconnectTimeout();
++			this.reconnectTimeout = setTimeout(() => {
++				this.reconnectTimeout = void 0;
++				if (this.shouldConnect && !this.isDestroyed && !this.cancelWebsocketRetry && this.status === WebSocketStatus.Disconnected) this.connect();
++			}, this.configuration.delay);
++		}
+ 	}
+ 	destroy() {
++		if (this.isDestroyed) return;
++		this.isDestroyed = true;
+ 		this.emit("destroy");
+ 		clearInterval(this.intervals.connectionChecker);
+-		this.stopConnectionAttempt();
+ 		this.disconnect();
+ 		this.removeAllListeners();
+ 		this.cleanupWebSocket();
++		this.status = WebSocketStatus.Disconnected;
+ 	}
+ };
+ 
+@@ -649,6 +751,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		this.authorizedScope = void 0;
+ 		this.manageSocket = false;
+ 		this._isAttached = false;
++		this.connectionGeneration = 0;
+ 		this.pendingUpdates = [];
+ 		this.pendingAwarenessClients = /* @__PURE__ */ new Set();
+ 		this.flushTimeout = null;
+@@ -746,18 +849,37 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		});
+ 	}
+ 	async sendToken() {
++		await this.sendTokenForGeneration(this.connectionGeneration, this.configuration.websocketProvider.webSocket);
++	}
++
++	isCurrentConnection(generation, socket) {
++		return generation === this.connectionGeneration && this._isAttached && socket !== null &&
++			socket === this.configuration.websocketProvider.webSocket && socket.readyState === WsReadyStates.Open &&
++			this.configuration.websocketProvider.shouldConnect;
++	}
++
++	async sendTokenForGeneration(generation, socket) {
+ 		let token;
+ 		try {
+ 			token = await this.getToken();
+ 		} catch (error) {
++			if (!this.isCurrentConnection(generation, socket)) return false;
+ 			this.permissionDeniedHandler(`Failed to get token during sendToken(): ${error}`);
+-			return;
++			return false;
+ 		}
+-		this.send(AuthenticationMessage, {
++
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		const messageSender = new MessageSender(AuthenticationMessage, {
+ 			token: token ?? "",
+-			documentName: this.effectiveName
++			documentName: this.effectiveName,
+ 		});
++		this.emit("outgoingMessage", { message: messageSender.message });
++		// An observer may retire the physical transport before the frame is actually sent.
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		messageSender.send(this.configuration.websocketProvider);
++		return true;
+ 	}
++
+ 	get batchingEnabled() {
+ 		return !!this.configuration.flushDelay && typeof this.configuration.flushDelay === "number";
+ 	}
+@@ -851,11 +973,17 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		console.warn("HocuspocusProvider::disconnect() is deprecated and does not do anything. Please connect/disconnect on the websocketProvider, or attach/deattach providers.");
+ 	}
+ 	async onOpen(event) {
++		const generation = ++this.connectionGeneration;
++		const socket = this.configuration.websocketProvider.webSocket;
+ 		this.isAuthenticated = false;
++
+ 		this.emit("open", { event });
+-		await this.sendToken();
+-		this.startSync();
++		if (
++			(await this.sendTokenForGeneration(generation, socket)) &&
++			this.isCurrentConnection(generation, socket)
++		) this.startSync();
+ 	}
++
+ 	async getToken() {
+ 		if (typeof this.configuration.token === "function") return await this.configuration.token();
+ 		return this.configuration.token;
+@@ -889,6 +1017,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		new MessageReceiver(message).apply(this, true);
+ 	}
+ 	onClose() {
++		this.connectionGeneration += 1;
+ 		this.isAuthenticated = false;
+ 		this.synced = false;
+ 		if (this.flushTimeout !== null) {
+@@ -900,6 +1029,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		if (this.awareness) removeAwarenessStates(this.awareness, Array.from(this.awareness.getStates().keys()).filter((client) => client !== this.document.clientID), this);
+ 	}
+ 	destroy() {
++		this.connectionGeneration += 1;
+ 		this.emit("destroy");
+ 		if (this.intervals.forceSync) clearInterval(this.intervals.forceSync);
+ 		if (this.awareness) {
+@@ -915,7 +1045,8 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		if (typeof window === "undefined" || !("removeEventListener" in window)) return;
+ 		window.removeEventListener("pagehide", this.boundPageHide);
+ 	}
+-	detach() {
++	detach(notifyServer = true) {
++		this.connectionGeneration += 1;
+ 		this.configuration.websocketProvider.off("connect", this.configuration.onConnect);
+ 		this.configuration.websocketProvider.off("connect", this.forwardConnect);
+ 		this.configuration.websocketProvider.off("status", this.forwardStatus);
+@@ -928,7 +1059,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		this.configuration.websocketProvider.off("disconnect", this.forwardDisconnect);
+ 		this.configuration.websocketProvider.off("destroy", this.configuration.onDestroy);
+ 		this.configuration.websocketProvider.off("destroy", this.forwardDestroy);
+-		this.configuration.websocketProvider.detach(this);
++		this.configuration.websocketProvider.detach(this, notifyServer);
+ 		this._isAttached = false;
+ 	}
+ 	attach() {
+diff --git a/dist/hocuspocus-provider.cjs b/dist/hocuspocus-provider.cjs
+index c4055df..839ef7b 100644
+--- a/dist/hocuspocus-provider.cjs
++++ b/dist/hocuspocus-provider.cjs
+@@ -159,6 +159,7 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 	constructor(configuration) {
+ 		super();
+ 		this.messageQueue = [];
++		this.isDestroyed = false;
+ 		this.configuration = {
+ 			url: "",
+ 			autoConnect: true,
+@@ -218,9 +219,12 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (this.shouldConnect) this.connect();
+ 	}
+ 	async onOpen(event) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (!current()) return;
+ 		this.status = WebSocketStatus.Connected;
+-		this.emit("status", { status: WebSocketStatus.Connected });
+-		this.cancelWebsocketRetry = void 0;
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++		if (!current()) return;
+ 		this.receivedOnOpenPayload = event;
+ 	}
+ 	attach(provider) {
+@@ -233,10 +237,10 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (this.status === WebSocketStatus.Disconnected && this.shouldConnect) this.connect();
+ 		if (this.receivedOnOpenPayload && this.status === WebSocketStatus.Connected) provider.onOpen(this.receivedOnOpenPayload);
+ 	}
+-	detach(provider) {
++	detach(provider, notifyServer = true) {
+ 		const key = provider.effectiveName;
+ 		if (this.configuration.providerMap.has(key)) {
+-			provider.send(CloseMessage, { documentName: key });
++			if (notifyServer) provider.send(CloseMessage, { documentName: key });
+ 			this.configuration.providerMap.delete(key);
+ 		}
+ 	}
+@@ -248,46 +252,114 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		if (!this.configuration.autoConnect) this.shouldConnect = false;
+ 	}
+ 	async connect() {
+-		if (this.status === WebSocketStatus.Connected) return;
+-		if (this.cancelWebsocketRetry) {
+-			this.cancelWebsocketRetry();
+-			this.cancelWebsocketRetry = void 0;
+-		}
+-		this.receivedOnOpenPayload = void 0;
++		if (this.isDestroyed) return;
++		// HTTP 101 is not retry completion: the first protocol message still owns this attempt.
++		if (this.status === WebSocketStatus.Connected) return this.websocketRetryPromise;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
++		this.receivedOnOpenPayload = undefined;
+ 		this.shouldConnect = true;
+-		const abortableRetry = () => {
+-			let cancelAttempt = false;
+-			return {
+-				retryPromise: (0, _lifeomic_attempt.retry)(this.createWebSocketConnection.bind(this), {
+-					delay: this.configuration.delay,
+-					initialDelay: this.configuration.initialDelay,
+-					factor: this.configuration.factor,
+-					maxAttempts: this.configuration.maxAttempts,
+-					minDelay: this.configuration.minDelay,
+-					maxDelay: this.configuration.maxDelay,
+-					jitter: this.configuration.jitter,
+-					timeout: this.configuration.timeout,
+-					handleTimeout: this.configuration.handleTimeout,
+-					beforeAttempt: (context) => {
+-						if (!this.shouldConnect || cancelAttempt) context.abort();
+-					}
+-				}).catch((error) => {
+-					if (error?.code !== "ATTEMPT_ABORTED") this.emit("maxAttemptsFailed", { error });
+-				}),
+-				cancelFunc: () => {
+-					cancelAttempt = true;
+-				}
++		const configuration = this.configuration;
++		let cancelled = false;
++		let pauseTimer;
++		let finishPause;
++		const pause = (milliseconds) => new Promise((resolvePause) => {
++			finishPause = () => {
++				clearTimeout(pauseTimer);
++				pauseTimer = undefined;
++				finishPause = undefined;
++				resolvePause();
+ 			};
++			pauseTimer = setTimeout(finishPause, milliseconds);
++		});
++		const cancel = () => {
++			if (cancelled) return;
++			cancelled = true;
++			finishPause?.();
++			if (this.cancelWebsocketRetry === cancel) {
++				this.rejectConnectionAttempt(Object.assign(new Error("Connection attempt cancelled"), {
++					code: "ATTEMPT_ABORTED",
++				}));
++			}
++		};
++		this.cancelWebsocketRetry = cancel;
++		const run = async () => {
++			if (!Number.isInteger(configuration.initialDelay) || configuration.initialDelay < 0) {
++				throw new Error("Value for initialDelay must be an integer greater than or equal to 0");
++			}
++			if (configuration.initialDelay) await pause(configuration.initialDelay);
++			if (cancelled || !this.shouldConnect || this.isDestroyed) return;
++			return (0, _lifeomic_attempt.retry)(this.createWebSocketConnection.bind(this), {
++				delay: configuration.delay,
++				initialDelay: 0,
++				factor: configuration.factor,
++				maxAttempts: configuration.maxAttempts,
++				minDelay: configuration.minDelay,
++				maxDelay: configuration.maxDelay,
++				jitter: configuration.jitter,
++				timeout: configuration.timeout,
++				handleTimeout: configuration.handleTimeout,
++				// Keep the library's retry policy, but own its delay so cancellation settles now.
++				calculateDelay: () => 0,
++				handleError: async (_error, context, options) => {
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++					if (context.aborted || context.attemptsRemaining === 0) return;
++					const delay = (0, _lifeomic_attempt.defaultCalculateDelay)({
++						...context, attemptNum: context.attemptNum + 1,
++					}, options);
++					if (delay) await pause(delay);
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++				},
++				beforeAttempt: (context) => {
++					if (cancelled || !this.shouldConnect || this.isDestroyed) context.abort();
++				},
++			});
+ 		};
+-		const { retryPromise, cancelFunc } = abortableRetry();
+-		this.cancelWebsocketRetry = cancelFunc;
++		const retryPromise = run().catch((error) => {
++			if (!cancelled && error?.code !== "ATTEMPT_ABORTED") {
++				this.shouldConnect = false;
++				this.emit("maxAttemptsFailed", { error });
++			}
++		}).finally(() => {
++			finishPause?.();
++			// An obsolete completion must never release a newer retry owner's handle.
++			if (this.cancelWebsocketRetry === cancel) {
++				cancel();
++				this.cancelWebsocketRetry = undefined;
++				this.cleanupWebSocket();
++				if (this.status !== WebSocketStatus.Disconnected) {
++					const generation = this.identifier;
++					this.status = WebSocketStatus.Disconnected;
++					this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation && !this.cancelWebsocketRetry, "status", { status: WebSocketStatus.Disconnected });
++				}
++			}
++			if (this.websocketRetryPromise === retryPromise) this.websocketRetryPromise = undefined;
++		});
++		if (this.cancelWebsocketRetry === cancel) this.websocketRetryPromise = retryPromise;
+ 		return retryPromise;
+ 	}
++
++	clearReconnectTimeout() {
++		if (this.reconnectTimeout !== undefined) clearTimeout(this.reconnectTimeout);
++		this.reconnectTimeout = undefined;
++	}
++
++	ownsSocket(socket) {
++		return socket !== null && this.webSocket === socket && this.shouldConnect && !this.isDestroyed;
++	}
++
++	emitWhileCurrent(current, event, ...args) {
++		// A callback may synchronously retire this transport; never dispatch its continuation to a successor.
++		this.callbacks[event]?.forEach((callback) => {
++			if (current()) callback.apply(this, args);
++		});
++	}
+ 	attachWebSocketListeners(ws, reject) {
+ 		const { identifier } = ws;
+-		const onMessageHandler = (payload) => this.emit("message", payload);
+-		const onCloseHandler = (payload) => this.emit("close", { event: payload });
+-		const onOpenHandler = (payload) => this.emit("open", payload);
++		const generation = this.identifier;
++		const onMessageHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "message", payload); };
++		const onCloseHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => !this.isDestroyed && this.identifier === generation, "close", { event: payload }); };
++		const onOpenHandler = (payload) => { if (this.webSocket === ws) this.emitWhileCurrent(() => this.ownsSocket(ws), "open", payload); };
+ 		const onErrorHandler = (err) => {
+ 			reject(err);
+ 		};
+@@ -303,17 +375,29 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		});
+ 	}
+ 	cleanupWebSocket() {
+-		if (!this.webSocket) return;
+-		const { identifier } = this.webSocket;
+-		const handlers = this.webSocketHandlers[identifier];
+-		Object.keys(handlers).forEach((name) => {
+-			this.webSocket?.removeEventListener(name, handlers[name]);
+-			delete this.webSocketHandlers[identifier];
+-		});
+-		this.webSocket.close();
+-		this.webSocket = null;
+-	}
+-	createWebSocketConnection() {
++        const socket = this.webSocket;
++        if (!socket) return;
++        this.webSocket = null;
++        const { identifier } = socket;
++        const handlers = this.webSocketHandlers[identifier];
++        Object.keys(handlers).forEach((name) => {
++            if (name !== "error") socket.removeEventListener(name, handlers[name]);
++        });
++        delete this.webSocketHandlers[identifier];
++        // Node's ws emits an error asynchronously when a CONNECTING socket is closed.
++        // Keep that retired attempt's rejection handler until its own close, never the new socket's.
++        const release = () => {
++            socket.removeEventListener("error", handlers.error);
++            socket.removeEventListener("close", release);
++        };
++        if (socket.readyState === 3) release();
++        else {
++            socket.addEventListener("close", release);
++            socket.close();
++        }
++    }
++
++    createWebSocketConnection() {
+ 		return new Promise((resolve, reject) => {
+ 			if (this.webSocket) {
+ 				this.messageQueue = [];
+@@ -326,16 +410,16 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 			ws.identifier = this.identifier;
+ 			this.attachWebSocketListeners(ws, reject);
+ 			this.webSocket = ws;
++			this.connectionAttempt = { resolve, reject };
+ 			this.status = WebSocketStatus.Connecting;
+-			this.emit("status", { status: WebSocketStatus.Connecting });
+-			this.connectionAttempt = {
+-				resolve,
+-				reject
+-			};
++			this.emitWhileCurrent(() => this.ownsSocket(ws), "status", { status: WebSocketStatus.Connecting });
+ 		});
+ 	}
+ 	onMessage(event) {
++		const socket = this.webSocket;
++		if (!this.ownsSocket(socket)) return;
+ 		this.resolveConnectionAttempt();
++		if (!this.ownsSocket(socket)) return;
+ 		this.lastMessageReceived = lib0_time.getUnixTime();
+ 		const data = new Uint8Array(event.data);
+ 		if (data.length === 1 && data[0] === MessageType.Ping) {
+@@ -354,14 +438,21 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		this.send(lib0_encoding.toUint8Array(encoder));
+ 	}
+ 	resolveConnectionAttempt() {
+-		if (this.connectionAttempt) {
++		const socket = this.webSocket;
++		const current = () => this.ownsSocket(socket);
++		if (this.connectionAttempt && current()) {
+ 			this.connectionAttempt.resolve();
+ 			this.connectionAttempt = null;
++			this.cancelWebsocketRetry = void 0;
+ 			this.status = WebSocketStatus.Connected;
+-			this.emit("status", { status: WebSocketStatus.Connected });
+-			this.emit("connect");
+-			this.messageQueue.forEach((message) => this.send(message));
+-			this.messageQueue = [];
++			this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Connected });
++			if (!current()) return;
++			this.emitWhileCurrent(current, "connect");
++			if (!current()) return;
++			this.messageQueue.forEach((message) => {
++				if (current()) this.send(message);
++			});
++			if (current()) this.messageQueue = [];
+ 		}
+ 	}
+ 	stopConnectionAttempt() {
+@@ -398,6 +489,9 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 	}
+ 	disconnect() {
+ 		this.shouldConnect = false;
++		this.clearReconnectTimeout();
++		this.cancelWebsocketRetry?.();
++		this.cancelWebsocketRetry = void 0;
+ 		if (this.webSocket === null) return;
+ 		try {
+ 			this.webSocket.close();
+@@ -434,23 +528,31 @@ var HocuspocusProviderWebsocket = class HocuspocusProviderWebsocket extends Even
+ 		else this.addToQueue(message);
+ 	}
+ 	onClose({ event }) {
++		const identifier = this.identifier;
++		const current = () => !this.isDestroyed && this.identifier === identifier;
+ 		this.closeTries = 0;
+ 		this.cleanupWebSocket();
+ 		if (this.connectionAttempt) this.rejectConnectionAttempt(/* @__PURE__ */ new Error(`WebSocket closed before the connection was established (code: ${event?.code}, reason: ${event?.reason || "none"})`));
+ 		this.status = WebSocketStatus.Disconnected;
+-		this.emit("status", { status: WebSocketStatus.Disconnected });
+-		this.emit("disconnect", { event });
+-		if (!this.cancelWebsocketRetry && this.shouldConnect) setTimeout(() => {
+-			this.connect();
+-		}, this.configuration.delay);
++		this.emitWhileCurrent(current, "status", { status: WebSocketStatus.Disconnected });
++		this.emitWhileCurrent(current, "disconnect", { event });
++		if (current() && !this.cancelWebsocketRetry && this.shouldConnect) {
++			this.clearReconnectTimeout();
++			this.reconnectTimeout = setTimeout(() => {
++				this.reconnectTimeout = void 0;
++				if (this.shouldConnect && !this.isDestroyed && !this.cancelWebsocketRetry && this.status === WebSocketStatus.Disconnected) this.connect();
++			}, this.configuration.delay);
++		}
+ 	}
+ 	destroy() {
++		if (this.isDestroyed) return;
++		this.isDestroyed = true;
+ 		this.emit("destroy");
+ 		clearInterval(this.intervals.connectionChecker);
+-		this.stopConnectionAttempt();
+ 		this.disconnect();
+ 		this.removeAllListeners();
+ 		this.cleanupWebSocket();
++		this.status = WebSocketStatus.Disconnected;
+ 	}
+ };
+ 
+@@ -679,6 +781,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		this.authorizedScope = void 0;
+ 		this.manageSocket = false;
+ 		this._isAttached = false;
++		this.connectionGeneration = 0;
+ 		this.pendingUpdates = [];
+ 		this.pendingAwarenessClients = /* @__PURE__ */ new Set();
+ 		this.flushTimeout = null;
+@@ -776,18 +879,37 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		});
+ 	}
+ 	async sendToken() {
++		await this.sendTokenForGeneration(this.connectionGeneration, this.configuration.websocketProvider.webSocket);
++	}
++
++	isCurrentConnection(generation, socket) {
++		return generation === this.connectionGeneration && this._isAttached && socket !== null &&
++			socket === this.configuration.websocketProvider.webSocket && socket.readyState === _hocuspocus_common.WsReadyStates.Open &&
++			this.configuration.websocketProvider.shouldConnect;
++	}
++
++	async sendTokenForGeneration(generation, socket) {
+ 		let token;
+ 		try {
+ 			token = await this.getToken();
+ 		} catch (error) {
++			if (!this.isCurrentConnection(generation, socket)) return false;
+ 			this.permissionDeniedHandler(`Failed to get token during sendToken(): ${error}`);
+-			return;
++			return false;
+ 		}
+-		this.send(AuthenticationMessage, {
++
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		const messageSender = new MessageSender(AuthenticationMessage, {
+ 			token: token ?? "",
+-			documentName: this.effectiveName
++			documentName: this.effectiveName,
+ 		});
++		this.emit("outgoingMessage", { message: messageSender.message });
++		// An observer may retire the physical transport before the frame is actually sent.
++		if (!this.isCurrentConnection(generation, socket)) return false;
++		messageSender.send(this.configuration.websocketProvider);
++		return true;
+ 	}
++
+ 	get batchingEnabled() {
+ 		return !!this.configuration.flushDelay && typeof this.configuration.flushDelay === "number";
+ 	}
+@@ -881,11 +1003,17 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		console.warn("HocuspocusProvider::disconnect() is deprecated and does not do anything. Please connect/disconnect on the websocketProvider, or attach/deattach providers.");
+ 	}
+ 	async onOpen(event) {
++		const generation = ++this.connectionGeneration;
++		const socket = this.configuration.websocketProvider.webSocket;
+ 		this.isAuthenticated = false;
++
+ 		this.emit("open", { event });
+-		await this.sendToken();
+-		this.startSync();
++		if (
++			(await this.sendTokenForGeneration(generation, socket)) &&
++			this.isCurrentConnection(generation, socket)
++		) this.startSync();
+ 	}
++
+ 	async getToken() {
+ 		if (typeof this.configuration.token === "function") return await this.configuration.token();
+ 		return this.configuration.token;
+@@ -919,6 +1047,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		new MessageReceiver(message).apply(this, true);
+ 	}
+ 	onClose() {
++		this.connectionGeneration += 1;
+ 		this.isAuthenticated = false;
+ 		this.synced = false;
+ 		if (this.flushTimeout !== null) {
+@@ -930,6 +1059,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		if (this.awareness) (0, y_protocols_awareness.removeAwarenessStates)(this.awareness, Array.from(this.awareness.getStates().keys()).filter((client) => client !== this.document.clientID), this);
+ 	}
+ 	destroy() {
++		this.connectionGeneration += 1;
+ 		this.emit("destroy");
+ 		if (this.intervals.forceSync) clearInterval(this.intervals.forceSync);
+ 		if (this.awareness) {
+@@ -945,7 +1075,8 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		if (typeof window === "undefined" || !("removeEventListener" in window)) return;
+ 		window.removeEventListener("pagehide", this.boundPageHide);
+ 	}
+-	detach() {
++	detach(notifyServer = true) {
++		this.connectionGeneration += 1;
+ 		this.configuration.websocketProvider.off("connect", this.configuration.onConnect);
+ 		this.configuration.websocketProvider.off("connect", this.forwardConnect);
+ 		this.configuration.websocketProvider.off("status", this.forwardStatus);
+@@ -958,7 +1089,7 @@ var HocuspocusProvider = class extends EventEmitter {
+ 		this.configuration.websocketProvider.off("disconnect", this.forwardDisconnect);
+ 		this.configuration.websocketProvider.off("destroy", this.configuration.onDestroy);
+ 		this.configuration.websocketProvider.off("destroy", this.forwardDestroy);
+-		this.configuration.websocketProvider.detach(this);
++		this.configuration.websocketProvider.detach(this, notifyServer);
+ 		this._isAttached = false;
+ 	}
+ 	attach() {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index b1b9b8c..8e96999 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -270,9 +270,15 @@ declare class HocuspocusProviderWebsocket extends EventEmitter {
+   receivedOnOpenPayload?: Event | undefined;
+   onOpen(event: Event): Promise<void>;
+   attach(provider: HocuspocusProvider): void;
+-  detach(provider: HocuspocusProvider): void;
++  detach(provider: HocuspocusProvider, notifyServer?: boolean): void;
+   setConfiguration(configuration?: Partial<HocuspocusProviderWebsocketConfiguration>): void;
+   cancelWebsocketRetry?: () => void;
++  private websocketRetryPromise;
++  private reconnectTimeout;
++  private isDestroyed;
++  private clearReconnectTimeout;
++  private ownsSocket;
++  private emitWhileCurrent;
+   connect(): Promise<unknown>;
+   attachWebSocketListeners(ws: HocusPocusWebSocket, reject: Function): void;
+   cleanupWebSocket(): void;
+@@ -384,6 +390,7 @@ declare class HocuspocusProvider extends EventEmitter {
+   authorizedScope: AuthorizedScope | undefined;
+   manageSocket: boolean;
+   private _isAttached;
++  private connectionGeneration;
+   /**
+    * Outgoing document updates buffered for the current `flushDelay` window.
+    */
+@@ -433,6 +440,8 @@ declare class HocuspocusProvider extends EventEmitter {
+   registerEventListeners(): void;
+   sendStateless(payload: string): void;
+   sendToken(): Promise<void>;
++  private sendTokenForGeneration;
++  private isCurrentConnection;
+   private get batchingEnabled();
+   documentUpdateHandler(update: Uint8Array, origin: any): void;
+   awarenessUpdateHandler({
+@@ -466,7 +475,7 @@ declare class HocuspocusProvider extends EventEmitter {
+   onMessage(event: MessageEvent): void;
+   onClose(): void;
+   destroy(): void;
+-  detach(): void;
++  detach(notifyServer?: boolean): void;
+   attach(): void;
+   permissionDeniedHandler(reason: string): void;
+   authenticatedHandler(scope: string): void;

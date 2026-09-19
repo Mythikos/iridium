@@ -11,6 +11,7 @@ import {
   kindOf,
   mintToken,
   parseToken,
+  parseTokenDetailed,
   redactToken,
   SCANNER_REGEX_SOURCE,
   scannerRegex,
@@ -111,6 +112,12 @@ describe('tokens.format.unit [area:tokens]', () => {
     it('names why a string is not a credential, in a closed vocabulary', () => {
       const raw = mintToken('oat', sequentialBytes(19)).raw;
       expect(tokenParseFailure(raw)).toBeNull();
+      // The detailed form is the one answer both projections are read from.
+      expect(parseTokenDetailed(raw)).toStrictEqual({ ok: true, token: parseToken(raw) });
+      expect(parseTokenDetailed('sk-live-not-ours')).toStrictEqual({
+        ok: false,
+        reason: 'not_a_credential',
+      });
       expect(tokenParseFailure('sk-live-not-ours')).toBe('not_a_credential');
       expect(tokenParseFailure('irid_zzz_0123456789ABCDEF_x')).toBe('unknown_kind');
       expect(tokenParseFailure('irid_pat_0123456789ABCDEF_short')).toBe('malformed');

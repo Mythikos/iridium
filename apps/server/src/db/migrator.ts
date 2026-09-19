@@ -26,6 +26,7 @@ import { Migrator, type MigrationResult } from 'kysely/migration';
 import { createPool, type Pool } from 'mysql2';
 import { createConnection, type RowDataPacket } from 'mysql2/promise';
 
+import { readGrantProvenance } from './grants.ts';
 import { bundledMigrationProvider, MIGRATION_NAMES } from './migrations.ts';
 import {
   DB_CONNECT_TIMEOUT_MS_DEFAULT,
@@ -198,6 +199,24 @@ async function run(
       }
     }
     if (error !== undefined) throw error;
+    if (
+      options.logger !== undefined &&
+      results?.some(
+        (result) => result.direction === 'Up' && result.migrationName.includes('grants'),
+      )
+    ) {
+      const provenance = await readGrantProvenance(options.db);
+      for (const record of provenance.skipped) {
+        options.logger.warn(
+          {
+            event: 'migration.grants_skipped',
+            table: record.table,
+            metadata: { skipped: record.reason },
+          },
+          'Grant application is unverified; ask the DBA to apply docs/ops/db-grants.sql.',
+        );
+      }
+    }
     options.logger?.info(
       { migration: label, applied: results?.length ?? 0 },
       `migrate: ${label} complete`,
@@ -257,6 +276,5 @@ export async function migrateTo(
  * full `migrate up`, and reading the same list `migrationStatus` reads is what keeps that assertion
  * from passing against a second opinion about what "all migrations" means.
  *
- * @internal
  */
 export { MIGRATION_NAMES } from './migrations.ts';

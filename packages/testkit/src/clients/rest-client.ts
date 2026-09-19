@@ -13,6 +13,8 @@
  * `pnpm gen` has an `openapi.json` to generate from; the shape of this module does not change then,
  * only the type of `path`.
  */
+import { strongEtag } from '@iridium/contracts';
+
 import type { CookieJar } from '../auth/cookie-jar.ts';
 import { createCookieJar } from '../auth/cookie-jar.ts';
 
@@ -28,6 +30,19 @@ export const CLIENT_HEADER = 'X-Iridium-Client';
 /** The header the `minClientVersion` gate reads. */
 export const CLIENT_VERSION_HEADER = 'X-Iridium-Client-Version';
 
+/**
+ * The two headers a browser sends on a same-origin unsafe request, and the CSRF guard checks
+ * (04-auth-and-access-control.md §4.4).
+ *
+ * The guard is mounted globally and `CSRF_EXEMPT_ROUTES` is a closed enumeration that does not
+ * include `/__test__/faults`, so a cookie-capable harness that omitted these would be answered
+ * `403 csrf_rejected` — which is why the plan states the rule for test clients in the same breath as
+ * for browsers: *"Test clients that use cookies send `X-Iridium-Client: web` and an `Origin` equal to
+ * `PUBLIC_ORIGIN`; there is no bypass switch."*
+ */
+export const ORIGIN_HEADER = 'Origin';
+export const FETCH_SITE_HEADER = 'Sec-Fetch-Site';
+
 export type HttpMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface RestRequestInit {
@@ -40,6 +55,14 @@ export interface RestRequestInit {
   readonly signal?: AbortSignal;
   /** Per-request `Authorization: Bearer …`, overriding the client's. */
   readonly bearer?: string;
+  /**
+   * `If-Match`, built by `@iridium/contracts`' `strongEtag` when given a version number and sent
+   * verbatim when given a string (09-api-reference.md §1.2).
+   *
+   * A number is the common case — every M1 body that carries a validator carries it as `version` —
+   * and a string is what the stale-version and malformed-validator cases need (`W/"…"`, `*`, a list).
+   */
+  readonly ifMatch?: number | string;
 }
 
 export interface RestResponse<T = unknown> {
@@ -85,10 +108,18 @@ export interface RestClient {
   del<T = unknown>(path: string, init?: RestRequestInit): Promise<RestResponse<T>>;
 
   /** A client on the same origin with a different credential. The jar is **not** shared. */
-  as(o: { bearer?: string; client?: IridiumClientKind; jar?: CookieJar }): RestClient;
+  as(o: {
+    bearer?: string;
+    client?: IridiumClientKind;
+    jar?: CookieJar;
+    originHeader?: string | null;
+    fetchSite?: string | null;
+  }): RestClient;
 }
 
 export interface RestClientOptions {
+  /** Optional assertion/observation of the actual parsed wire response, before the caller sees it. */
+  readonly onResponse?: (response: RestResponse, method: HttpMethod) => Promise<void>;
   /** `http://127.0.0.1:<port>`; no trailing slash is required. */
   readonly origin: string;
   /** Defaults to `'web'`, the value the CSRF guard accepts for cookie principals. */
@@ -103,6 +134,14 @@ export interface RestClientOptions {
   readonly basePath?: string;
   /** Injected for the msw-backed client harnesses; defaults to the global `fetch`. */
   readonly fetch?: typeof globalThis.fetch;
+  /**
+   * The `Origin` a cookie principal sends on an unsafe method. Defaults to the client's own origin,
+   * which the harness sets as `PUBLIC_ORIGIN`; `app://iridium` is what the desktop host sends, and
+   * `null` omits the header — the case `security.csrf.integration` asserts is refused.
+   */
+  readonly originHeader?: string | null;
+  /** `Sec-Fetch-Site` on an unsafe cookie request; defaults to `same-origin`, `null` omits it. */
+  readonly fetchSite?: string | null;
 }
 
 /**
@@ -189,6 +228,9 @@ class FetchRestClient implements RestClient {
   readonly bearer: string | undefined;
   readonly #clientVersion: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #originHeader: string | null;
+  readonly #fetchSite: string | null;
+  readonly #onResponse: RestClientOptions['onResponse'];
 
   constructor(options: RestClientOptions) {
     this.origin = options.origin.replace(/\/+$/, '');
@@ -198,6 +240,9 @@ class FetchRestClient implements RestClient {
     this.bearer = options.bearer;
     this.#clientVersion = options.clientVersion ?? DEFAULT_CLIENT_VERSION;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#onResponse = options.onResponse;
+    this.#originHeader = options.originHeader === undefined ? this.origin : options.originHeader;
+    this.#fetchSite = options.fetchSite === undefined ? 'same-origin' : options.fetchSite;
   }
 
   async request<T = unknown>(
@@ -223,6 +268,23 @@ class FetchRestClient implements RestClient {
       if (cookie !== undefined) {
         headers.set('cookie', cookie);
       }
+      // What a browser sends that `fetch` in Node does not. A bearer request is CSRF-exempt by
+      // construction (a header no cross-site form can set), so only the cookie branch needs them.
+      if (isUnsafeMethod(method)) {
+        if (this.#originHeader !== null) {
+          headers.set(ORIGIN_HEADER, this.#originHeader);
+        }
+        if (this.#fetchSite !== null) {
+          headers.set(FETCH_SITE_HEADER, this.#fetchSite);
+        }
+      }
+    }
+
+    if (init.ifMatch !== undefined) {
+      headers.set(
+        'if-match',
+        typeof init.ifMatch === 'number' ? strongEtag(init.ifMatch) : init.ifMatch,
+      );
     }
 
     let body: NonNullable<RequestInit['body']> | undefined;
@@ -252,7 +314,7 @@ class FetchRestClient implements RestClient {
     const contentType = mediaType(response.headers);
     const parsed: T = await readBody(response, contentType);
 
-    return {
+    const result: RestResponse<T> = {
       status: response.status,
       statusText: response.statusText,
       headers: response.headers,
@@ -261,6 +323,8 @@ class FetchRestClient implements RestClient {
       url,
       response,
     };
+    await this.#onResponse?.(result, method);
+    return result;
   }
 
   api<T = unknown>(
@@ -291,14 +355,23 @@ class FetchRestClient implements RestClient {
     return this.api<T>('DELETE', path, init);
   }
 
-  as(o: { bearer?: string; client?: IridiumClientKind; jar?: CookieJar }): RestClient {
+  as(o: {
+    bearer?: string;
+    client?: IridiumClientKind;
+    jar?: CookieJar;
+    originHeader?: string | null;
+    fetchSite?: string | null;
+  }): RestClient {
     return new FetchRestClient({
       origin: this.origin,
       basePath: this.basePath,
       clientVersion: this.#clientVersion,
       fetch: this.#fetch,
+      ...(this.#onResponse === undefined ? {} : { onResponse: this.#onResponse }),
       client: o.client ?? this.client,
       jar: o.jar ?? createCookieJar(),
+      originHeader: o.originHeader === undefined ? this.#originHeader : o.originHeader,
+      fetchSite: o.fetchSite === undefined ? this.#fetchSite : o.fetchSite,
       ...(o.bearer === undefined ? {} : { bearer: o.bearer }),
     });
   }

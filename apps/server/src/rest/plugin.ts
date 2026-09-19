@@ -1,11 +1,21 @@
 /**
- * Boot step 8, the `rest` plugin.
+ * Boot step 7, the `rest` plugin: the `/api/v1` route tree, the two documentation operations, and
+ * the static web surface.
  *
- * At M0 it registers what exists: the static web surface at `/app/*` and the root redirect of
- * ARCH-07. The `/api/v1` route tree, `@fastify/swagger`, `@fastify/swagger-ui` at `/docs` and
- * `GET /openapi.json` arrive with M1 — registered through Iridium's own wrapper rather than the
- * plugin defaults, because the route-policy boot assertion requires *every* registered route to
- * carry `config.auth` (ARCH-27).
+ * **`@fastify/swagger` is the first statement, and that is load-bearing.** It collects routes through
+ * an `onRoute` hook, so it documents only what is registered after it; everything that registers a
+ * route — `rest`, `collab`, `mcp`, `ops`, `jobs` — comes at or after this step, while steps 3 to 6
+ * register none. Registering it anywhere else would silently produce a document missing whole route
+ * families (`apps/server/src/ops/openapi.ts` records the same ordering from the other side).
+ *
+ * **Every route comes from `M1_ROUTES`.** Each area exports `applyXRoutes(instance, deps)` and reads
+ * its own rows through `routeSpec()`, so a route cannot be registered with a path, a policy or a
+ * schema the OpenAPI document does not describe, and `rest.route-index.contract` holds the served
+ * set, the documented set and 09-api-reference.md §2.18's table equal.
+ *
+ * **The `/api/v1` tree is one encapsulated child.** The zod validator and serializer compilers, the
+ * `X-Iridium-Api-Version` header and the prefix belong to the API and not to `/healthz` or to the SPA;
+ * encapsulating them is what keeps the operations surface free of a JSON serializer it never uses.
  *
  * Static serving is deliberately not `@fastify/static`'s own wildcard route. That route carries no
  * `config`, so the boot assertion would refuse to start; and the SPA entry document needs a
@@ -17,25 +27,38 @@
  *   the SPA entry document, including every fallback  →  `no-store`, nonce substituted
  *
  * `IRIDIUM_WEB_DIR` unset means the server serves no UI (API-only, 11-operations-and-deployment.md),
- * which is also the state at M0 before `apps/web` has been built: nothing is registered, `GET /`
- * answers the not-found handler's `ProblemDetails`, and no route promises a bundle that is not there.
+ * which is also the state before `apps/web` has been built: nothing is registered, `GET /` answers
+ * the not-found handler's `ProblemDetails`, and no route promises a bundle that is not there.
  */
 import { readFile, stat } from 'node:fs/promises';
 import { join, normalize, sep } from 'node:path';
 
 import fastifyStatic from '@fastify/static';
+import { NodeId, noteDocName, VaultId } from '@iridium/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { applyAuthRoutes } from '../auth/routes.ts';
+import { API_PREFIX } from '../authz/route-policy.ts';
 import type { IridiumConfig } from '../config/env.ts';
+import { CursorCodec, readPromotedCursorKeyVersion } from '../mcp/cursor.ts';
+import { applyMemberRoutes } from '../members/routes.ts';
+import { applyNoteReadRoutes } from '../notes-rest/routes.ts';
 import type { ServerLogger } from '../ops/logging.ts';
+import { applyOpenApiPlugin, hasOpenApi } from '../ops/openapi.ts';
 import {
   CSP_NONCE_PLACEHOLDER,
   ENTRY_DOCUMENT_CACHE_CONTROL,
   IMMUTABLE_ASSET_CACHE_CONTROL,
   STATIC_METADATA_CACHE_CONTROL,
 } from '../security/csp.ts';
+import { applyNodeRoutes } from '../tree/routes.ts';
+import { applyAdminUserRoutes } from '../users/routes.ts';
+import { applyVaultRoutes } from '../vaults/routes.ts';
+import { applyDocsUi } from './docs.ts';
+import { appDb } from './handler-context.ts';
+import { applyMetaRoutes } from './meta.ts';
 
-/** What the rest plugin needs at M0. */
+/** What the rest plugin needs. */
 export interface RestPluginOptions {
   readonly config: IridiumConfig;
   readonly logger: ServerLogger;
@@ -78,11 +101,93 @@ function cacheControlFor(relativePath: string): string {
   return STATIC_METADATA_CACHE_CONTROL;
 }
 
-/** Applies boot step 8. */
+/**
+ * The shared keyset cursor codec, built on first use.
+ *
+ * It cannot be built at boot: the signing version is `schema_meta.cursor_key_version`, a row, and
+ * `buildApp({ database: 'none' })` opens no pool. A failed build is not cached, so a listing made
+ * while the database was down does not poison every later one.
+ */
+function cursorCodecFactory(
+  app: FastifyInstance,
+  config: IridiumConfig,
+): () => Promise<CursorCodec> {
+  let pending: Promise<CursorCodec> | null = null;
+  return () => {
+    pending ??= (async () => {
+      const signingVersion = await readPromotedCursorKeyVersion(appDb(app));
+      return new CursorCodec({
+        keyring: config.keys.mcpCursor,
+        signingVersion,
+        now: () => app.clock.now(),
+      });
+    })().catch((error: unknown) => {
+      pending = null;
+      throw error;
+    });
+    return pending;
+  };
+}
+
+/** Applies boot step 7. */
 export async function applyRestPlugin(
   app: FastifyInstance,
   options: RestPluginOptions,
 ): Promise<void> {
+  const { config } = options;
+
+  // First, so the `onRoute` hook sees every route registered from here on (ARCH-27).
+  if (!hasOpenApi(app)) await applyOpenApiPlugin(app);
+
+  const cursors = cursorCodecFactory(app, config);
+
+  await app.register(
+    async (api: FastifyInstance) => {
+      applyMetaRoutes(api, config);
+      applyAuthRoutes(api, { audit: app.audit });
+      applyAdminUserRoutes(api, { audit: app.audit, cursors });
+      applyVaultRoutes(api, { audit: app.audit });
+      applyMemberRoutes(api, { audit: app.audit });
+      applyNodeRoutes(api, {
+        audit: app.audit,
+        notes: () => app.notes,
+        broadcastTreeChanged: (vaultId, treeVersion, node) => {
+          app.collab.gateway.broadcastVault(VaultId.parse(vaultId), {
+            v: 1,
+            t: 'tree-changed',
+            treeVersion,
+            changes: [
+              {
+                nodeId: NodeId.parse(node.id),
+                parentId: NodeId.parse(node.parentId),
+                kind: node.kind,
+                name: node.name,
+                path: node.path,
+                op: 'created',
+                version: node.version,
+              },
+            ],
+          });
+        },
+      });
+      applyNoteReadRoutes(api, {
+        markdownOf: (noteId, o) => app.notes.markdownOf(noteId, o),
+        participants: (noteId) => app.collab.gateway.participants(noteId),
+        isLoaded: (noteId) =>
+          app.collab.server
+            .loadedDocuments()
+            .some((document) => document.name === noteDocName(noteId)),
+      });
+    },
+    { prefix: API_PREFIX },
+  );
+
+  await applyDocsUi(app, config);
+  await applyStaticSurface(app, options);
+}
+
+/** The SPA and the root redirect of ARCH-07; nothing is registered without a built bundle. */
+async function applyStaticSurface(app: FastifyInstance, options: RestPluginOptions): Promise<void> {
   const { config, logger } = options;
   const root = config.web.dir;
   if (root === null) {
@@ -110,7 +215,14 @@ export async function applyRestPlugin(
   // navigation and a global regex replace per response is measurable at that rate.
   const entryPieces = entryTemplate.split(CSP_NONCE_PLACEHOLDER);
 
-  await app.register(fastifyStatic, { root, serve: false, decorateReply: true });
+  // Iridium owns per-route caching below. The file adapter's default max-age=0 would otherwise
+  // overwrite those headers while piping an asset or metadata file to the response.
+  await app.register(fastifyStatic, {
+    root,
+    serve: false,
+    decorateReply: true,
+    cacheControl: false,
+  });
 
   const sendEntryDocument = (reply: FastifyReply): FastifyReply =>
     reply
@@ -118,9 +230,12 @@ export async function applyRestPlugin(
       .type('text/html; charset=utf-8')
       .send(entryPieces.join(reply.cspNonce.style));
 
+  // The static surfaces of §2.17 are not API operations, so they carry no `operationId` and are
+  // hidden from the document: `openapi.coverage.contract` walks documented operations, and a bundle
+  // path there would be an operation no test could ever "exercise".
   app.get(
     `${APP_PREFIX}/*`,
-    { config: { auth: { public: true } } },
+    { config: { auth: { public: true } }, schema: { hide: true } },
     async (request: FastifyRequest<{ Params: { '*': string } }>, reply) => {
       const requested = request.params['*'];
       if (requested === '' || requested === ENTRY_DOCUMENT) return sendEntryDocument(reply);
@@ -138,14 +253,23 @@ export async function applyRestPlugin(
     },
   );
 
-  app.get(APP_PREFIX, { config: { auth: { public: true } } }, async (_request, reply) =>
-    reply.redirect(`${APP_PREFIX}/`, HTTP_FOUND),
+  app.get(
+    APP_PREFIX,
+    { config: { auth: { public: true } }, schema: { hide: true } },
+    // The shared router ignores trailing slashes, so this route also wins over the wildcard for
+    // /app/. Redirect only the bare prefix; the canonical URL must actually serve its entry.
+    async (request, reply) =>
+      request.url.split('?', 1)[0] === APP_PREFIX
+        ? reply.redirect(`${APP_PREFIX}/`, HTTP_FOUND)
+        : sendEntryDocument(reply),
   );
 
   // ARCH-07: the SPA is the only human entry point on the origin, and a 404 at the root is a
   // support ticket.
-  app.get('/', { config: { auth: { public: true } } }, async (_request, reply) =>
-    reply.redirect(`${APP_PREFIX}/`, HTTP_FOUND),
+  app.get(
+    '/',
+    { config: { auth: { public: true } }, schema: { hide: true } },
+    async (_request, reply) => reply.redirect(`${APP_PREFIX}/`, HTTP_FOUND),
   );
 
   logger.info({ webDir: root }, `serving the web bundle at ${APP_PREFIX}/*`);

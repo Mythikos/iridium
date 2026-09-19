@@ -29,6 +29,7 @@
 import { readFile } from 'node:fs/promises';
 
 import SwaggerParser from '@apidevtools/swagger-parser';
+import { isSafeNodeName, MarkdownLineRange, parseStrongEtag, parseToken } from '@iridium/contracts';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import ajvFormats from 'ajv-formats';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -209,6 +210,21 @@ class BundledOpenApiOracle implements OpenApiOracle {
       // race it; `validateFormats` is left at its default, because a registered format that is not
       // applied is the same silence this wiring exists to end.
       addFormats(ajv);
+      // These refinements are not expressible as JSON Schema patterns. Use the same validators
+      // as the product rather than silently treating its published formats as annotations.
+      ajv.addFormat('iridium-node-name', { type: 'string', validate: isSafeNodeName });
+      ajv.addFormat('iridium-strong-etag', {
+        type: 'string',
+        validate: (value: string) => parseStrongEtag(value) !== null,
+      });
+      ajv.addFormat('iridium-credential-spl', {
+        type: 'string',
+        validate: (value: string) => parseToken(value)?.kind === 'spl',
+      });
+      ajv.addFormat('iridium-line-range', {
+        type: 'string',
+        validate: (value: string) => MarkdownLineRange.safeParse(value).success,
+      });
       this.#options.configureAjv?.(ajv);
       ajv.addSchema(document, AJV_BASE_ID);
       return { document, operations: indexOperations(document), ajv };
@@ -241,7 +257,14 @@ class BundledOpenApiOracle implements OpenApiOracle {
     }
 
     const statusKey = String(status);
-    const declared = responses[statusKey];
+    const rangeKey = `${statusKey[0] ?? ''}XX`;
+    // OpenAPI precedence is exact response, status range, then the declared fallback.
+    const responseKey = Object.hasOwn(responses, statusKey)
+      ? statusKey
+      : Object.hasOwn(responses, rangeKey)
+        ? rangeKey
+        : 'default';
+    const declared = responses[responseKey];
     if (!isRecord(declared)) {
       const known = Object.keys(responses).toSorted().join(', ');
       return {
@@ -289,7 +312,7 @@ class BundledOpenApiOracle implements OpenApiOracle {
       return { pass: true, message: `${operationId} ${statusKey} matches the OpenAPI document` };
     }
 
-    const cacheKey = `${operationId}|${statusKey}|${received}`;
+    const cacheKey = `${operationId}|${responseKey}|${received}`;
     const cached = this.#validators.get(cacheKey);
     const validate: ValidateFunction =
       cached ??
@@ -299,7 +322,7 @@ class BundledOpenApiOracle implements OpenApiOracle {
           located.path,
           located.method,
           'responses',
-          statusKey,
+          responseKey,
           'content',
           received,
           'schema',

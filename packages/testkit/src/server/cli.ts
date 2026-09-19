@@ -10,6 +10,7 @@
 import { spawn } from 'node:child_process';
 
 import { SERVER_DIST_ENTRY, requireExistingPath } from '../paths.ts';
+import type { DatabasePasswords } from './env.ts';
 import { buildServerEnv } from './env.ts';
 
 export interface CliResult {
@@ -74,6 +75,8 @@ export async function runIridiumCli(
 }
 
 export interface MigrateOptions {
+  readonly passwords?: DatabasePasswords;
+  readonly extraEnv?: Readonly<Record<string, string>>;
   /** The MySQL coordinates on this machine; a container object is never needed. */
   readonly host: string;
   readonly port: number;
@@ -92,6 +95,8 @@ export async function migrateSchema(options: MigrateOptions): Promise<void> {
     host: options.host,
     port: options.port,
     schema: options.schema,
+    ...(options.passwords === undefined ? {} : { passwords: options.passwords }),
+    ...(options.extraEnv === undefined ? {} : { extraEnv: options.extraEnv }),
     publicOrigin: options.publicOrigin ?? 'http://127.0.0.1:4000',
   });
   const result = await runIridiumCli(['migrate', 'up'], {

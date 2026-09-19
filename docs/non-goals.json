@@ -62,7 +62,7 @@
       "section": "04-auth-and-access-control.md",
       "sinceMilestone": "M1",
       "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
-      "absenceAssertion": "`authorize()`'s context type has exactly the key `vaultId`; every route's `config.auth` uses one of the four documented `vaultFrom` forms; no `nodes`, `notes` or `note_*` column named `role`, `permissions`, `acl`, `visibility` or `shared_with` exists in the `Database` interface or in any migration"
+      "absenceAssertion": "`authorize()`'s `AuthzScope` has exactly `vaultId`, `vault`, `member`, `requireStepUp`, `allowArchived` and `surface`: `vaultId` is the sole ACL resource identifier; the other members are preloaded vault/membership rows or request-policy metadata, never node or category overrides. Every route's `config.auth` uses one of the six canonical `VaultFrom` forms (`params.vaultId`, `body.vaultId`, `node:params.nodeId`, `note:params.noteId`, `attachment:params.attachmentId`, `job:params.jobId`), each resolving the containing vault; no `nodes`, `notes` or `note_*` column named `role`, `permissions`, `acl`, `visibility` or `shared_with` exists in the `Database` interface or in any migration"
     },
     {
       "id": "public-sharing",
@@ -132,7 +132,7 @@
       "section": "02-system-architecture.md",
       "sinceMilestone": "M1",
       "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
-      "absenceAssertion": "one `new Hocuspocus(` construction site (the composed claim; `guards.one-boot-path.guard` owns the primitive); no `@hocuspocus/extension-redis`, `ioredis` or `redis` dependency; `GET_LOCK('iridium_note_` and `GET_LOCK('iridium_jobs_leader'` appear in no non-test source file, so the locks 02-system-architecture.md reserves stay reserved, while `GET_LOCK('iridium_collab_owner'` appears exactly once"
+      "absenceAssertion": "one `new Hocuspocus(` construction site (the composed claim; `guards.one-boot-path.guard` owns the primitive); no `@hocuspocus/extension-redis`, `ioredis` or `redis` dependency; `GET_LOCK('iridium_note_` and `GET_LOCK('iridium_jobs_leader'` appear in no non-test source file, so the locks 02-system-architecture.md reserves stay reserved, while the owner-lease acquisition site appears exactly once"
     },
     {
       "id": "built-in-ai-features",

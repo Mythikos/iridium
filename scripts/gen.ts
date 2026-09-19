@@ -15,8 +15,9 @@
  * 5  mcp tool schema            packages/contracts/mcp/tools.schema.json
  * 6  desktop ipc typings        packages/contracts/src/generated/desktop-ipc.d.ts
  * 7  msw handler skeleton       packages/testkit/src/msw/generated/operations.ts
- * 8  declared non-goals         docs/non-goals.json
- * 9  acceptance map             docs/acceptance-map.json
+ * 8  database grants           docs/ops/db-grants.sql and grant snapshot
+ * 9  declared non-goals         docs/non-goals.json
+ * 10 acceptance map             docs/acceptance-map.json
  * ```
  *
  * `pnpm gen:check` is `pnpm gen && git diff --exit-code`, which is `gen.drift.guard`. `--check` on
@@ -43,6 +44,7 @@ import { step as kyselySchema } from './check-kysely-schema.ts';
 import { step as mcpTools } from './export-mcp-tools.ts';
 import { step as openapiExport } from './export-openapi.ts';
 import { step as apiTypes } from './generate-api-types.ts';
+import { step as dbGrants } from './generate-db-grants.ts';
 import { step as desktopIpc } from './generate-desktop-ipc.ts';
 import { step as mswHandlers } from './generate-msw-handlers.ts';
 import { parseContext, type Step } from './lib/step.ts';
@@ -58,6 +60,7 @@ export const STEPS: readonly Step[] = [
   mcpTools,
   desktopIpc,
   mswHandlers,
+  dbGrants,
   nonGoals,
   acceptanceMap,
 ];

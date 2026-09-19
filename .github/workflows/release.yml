@@ -4,7 +4,7 @@
 #
 # Two triggers, because the workflow owns both halves of a release:
 #   * a push to `main` runs `version-pr` only — `changesets/action` keeps the Version PR open;
-#   * a tag produced by `changeset git-tag` runs everything else against the tagged tree.
+#   * a manually cut product tag selects only the artifact jobs due at its exited milestone.
 # A tag is never trusted to match a green pull request, which is why `verify` re-runs the
 # blocking lanes before anything is built or published.
 #
@@ -33,11 +33,37 @@ env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/iridium-server
 
 jobs:
+  # D12-1/D12-2: CURRENT and the Changesets server version belong to the tagged tree.
+  # M0 publishes nothing; server M1, bridge M3, desktop/feed M5, recovery drill M8.
+  release-plan:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.select.outputs.version }}
+      milestone: ${{ steps.select.outputs.milestone }}
+      image_tags: ${{ steps.select.outputs.image_tags }}
+      verify: ${{ steps.select.outputs.verify }}
+      server_image: ${{ steps.select.outputs.server_image }}
+      bridge: ${{ steps.select.outputs.bridge }}
+      desktop: ${{ steps.select.outputs.desktop }}
+      release_feed: ${{ steps.select.outputs.release_feed }}
+      drill: ${{ steps.select.outputs.drill }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          install: 'false'
+      - name: Select due release jobs and validate current operator notes
+        id: select
+        run: node scripts/check-release.ts plan
+
   # Re-run `static`, `unit`, `integration` and the license scan against the tagged tree.
   verify:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
+    if: needs.release-plan.outputs.verify == 'true'
+    needs: [release-plan]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -52,6 +78,8 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
+        with:
+          playwright-browsers: 'chromium'
 
       - name: Build
         run: pnpm turbo run build
@@ -82,31 +110,16 @@ jobs:
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project integration --project contract --project mcp
 
-      # `release.yml` fails if a release contains a migration without a `[migration]` flag
-      # in the generated changelog (11-operations-and-deployment.md, "Release-note flags an
-      # operator must read").
+      # Check only this tag's generated server changelog section; an older [migration]
+      # flag cannot authorize a new migration. The first release checks its initial tree.
       - name: Release-note flags
-        run: |
-          set -euo pipefail
-          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
-          if [ -z "$previous" ]; then
-            echo 'No previous tag; nothing to compare.'
-            exit 0
-          fi
-          migrations="$(git diff --name-only "$previous" "$GITHUB_REF_NAME" -- 'apps/server/**/migrations/**' || true)"
-          if [ -n "$migrations" ] && ! grep -q '\[migration\]' CHANGELOG.md; then
-            echo "The release changes migrations but the changelog carries no [migration] flag:"
-            echo "$migrations"
-            exit 1
-          fi
+        run: node scripts/check-release.ts notes
 
   # `docker/setup-buildx-action` → `docker/build-push-action@v7.3.0` with SBOM and
   # provenance attestation → syft SBOM + grype scan → push by digest.
   server-image:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
-    needs: verify
+    if: needs.release-plan.outputs.server_image == 'true'
+    needs: [release-plan, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -117,19 +130,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Image tags: `1.2.3` (immutable), `1.2` and `1` (floating), never `latest`.
-      - name: Resolve the version and the tag set
-        id: version
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          major="${version%%.*}"
-          minor="${version%.*}"
-          {
-            echo "version=$version"
-            echo "tags=${IMAGE_NAME}:${version},${IMAGE_NAME}:${minor},${IMAGE_NAME}:${major}"
-          } >> "$GITHUB_OUTPUT"
-
+      # The selector emits exact-only prerelease tags; stable releases also move minor/major aliases.
       - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
@@ -147,7 +148,7 @@ jobs:
           file: infra/docker/server.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.version.outputs.tags }}
+          tags: ${{ needs.release-plan.outputs.image_tags }}
           provenance: mode=max
           sbom: true
 
@@ -184,7 +185,7 @@ jobs:
           reported="$(docker run --rm "$ref" --version)"
           echo "iridium --version: $reported"
           case "$reported" in
-            *"${{ steps.version.outputs.version }}"*) ;;
+            *"${{ needs.release-plan.outputs.version }}"*) ;;
             *) echo 'The image version does not equal the Changesets version.'; exit 1 ;;
           esac
           docker run --rm --entrypoint mysqldump "$ref" --version | grep -E '\b9\.7\.'
@@ -201,10 +202,8 @@ jobs:
   # then the final artefacts, then `bundles.json` and `SHA256SUMS`, then
   # `release.bundle-integrity` and a launch-and-exit sanity check over them.
   desktop:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
-    needs: verify
+    if: needs.release-plan.outputs.desktop == 'true'
+    needs: [release-plan, verify]
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -268,10 +267,8 @@ jobs:
   # and `<PUBLIC_ORIGIN>/api/v1/desktop/update-policy` and assert the published digests equal
   # the built ones. There is no end-to-end updater test at 1.0 — there is no updater.
   release-feed:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
-    needs: [desktop, server-image]
+    if: needs.release-plan.outputs.release_feed == 'true'
+    needs: [release-plan, desktop, server-image]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -297,10 +294,8 @@ jobs:
   # Build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`, then run
   # `bridge.parity.contract` against the release image.
   bridge:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
-    needs: server-image
+    if: needs.release-plan.outputs.bridge == 'true'
+    needs: [release-plan, server-image]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -328,10 +323,8 @@ jobs:
   # The backup/restore drill against the release image, so "restorable" is a property of the
   # artefact and not of `main`.
   drill:
-    # The milestone tags of 12-milestones.md section 13.2 are v0.<N>.0; the release jobs begin at
-    # M1 (section 3), so the M0 tag v0.0.0 cuts no release: it is excluded here by name.
-    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v0.0.0'
-    needs: server-image
+    if: needs.release-plan.outputs.drill == 'true'
+    needs: [release-plan, server-image]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -355,8 +348,8 @@ jobs:
           name: release-drill-${{ matrix.mysql }}
 
   # The Version PR. Changesets keeps one product version across the server image, the web
-  # bundle, the desktop bundles and `iridium-mcp`; merging the PR is what produces the tag
-  # that triggers every job above.
+  # bundle, the desktop bundles and `iridium-mcp`; merging it records versions and per-package
+  # changelogs. The milestone exit then cuts the product tag by hand (D12-1).
   version-pr:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
