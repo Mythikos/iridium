@@ -848,3 +848,80 @@ Local validation of this landing passes formatting, all 468 name references and 
 guards (ten future skips). The Node 26 launcher parses and its Node 24 negative control fails
 before launching tests, as intended. The exact promoted fixture is next exercised by both
 remote restoration lanes; earlier fixture results are not relabeled as its verification.
+
+## Final fixture commit: `46f2e8b`
+
+Commit `46f2e8bfdd85a914368117e679cc4e922f72d4c4` lands the fixture and runtime-launcher
+correction directly on main. [CI 35497678473](https://github.com/Mythikos/iridium/actions/runs/35497678473)
+and [nightly 35497703737](https://github.com/Mythikos/iridium/actions/runs/35497703737)
+capture that commit. No pull requests are open.
+
+The full-scope nightly mutation check `106043686493` passes at **74.71223021582733%**:
+4,154 detected of 5,560 valid mutants, zero pending, and all 85 reported source contents
+matching this commit. It instruments 87 files with 10,607 mutants, runs a fresh 2,086-test
+baseline and reuses 10,056 results from `7176d39`. Counts remain 3,849 killed, 305 timeout,
+1,242 survived, 164 uncovered, 4,525 compile errors, 521 ignored and one runtime error.
+Artifact `10601567507` has digest
+`sha256:2b34b4fa17fc1cc687c81a79528919212614f390607f39c18e49af43fd446c02`;
+the report hash is `67fbe82832f0ed4371e4185c6f4a1b10aaf00edc6086dd2daa6c3efe8ab3f126`.
+This is an incremental full-scope result, not a fresh mutation campaign.
+
+Corrected Node 26 check `106043686560` now records the actual test runtime:
+`v26.9.0`, executable `/opt/hostedtoolcache/node/26.9.0/x64/bin/node`, in artifact
+`10601427919`. It fails six cases in `app.boot-modes.integration`, with 2,729 tests passing
+across the remaining 226 files. All six failures compare expected empty stderr with
+Node 26's `ExperimentalWarning: localStorage is not available because --localstorage-file
+was not provided.` The expected exit codes and signals match. This is an actual advisory
+compatibility finding under A4/D10-19, carried to Node 26 adoption; its originating accessor
+remains to be traced. The runtime warning and the existing assertions are retained.
+Earlier green jobs redirected through pnpm's Node 24 pin do not establish Node 26 support.
+
+The fifth nightly's innovation check `106043686687` repeats the explicit advisory failure
+(93 failed, 27 passed, 291 skipped; artifact `10600987031`). Its MySQL 9.7 third chaos shard
+`106043686557` passes twelve cases. Older third-nightly second shards also complete green:
+`106029939178` / `106029939129` each pass 171 cases, in 7,054.56 / 7,118.44 seconds, with
+artifacts `10601046975` / `10601706854`. These dated results do not replace unfinished
+property or fourth-shard results on the fixture commit.
+
+Both extended property jobs in the third nightly finish successfully with 2,330 tests in
+156 files: MySQL 8.4 check `106029939097` takes 8,569.94 seconds and uploads artifact
+`10601738405`; MySQL 9.7 check `106029939114` takes 7,539.20 seconds and uploads artifact
+`10601283035`. Their 5,000-run/300-command budgets remain unchanged. Run `35492580406`
+finishes red because of the separately recorded failures; its passing jobs do not make the
+whole workflow green.
+
+The fourth nightly's full API profiles remain red on both engines (`106038745087` /
+`106038745107`, artifacts `10601199071` / `10601043941`). The logs repeat D12-20's signed-cursor
+and stateful administrator-authentication findings; the 9.7 outsider profile also reproduces
+the transport-level content-type finding. These are kept separate from M1's passing light
+profiles, and no failing run is deleted or renamed as successful.
+
+The fifth nightly exposes a new flake in check `106043702789`: the first integration pass
+has 411 passing tests in 74 files (369.34 seconds); the second has 410 passes and one failure
+(363.48 seconds), so the third pass does not run. The administrator case in
+`collab.epoch-steady-state.integration` observes one application query where the steady-state
+window requires zero. Artifact `10600747903` and `35497703737-flake.log` preserve the failure.
+The race is between the initial Saved boundary and the asynchronous connection hook's
+participant-identity read. Thirty unmodified local repetitions pass and do not reproduce it.
+A controlled diagnostic holds that real read until Saved, then releases it: both roles fail
+with exactly `SELECT display_name, color_hue FROM users WHERE id = ?` inside the measurement
+window, matching the remote count of one. The diagnostic records SQL shape without bind values.
+
+The correction awaits the actual client's participant message before taking the SQL baseline.
+Both controlled cases then pass at zero steady-state queries and exactly two stale-epoch
+reads. After all diagnostic instrumentation is removed, the existing epoch and participant
+suites pass on both MySQL engines. Types, type-aware lint, formatting and all 468 name
+references pass. No product source, mutation input, fixture, timing allowance, update count or
+SQL assertion changes. The diagnostic failures and passing checks remain in
+`epoch-controlled-{before,after}-84.log` and `epoch-final-{84,97}.log`; the next Actions run
+must validate this repaired observation boundary.
+
+The fifth nightly's first chaos shards pass on both engines: `106043686555` / `106043686586`,
+67 cases in four files, 1,700.90 / 1,642.40 seconds. Main CI's MySQL 8.4 chaos check
+`106043780622` also passes 88 cases with 42 skips (1,732.49 seconds). Its source run remains
+identified separately from the nightly campaigns.
+
+Main CI `35497678473` completes successfully on `46f2e8b`, including MySQL 9.7 chaos check
+`106043780576` and merge check `106047789359`. All twelve required jobs pass, including both
+engines' restoration of the promoted fixture. This complete green run is preserved before
+the subsequent test-only synchronization repair is pushed to main.

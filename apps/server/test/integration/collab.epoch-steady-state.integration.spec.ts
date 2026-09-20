@@ -21,6 +21,11 @@ describe('collab.epoch-steady-state.integration [hp:HP-3] [area:collab]', () => 
           flushDelayMs: false,
         });
         await client.waitFor('saved');
+        // Saved proves the persisted baseline, while connected still reads participant identity.
+        // Start the steady-state SQL window only after that setup read reaches the real client.
+        await expect
+          .poll(() => client.session.snapshot.participants.map((participant) => participant.id))
+          .toEqual([user.id]);
         const app = harness.application();
         clock.jump(clock.now() + 10_001);
         const before = app.database.queryCounts();
