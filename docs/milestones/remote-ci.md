@@ -105,3 +105,31 @@ successful elevated offline retry are retained; this is not a registry audit.
 Release preflight also canonicalizes the mixed-case GitHub owner into one lowercase OCI repository
 for publishing, SBOM generation and digest-based scanning; its regression is in the release guards.
 No version PR exists, and the release workflow has no version-PR job.
+
+## Fourth repair and first nightly findings
+
+Commit `8c6fb76193b033a3061123d602a1c506ca506c24` starts push CI `35478371568`, superseded
+by explicit [M1 rehearsal 35478419591](https://github.com/Mythikos/iridium/actions/runs/35478419591).
+[Diagnostic 35478400206](https://github.com/Mythikos/iridium/actions/runs/35478400206), job
+`105991600542`, passes the real Linux fresh-capacity shutdown. The temporary diagnostic workflow
+is removed after that proof. The rehearsal passes static, both unit jobs, Windows and macOS Electron.
+Linux job `105991867020` shows that the release binary ignores `CHROME_DEVEL_SANDBOX` and still
+looks beside Electron. Setup now links that expected path to the installed root-owned helper.
+
+Manual CI rehearsals now have independent concurrency groups, so later main pushes cannot discard
+their captured-commit evidence. Ordinary pushes still supersede earlier pushes.
+
+Nightly `35475597877` completes `schemathesis-full` as a failure (job `105984200108`, artifact
+`10594333947`). Admin case `SiiXiH` returns 500 for an initial vault member that does not exist;
+outsider case `RPsTyK` returns 422 for the valid single query value `status=active`. Both regressions
+fail locally before the fixes. Vault creation now locks and checks initial members, returns the
+documented 404 and rolls back the entire creation and authorization-version changes; a follow-up
+valid creation succeeds. The query codec accepts one or repeated enum values. All 11 response
+integration tests pass locally; the generated contract adds the new 404 response.
+
+Other full-profile findings remain open: a signed cursor cannot be synthesized as an arbitrary
+schema-valid string (the server correctly returns `cursor_invalid`); admin fuzzing loses its fixture
+login with HTTP 401 after stateful account mutations; and a request exceeding Node's parser header
+limit receives Fastify's transport-level 431 JSON envelope, outside the declared ProblemDetails
+envelope. These are recorded failures, not a passing full fuzz run. The light non-admin required
+gate remains separate. The first nightly's remaining jobs are still running at this checkpoint.

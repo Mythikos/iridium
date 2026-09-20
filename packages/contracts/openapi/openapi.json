@@ -3236,15 +3236,27 @@
           },
           {
             "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "active",
-                  "disabled",
-                  "deleted"
-                ]
-              }
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "active",
+                    "disabled",
+                    "deleted"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "deleted"
+                    ]
+                  }
+                }
+              ]
             },
             "in": "query",
             "name": "status",
@@ -3854,6 +3866,16 @@
           },
           "403": {
             "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
             "content": {
               "application/problem+json": {
                 "schema": {

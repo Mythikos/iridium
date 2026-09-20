@@ -28,6 +28,7 @@ import { Permission, Role, VaultStatus } from '../authz.ts';
 import { NodeId, NoteId, SessionId, TokenId, UserId, VaultId } from '../ids.ts';
 import { LIMITS } from '../limits.ts';
 import { isSafeNodeName, RESERVED_DEVICE_NAMES } from '../paths.ts';
+import type { EnumOf } from '../schema.ts';
 import { Timestamp } from '../time.ts';
 
 // ---- headers, validators and the client contract (section 1.2) -------------------------------
@@ -207,7 +208,9 @@ export const USER_STATUSES = ['active', 'disabled', 'deleted'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 /** `users.status`. */
-export const UserStatus: z.ZodType<UserStatus> = z.enum(USER_STATUSES).meta({ id: 'UserStatus' });
+export const UserStatus: EnumOf<typeof USER_STATUSES> = z
+  .enum(USER_STATUSES)
+  .meta({ id: 'UserStatus' });
 
 /** An embedded author or actor: everything a client needs to render a name and a colour. */
 export interface UserRef {

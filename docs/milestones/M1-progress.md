@@ -4,7 +4,7 @@ M1 review corrections and implementation are complete locally. The final58 build
 
 ## Status and provenance
 
-M0's local validation record, [M0-exit.md](M0-exit.md), has been rechecked through workspace, real database, container and Windows/Linux desktop validation. The current58 Windows and fresh native Linux proofs are recorded in [Final58 local verification](#final58-local-verification). Its remote CI, branch-protection and `v0.0.0` tag prerequisites remain unresolved. Local validation does not establish a formal remote or cross-platform exit.
+M0's local validation record, [M0-exit.md](M0-exit.md), has been rechecked through workspace, real database, container and Windows/Linux desktop validation. The current58 Windows and fresh native Linux proofs are recorded in [Final58 local verification](#final58-local-verification). Its green remote CI and `v0.0.0` tag prerequisites remain unresolved; the owner has deferred branch protection under the direct-main rule. Current remote attempts and repairs are recorded in [remote-ci.md](remote-ci.md).
 
 M1 implements the authenticated headless note kernel: one authorization core, transactional audit, vaults and notes, durable collaborative saving, live revocation and operator commands. The proofs below use real MySQL, product clients, separate processes and production containers.
 

@@ -640,7 +640,7 @@ Request:  { name: VaultName, description: z.string().max(500).optional(),
             settings: VaultSettings.partial().optional(),
             members: z.array(z.strictObject({ userId: UserId, role: Role })).max(500).optional() }
 Response 201 Vault   + Location: /api/v1/vaults/<id>
-Errors: 403 forbidden (non-admin) · 409 name_conflict · 422 validation_failed
+Errors: 403 forbidden (non-admin) · 404 not_found (an initial member does not exist) · 409 name_conflict · 422 validation_failed
 ```
 
 `VaultName` = `z.string().min(1).max(120)` with the node-name character rules of skeleton A12 (no `/`, no backslash, no control characters, no leading or trailing space or dot, not `.` or `..`). One transaction: `vaults` row (`status='active'`) → root `nodes` row (`kind='category'`, `name=''`, `parent_id = id`) → `vaults.root_node_id` → optional `vault_members` rows (each bumps that member's `users.authz_version`) → audit `vault.created` plus one `vault.member.added` per member. `slug` is derived from the name (lowercased ASCII, non-alphanumerics to `-`, collisions suffixed `-2`, `-3`) and is used in export archive names only.

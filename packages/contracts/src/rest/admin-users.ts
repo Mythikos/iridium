@@ -33,7 +33,13 @@ export interface ListAdminUsersQuery {
 export const ListAdminUsersQuery: z.ZodType<ListAdminUsersQuery> = z
   .strictObject({
     q: z.string().max(200).optional(),
-    status: z.array(UserStatus).optional(),
+    // A single form-style query value arrives as a string; repeated values arrive as an array.
+    status: z
+      .codec(z.union([UserStatus, z.array(UserStatus)]), z.array(UserStatus), {
+        decode: (value) => (typeof value === 'string' ? [value] : value),
+        encode: (value) => value,
+      })
+      .optional(),
     isServerAdmin: QueryBoolean.optional(),
     cursor: z.string().max(4096).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(50),

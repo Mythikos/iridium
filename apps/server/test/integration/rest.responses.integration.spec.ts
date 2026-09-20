@@ -4,6 +4,7 @@ import type { RestClient, RestRequestInit, RestResponse } from '@iridium/testkit
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { idBytes } from '../../src/auth/ids.ts';
 import { TEST_NAMESPACE_PREFIX } from '../../src/ops/test-routes.ts';
 import {
   startAuthServer,
@@ -232,6 +233,9 @@ describe('rest.responses.integration [area:contracts]', () => {
     expect((await manager.get('/admin/users')).body).toMatchObject({
       items: expect.arrayContaining([expect.objectContaining({ id: member.id })]),
     });
+    await expectStatus(manager, 'GET', '/admin/users?status=active', 200);
+    await expectStatus(manager, 'GET', '/admin/users?status=active&status=disabled', 200);
+    await expectStatus(manager, 'GET', '/admin/users?status=unknown', 422);
     await expectStatus(manager, 'GET', '/admin/users?limit=0', 422);
     await expectStatus(manager, 'POST', '/admin/users', 422, { json: { email: 'invalid' } });
     await expectStatus(manager, 'POST', '/admin/users', 409, {
@@ -314,6 +318,37 @@ describe('rest.responses.integration [area:contracts]', () => {
     const docs = await manager.get('/docs');
     expect(docs.status).toBe(200);
     await expect(docs).toMatchOpenApi('meta.docs', 200);
+  });
+
+  it('rolls back vault creation when an initial member does not exist', async () => {
+    const name = 'Rejected initial membership';
+    const before = await context.db
+      .selectFrom('users')
+      .select('authz_version')
+      .where('id', '=', idBytes(member.id))
+      .executeTakeFirstOrThrow();
+    await expectStatus(manager, 'POST', '/vaults', 404, {
+      json: {
+        name,
+        members: [
+          { userId: member.id, role: 'editor' },
+          { userId: MISSING_ID, role: 'manager' },
+        ],
+      },
+    });
+    expect(
+      await context.db.selectFrom('vaults').select('id').where('name', '=', name).execute(),
+    ).toEqual([]);
+    expect(
+      await context.db
+        .selectFrom('users')
+        .select('authz_version')
+        .where('id', '=', idBytes(member.id))
+        .executeTakeFirstOrThrow(),
+    ).toEqual(before);
+    await expectStatus(manager, 'POST', '/vaults', 201, {
+      json: { name, members: [{ userId: member.id, role: 'editor' }] },
+    });
   });
 
   it('serves conditional Markdown and participants, refuses bad ranges, and bounds fresh projections', async () => {

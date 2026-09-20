@@ -991,7 +991,7 @@ export interface operations {
                 readonly isServerAdmin?: "true" | "false";
                 readonly limit?: number;
                 readonly q?: string;
-                readonly status?: readonly ("active" | "disabled" | "deleted")[];
+                readonly status?: ("active" | "disabled" | "deleted") | readonly ("active" | "disabled" | "deleted")[];
             };
             readonly header?: never;
             readonly path?: never;
@@ -2429,6 +2429,15 @@ export interface operations {
             };
             /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
             readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
                 headers: {
                     readonly [name: string]: unknown;
                 };

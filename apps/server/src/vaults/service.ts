@@ -39,6 +39,7 @@ import type { OwnerFence } from '../collab/owner-lease.ts';
 import type { Database } from '../db/index.ts';
 import type { ExternalImagePolicy, MarkdownFlavor } from '../db/schema.ts';
 import { BOUNDED_LIST_ROWS } from '../rest/pagination.ts';
+import { ProblemError } from '../security/problem.ts';
 import { storedVaultName } from '../tree/names.ts';
 import {
   toVaultDto,
@@ -255,7 +256,8 @@ export async function listVaults(
  * Creates a vault, its root category row and any initial memberships in one transaction (§2.5, §5).
  *
  * @throws ProblemError `409 name_conflict` through `db/failure.ts` when `uq_vaults_name` refuses the
- * name, and `422 validation_failed` when the name breaks a node-name rule of §6.5.
+ * name, `422 validation_failed` when the name breaks a node-name rule of §6.5, and
+ * `404 not_found` when an initial membership names a user that does not exist.
  */
 export async function createVault(
   deps: {
@@ -271,7 +273,9 @@ export async function createVault(
   const vaultBytes = idBytes(vaultId);
   const rootBytes = idBytes(rootNodeId);
   const actorBytes = idBytes(input.actor.userId);
-  const grants = input.members ?? [];
+  const grants = [...(input.members ?? [])].toSorted((left, right) =>
+    left.userId.localeCompare(right.userId),
+  );
   const events: AuthzEvent[] = [];
   const actor = {
     actorType: 'user',
@@ -379,6 +383,13 @@ async function grantMembershipRow(
   now: Date,
 ): Promise<number> {
   const memberBytes = idBytes(grant.userId);
+  const member = await trx
+    .selectFrom('users')
+    .select('id')
+    .where('id', '=', memberBytes)
+    .forUpdate()
+    .executeTakeFirst();
+  if (member === undefined) throw new ProblemError('not_found', { detail: 'No such user.' });
   await trx
     .insertInto('vault_members')
     .values({

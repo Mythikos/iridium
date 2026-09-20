@@ -28,7 +28,9 @@ on:
         options: [none, M1]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Keep an explicitly requested exit rehearsal's evidence when main advances. Ordinary pushes
+  # still supersede earlier pushes; each manual rehearsal validates its captured commit to the end.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 permissions:

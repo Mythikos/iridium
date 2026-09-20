@@ -321,6 +321,17 @@ describe('rest.dtos.unit [area:contracts]', () => {
   });
 
   describe('query strings (section 1.1)', () => {
+    it('normalizes one or repeated user status filters without accepting unknown values', () => {
+      expect(ListAdminUsersQuery.parse({ status: 'active' }).status).toEqual(['active']);
+      expect(ListAdminUsersQuery.parse({ status: ['active', 'disabled'] }).status).toEqual([
+        'active',
+        'disabled',
+      ]);
+      for (const status of ['', 'unknown', ['active', 'unknown'], 1]) {
+        expect(ListAdminUsersQuery.safeParse({ status }).success).toBe(false);
+      }
+    });
+
     it('reads booleans as the literal true and false and nothing else', () => {
       expect(ListVaultsQuery.parse({})).toStrictEqual({ includeArchived: true });
       expect(ListVaultsQuery.parse({ includeArchived: 'false' })).toStrictEqual({

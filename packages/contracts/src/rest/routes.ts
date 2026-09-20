@@ -424,7 +424,14 @@ const VAULT_ROUTES: readonly RouteSpec[] = [
         },
       },
     ],
-    errors: ['unauthenticated', 'forbidden', 'csrf_rejected', 'name_conflict', 'validation_failed'],
+    errors: [
+      'unauthenticated',
+      'forbidden',
+      'csrf_rejected',
+      'name_conflict',
+      'not_found',
+      'validation_failed',
+    ],
     summary:
       'Create a vault, its root category row and any initial memberships in one transaction.',
   },
