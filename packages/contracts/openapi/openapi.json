@@ -3,7 +3,11 @@
   "info": {
     "title": "Iridium API",
     "description": "The REST surface of an Iridium server. Every path below is relative to `<PUBLIC_ORIGIN>/api/v1`; the operations published outside that prefix carry their own absolute paths (09-api-reference.md §2.18). This document is generated from the running server's zod schemas by `pnpm gen` and committed; `gen.drift.guard` fails any change to a schema that is not regenerated.",
-    "version": "1"
+    "version": "1",
+    "license": {
+      "name": "Elastic License 2.0",
+      "identifier": "Elastic-2.0"
+    }
   },
   "components": {
     "securitySchemes": {

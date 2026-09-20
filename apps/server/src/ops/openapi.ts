@@ -142,6 +142,10 @@ export function openApiDocument() {
         "server's zod schemas by `pnpm gen` and committed; `gen.drift.guard` fails any change to a " +
         'schema that is not regenerated.',
       version: '1',
+      // Source-available, not open source: internal and personal use are free, offering Iridium to
+      // third parties as a hosted or managed service is not (D01-15). OpenAPI 3.1 takes the SPDX
+      // identifier directly, so no URL is published beside it.
+      license: { name: 'Elastic License 2.0', identifier: 'Elastic-2.0' },
     },
     servers: [
       {
