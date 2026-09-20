@@ -133,3 +133,47 @@ login with HTTP 401 after stateful account mutations; and a request exceeding No
 limit receives Fastify's transport-level 431 JSON envelope, outside the declared ProblemDetails
 envelope. These are recorded failures, not a passing full fuzz run. The light non-admin required
 gate remains separate. The first nightly's remaining jobs are still running at this checkpoint.
+
+## Report portability repair
+
+Commit `66f3d631dccddb00c5c5d89de3ce4b8be0369bb9` starts
+[CI 35478972790](https://github.com/Mythikos/iridium/actions/runs/35478972790). All three Electron
+jobs pass, including Linux job `105993370422` with four actual tests and the enabled sandbox.
+The preceding M1 rehearsal passes both integration jobs (`105991867028` on 8.4 and
+`105991867027` on 9.7), each with 84 files, including the repaired capacity cleanup.
+
+Replaying its actual Windows and Linux unit blobs exposes an additional reporting defect:
+Vitest 5 retains absolute checkout paths and counts 294 source files twice (588 coverage entries).
+The merge now verifies each blob's captured commit and SHA-256 and relocates a copy to the merge
+runner's root. Raw artifacts, test results, reference indices and coverage counters are preserved.
+The same downloaded inputs then produce 294 entries. Four regressions cover path forms, unchanged
+results/counters, format and collision refusal, stale/tampered/missing origins and workflow wiring;
+all 48 combined portability and acceptance-map checks pass, as do types and targeted lint.
+This local artifact replay diagnoses and verifies report handling; it is not a substitute for the
+complete remote merged coverage gate.
+
+The completed rehearsal merge (`105996021630`) and main merge (`105997306931`) confirm the defect:
+duplicated roots lower functions/branches below the gates, and Windows drive colons make the Linux
+HTML report artifact invalid. Replaying all six rehearsal blobs after relocation gives 91.01%
+statements, 91.98% lines, 85.79% branches and 91.58% functions; unchanged coverage thresholds pass.
+The original failed chaos result remains in the raw artifacts and its required job stays failed.
+Actual passing Electron blobs from main also reproduce Playwright's different-root rejection.
+Passing the existing explicit Playwright config fixes that merge (12 passes); CI platform tags
+distinguish the three executions, following [Playwright's merge guidance](https://playwright.dev/docs/test-sharding#merge-reports-cli).
+
+The rehearsal's 8.4 chaos (`105991867057`) times out observing backpressure; 9.7 (`105991867133`)
+passes. A constrained local replay also proves that WebSocket refusals can arrive before child
+stdout. The oracle now observes queue loading separately, records each refusal on its actual event
+even if the state was already `save-failed`, and retains the 5,001-update bound, 15 s delivery check,
+two-second independent-writer limit, pending-edit recovery and 180 s overall deadline. One-core
+8.4 with coverage and the 9.7 focused check pass. Failed intermediate observations are retained.
+
+Main `35478972790` finishes with both integration engines and 9.7 chaos green; its 8.4 chaos
+(`105993370481`) instead fails CH-6's 30 s recovery assertion after ownership loss. Readiness and
+two clients recover; the third is still in the documented reconnect ladder. The explicit
+[D10-33 amendment](../adr/d10-33-collaboration-owner-lease.md#outage-recovery-observation) reconciles
+that ownership-loss case with the existing retry ceilings using 75 s, while retaining 30 s for an
+intact owner. It changes that acceptance deadline, not the product retry policy, and keeps the
+original documents, undo history, exact-once content and overall case deadline as assertions.
+The focused real-outage cases pass on both MySQL 8.4 and 9.7 after that amendment. Full types,
+targeted lint, formatting, Knip and acceptance-map generation checks also pass before the push.

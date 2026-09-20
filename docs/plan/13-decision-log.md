@@ -2438,6 +2438,22 @@ ADR mirror: [OPS-12](../adr/ops-12-serving-sql-deadlines.md).
 
 ADR mirror: [D10-33](../adr/d10-33-collaboration-owner-lease.md).
 
+## D10-33 amendment: outage recovery observation (2026-09-20)
+
+Status: accepted, amended 2026-09-20.
+
+The first complete remote matrices expose a conflict in CH-6: its 30 s recovery assertion predates
+the ownership-loss exception, whose automatic document and socket retries may wait up to 60 s and
+30 s respectively (05). In run `35478972790`, MySQL 8.4 job `105993370481`, two clients save after
+readiness recovers and the third is still disconnected in that retry window. Keep 30 s for an
+intact owner. After an observed owner-lease loss, allow 75 s from database restoration: 60 s for
+the document ladder, one 5 s readiness tick and 10 s for admission and durable save. Socket retries
+proceed independently. The test must use the unchanged product retry policies, original documents
+and undo managers, prove every edit commits once, and retain its 180 s overall deadline. This is
+an explicit acceptance-deadline amendment, not a claim that the original run passed.
+
+ADR mirror: [D10-33](../adr/d10-33-collaboration-owner-lease.md).
+
 ## D04-14 amendment: owner-executed authorization changes (2026-09-17)
 
 `AuthzBus` starts subscribers synchronously in fixed order and offers acknowledged completion. Existing-principal authorization mutations fence admission and drain already accepted writer updates before COMMIT. Separate CLI session revocation is durable intent executed by the serving owner, with the same shared owner-generation lock and an atomic durable result. Unknown outcomes retain the admission fence until a locking read proves the previous transaction ended; CLI commands read their durable result and REST recovery independently checks every actual connection's session, user and membership. A rolled-back change does not invent a revocation event. Ordinary collaboration messages retain their zero-I/O path.

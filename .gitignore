@@ -27,6 +27,7 @@ stryker-setup-*.js
 
 # Vitest blob reports the CI lanes hand to merge-reports (and local merge rehearsals)
 .vitest-reports/
+.vitest-merge/
 
 # Local unpacked dependency scratch used when developing pinned patches
 /.tmp/

@@ -127,7 +127,7 @@ single limits policy (`A.1`), and `0059`–`0061` are the three ADRs the project
 
 ## Section decision amendments
 
-- [D10-33: collaboration owner lease scope](./d10-33-collaboration-owner-lease.md), amended 2026-09-17. Section decision IDs keep their original names rather than consuming an A-series number.
+- [D10-33: collaboration owner lease scope](./d10-33-collaboration-owner-lease.md), amended 2026-09-20 for ownership-loss recovery observation. Section decision IDs keep their original names rather than consuming an A-series number.
 
 - [OPS-12: serving SQL deadlines](./ops-12-serving-sql-deadlines.md), amended 2026-09-17.
 

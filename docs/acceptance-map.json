@@ -1172,6 +1172,11 @@
       "how": "imports the pure release policy through Node, checks actual workflow wiring with negative fixtures, and inspects disposable Git histories including the first product release, package tags, historical flags, uncommitted notes and deleted migrations"
     },
     {
+      "name": "guards.report-portability.guard",
+      "asserts": "M1 — merged Vitest coverage counts each source once across operating systems; raw lane reports retain commit, root and checksum evidence",
+      "how": "exercises path relocation with Windows/Unix/file URLs, unchanged counters and results, collision and format rejection, stale/tampered/missing origins, and the workflow's capture and merge wiring"
+    },
+    {
       "name": "guards.mutation-lane.guard",
       "asserts": "M0 — @typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
       "how": "parses every workspace manifest"
@@ -4874,6 +4879,17 @@
       "file": null,
       "tag": null,
       "asserts": "M1 — product tags match the tagged server version and exited milestone; artifact jobs begin at M1/M3/M5/M8 and retain verification prerequisites; a new migration requires a visible [migration] flag in the exact current server changelog section",
+      "inventories": [
+        "Guard tests"
+      ]
+    },
+    "guards.report-portability.guard": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "guard",
+      "file": null,
+      "tag": null,
+      "asserts": "M1 — merged Vitest coverage counts each source once across operating systems; raw lane reports retain commit, root and checksum evidence",
       "inventories": [
         "Guard tests"
       ]

@@ -5,6 +5,8 @@ const CI = !!process.env.CI;
 
 export default defineConfig({
   testDir: 'apps/e2e',
+  // Distinguish repeated Electron cases when the three operating-system blobs are merged.
+  ...(CI ? { tag: `@${process.platform}` } : {}),
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 2 : 0,

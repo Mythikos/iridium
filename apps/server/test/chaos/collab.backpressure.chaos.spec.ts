@@ -10,6 +10,7 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
   () => {
     it('bounds a real five-thousand-update queue, refuses all senders, preserves pending edits, and keeps another writer healthy', async () => {
       const harness = await startCollab({ mode: 'child' });
+      const unsubscribe: (() => void)[] = [];
       try {
         await harness.server.waitReady();
         const cast = await harness.server.seed.kernel();
@@ -38,37 +39,89 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
         if (first === undefined) throw new Error('The writer needs an attached producer.');
         first.marker('queue-hold');
         await waitFault(harness, FAULT.storeHoldBeforeCommit, logStart);
-        const failures = clients.map((client) =>
-          client.waitForStateless('persist-failed', { timeoutMs: 15_000 }).then((message) => ({
-            message,
-            stateAtRefusal: client.saveState,
-          })),
-        );
+        const refusalStates = new Map<number, string>();
+        clients.forEach((client, index) => {
+          const provider = client.provider;
+          if (provider === null) throw new Error('Every producer must be attached.');
+          // The product folds stateless input before this observer. A snapshot subscription alone
+          // can miss this event when the dominance deadline already made the state save-failed.
+          const recordRefusal = (): void => {
+            if (client.session.input.persistFailed !== null && !refusalStates.has(index)) {
+              refusalStates.set(index, client.saveState);
+            }
+          };
+          provider.on('stateless', recordRefusal);
+          unsubscribe.push(() => provider.off('stateless', recordRefusal));
+        });
         const markers: string[] = [];
         clients.forEach((client, index) => {
           for (let update = 0; update < 175; update++)
             markers.push(client.marker(`queue-${String(index)}`));
         });
-        const messages = await Promise.all(failures);
+        const backpressureEvents = (): unknown[] =>
+          harness.logs.flatMap((line) => {
+            try {
+              const value: unknown = JSON.parse(line);
+              return typeof value === 'object' &&
+                value !== null &&
+                'event' in value &&
+                value.event === 'persist.backpressure'
+                ? [value]
+                : [];
+            } catch {
+              return [];
+            }
+          });
+        let phase = 'fill the held queue';
+        try {
+          // Producing and broadcasting 5,250 real updates is setup for the refusal oracle.
+          // Start its 15 s delivery deadline only after the server has crossed the queue bound.
+          // Child stdout and WebSocket delivery are independent; either may arrive first.
+          await expect.poll(() => backpressureEvents().length > 0, { timeout: 60_000 }).toBe(true);
+          phase = 'deliver every refusal';
+          await expect
+            .poll(
+              () =>
+                clients.every((client) =>
+                  client.stateless.some((message) => message.t === 'persist-failed'),
+                ),
+              { timeout: 15_000 },
+            )
+            .toBe(true);
+        } catch (error) {
+          console.error('Backpressure observation failed', {
+            phase,
+            clients: clients.map((client) => ({
+              state: client.saveState,
+              unsynced: client.provider?.unsyncedChanges,
+              failures: client.stateless.filter((message) => message.t === 'persist-failed'),
+              closes: client.closes,
+            })),
+            metrics: await harness.server
+              .metrics()
+              .catch((cause: unknown) => ({ error: String(cause) })),
+            events: harness.logs
+              .filter((line) => /persist\.|fault\.|rate.limit/.test(line))
+              .slice(-20),
+          });
+          throw error;
+        }
+        const messages = clients.map((client, index) => {
+          const message = client.stateless.find((item) => item.t === 'persist-failed');
+          if (message === undefined) throw new Error('The observed refusal must be retained.');
+          return { message, stateAtRefusal: refusalStates.get(index) };
+        });
         expect(
           messages.every(
             ({ message }) => message.reason === 'backpressure' && message.retryInMs > 0,
           ),
         ).toBe(true);
-        expect(messages.every(({ stateAtRefusal }) => stateAtRefusal !== 'saved')).toBe(true);
-        const events = harness.logs.flatMap((line) => {
-          try {
-            const value: unknown = JSON.parse(line);
-            return typeof value === 'object' &&
-              value !== null &&
-              'event' in value &&
-              value.event === 'persist.backpressure'
-              ? [value]
-              : [];
-          } catch {
-            return [];
-          }
-        });
+        expect(
+          messages.every(
+            ({ stateAtRefusal }) => stateAtRefusal !== undefined && stateAtRefusal !== 'saved',
+          ),
+        ).toBe(true);
+        const events = backpressureEvents();
         expect(events).toHaveLength(1);
         expect(events[0]).toMatchObject({ queued: LIMITS.WRITER_QUEUE_MAX_UPDATES + 1 });
         const metrics = await harness.server.metrics();
@@ -94,6 +147,7 @@ describe.each(Array.from({ length: ROUTINE_ITERATIONS }, (_, index) => index))(
         expect((await harness.server.metrics())['iridium_persist_queue_depth']).toBe(0);
         expect(harness.logs.some((line) => line.includes('persist.cas_mismatch'))).toBe(false);
       } finally {
+        for (const off of unsubscribe) off();
         await harness.server.faults.disarmAll();
         await harness.close();
       }

@@ -193,6 +193,10 @@ jobs:
           --reporter=default --reporter=blob
           --coverage --outputFile.blob=.vitest-reports/unit-${{ matrix.os }}.json
 
+      - name: Record the Vitest blob origin
+        if: always()
+        run: node scripts/prepare-vitest-reports.ts capture .vitest-reports
+
       - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -288,6 +292,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Record the Vitest blob origin
+        if: always()
+        run: node scripts/prepare-vitest-reports.ts capture .vitest-reports
+
       - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -346,6 +354,10 @@ jobs:
           --reporter=default --reporter=blob
           --coverage
           --outputFile.blob=.vitest-reports/chaos-${{ steps.image.outputs.slug }}.json
+
+      - name: Record the Vitest blob origin
+        if: always()
+        run: node scripts/prepare-vitest-reports.ts capture .vitest-reports
 
       - name: Upload blob report
         if: always()
@@ -633,14 +645,16 @@ jobs:
           path: reports
 
       - name: Merge the Vitest reports and evaluate the coverage thresholds
-        # The blobs are downloaded into .vitest-reports (Vitest's default is .vitest/blob).
-        run: pnpm exec vitest --merge-reports=.vitest-reports --coverage --config vitest.config.ts
+        # Keep raw artifacts and counters intact; map each checkout root to this runner first.
+        run: |
+          node scripts/prepare-vitest-reports.ts merge .vitest-reports .vitest-merge
+          pnpm exec vitest --merge-reports=.vitest-merge --coverage --config vitest.config.ts
         env:
           # The one place the section 3 thresholds are enforced (root vitest.config.ts).
           IRIDIUM_COVERAGE_GATE: '1'
 
       - name: Merge the Playwright reports
-        run: pnpm exec playwright merge-reports --reporter=html,github blob-report
+        run: pnpm exec playwright merge-reports --config=playwright.config.ts --reporter=html,github blob-report
 
       - name: OpenAPI operation coverage
         run: node scripts/check-openapi-coverage.ts

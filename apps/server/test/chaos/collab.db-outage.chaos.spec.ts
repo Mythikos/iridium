@@ -153,8 +153,12 @@ describe('collab.db-outage.chaos [hp:HP-1] [hp:HP-5]', () => {
         await proxy.setEnabled(true);
         phase = 'connected recovery';
         try {
+          // CH-6: an intact owner drains within 30 s. Losing ownership invokes the documented
+          // 60 s document / 30 s socket retry ladders, plus readiness and handshake/COMMIT work.
+          // The 75 s bound includes one 5 s readiness tick and 10 s for admission and durable save.
+          const recoveryTimeoutMs = ownershipLost ? 75_000 : 30_000;
           await Promise.all(
-            clients.map((client) => client.waitFor('saved', { timeoutMs: 30_000 })),
+            clients.map((client) => client.waitFor('saved', { timeoutMs: recoveryTimeoutMs })),
           );
         } catch (cause) {
           throw new Error(
