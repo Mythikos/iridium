@@ -1196,3 +1196,70 @@ The failed main-run snapshot is retained before the next corrective push. Normal
 concurrency may cancel its remaining chaos jobs, while the completed Windows failure remains
 visible. The new production latch boundary requires fresh remote evidence; neither that
 supersession nor the prior green mutation campaign certifies the repaired implementation.
+
+## Current implementation verification and fresh rehearsal completion
+
+Implementation `20494d32a1e1d84697c1a9dd35303caa1d9a297d` runs in
+[main CI 35506765887](https://github.com/Mythikos/iridium/actions/runs/35506765887)
+and [nightly 35506782276](https://github.com/Mythikos/iridium/actions/runs/35506782276).
+All twelve required main checks pass. The six raw lanes contain 5,814 passes and 84 declared
+skips; both integration engines pass 481 tests in 84 files and record all 131 explicit API
+operation/status pairs plus five defaults. Both unit platforms pass 2,338 tests, including
+all six requested NoteSession regressions and all six native first-frame latch regressions.
+All 73 grouped M0/M1 named proofs are present, every raw origin hash matches, and every
+check-run API entry names this source commit.
+
+Merge check `106071941895` passes the unchanged coverage gates at 91% statements, 91.98%
+lines, 85.86% branches and 91.5% functions, then all 428 guards with ten future skips.
+Merged artifact `10604293448` has digest
+`sha256:0c35905f0d8168c67f196335d1ae68fbe8e8f0f8633e9e35c97aef8785c8e89b`.
+The final exit record maps each required check and named proof to these remote results.
+
+Main mutation check `106068100420` and nightly mutation check `106067832796` both score
+74.78417266187051%, with 4,158 detected of 5,560 valid mutants and zero pending. Both reports'
+85 source contents match the implementation. These are incremental full-scope executions;
+the nightly log records a fresh 2,100-test baseline and 8,982 reused results, with two test
+files changed. Main artifact `10605256311` has report hash
+`4620c1e937d37863cb904130c65b57f7b9dffa628cf0d03fb0a5e75c51a3a303`.
+Nightly artifact `10605050663` has digest
+`sha256:0cbb4ea51a09230cab594da0dd81d5313b0d5c6da41a8dd799587475024b047e`
+and report hash `84ef180b3921e8e1421d78935b8ce57418b337a1d880b1baa225dadfa04f57dd`.
+
+The earlier fresh full-scope rehearsal
+[35495933501 / 106038899755](https://github.com/Mythikos/iridium/actions/runs/35495933501/job/106038899755)
+finishes successfully after 296 minutes and 37 seconds. Its log explicitly records that no
+incremental result file exists, then a fresh 2,086-test baseline. The final score is
+74.49640287769785%, with 4,142 detected of 5,560 valid mutants and zero pending. All 85 report
+sources match `7176d392232aa8f79f9f4cec47c4d9df9635085a`. Artifact `10604434657` has digest
+`sha256:89228000272e464d8ac59767a18623fa04c9131fd8b7cc3e7dcb2a6be38d5176`; the report hash is
+`97636317c81c3b5081abab3c03ebea9123759bec17d5a4b80239098c935f6c27`.
+This is completed historical evidence. It does not replace the current implementation's
+separately recorded mutation result, and it does not convert any earlier timeout into a pass.
+
+The current nightly's MySQL 8.4 full API check `106067832605` retains one administrator
+cursor-generation failure and 27 authentication errors. Its outsider profile completes with
+two content-type failures: HTTP 431 from oversized headers and HTTP 414 from the router's
+maximum parameter length. Both return `application/json` where the contract documents
+`application/problem+json`. Artifact `10604299681`, digest
+`sha256:02941ef4e88abce17ded544674fa228a461635fab9f0f00c15156307327610ae`, contains both profiles'
+logs, XML and authentication-network records; all six files are archived and hashed locally.
+The 414 observation joins the existing full-profile M2 follow-up under D12-20. Required M1
+non-admin light profiles pass separately on both supported engines. No failing profile is
+described as a pass; the administrator authentication errors do not establish authenticated
+full-profile coverage.
+
+The corresponding 9.7 full API check `106067832826` has the same one administrator cursor
+failure and 27 authentication errors, then its outsider profile reaches the 3,600,000 ms
+completion deadline without a terminal pass. Artifact `10604774311` has digest
+`sha256:3a169f38ea2eaf28e6f2c94f60eec4aaeaca6f68642798bee75e7e41f2b7b228`.
+The complete failed job log and available profile files are archived separately; neither the
+timeout nor the missing outsider terminal result is treated as passing coverage.
+
+The current campaign completes all fourteen due extended proofs: both 5,000-example property
+lanes pass 2,351 tests in 156 files, all eight chaos shards pass (67 / 171 / 12 / 695 tests
+per engine), the flake hunt passes 411 tests in each of three consecutive repetitions, and
+full Electron passes four tests on each operating system. The final crash shards retain the
+200-iteration kill budgets. The workflow itself remains failed because the separate full API
+and advisory findings above remain open; it is not described as green nightly health. The
+exit record retains all nine actual nightly runs, including the first scheduled execution,
+with their sources, triggers, check IDs and conclusions.
