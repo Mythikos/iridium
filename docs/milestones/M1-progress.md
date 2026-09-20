@@ -186,3 +186,16 @@ M0 closed first with its remote evidence and `v0.0.0` marker. The [M1 exit recor
 Both requested NoteSession findings are fixed and proven: an unanswered CLOSE has a Clock deadline, and grace retries use the growing retry delay even when server grace is zero. The exit record also names the explicit 75-second ownership-loss recovery amendment and the release packaging correction. No version bot opens pull requests; direct commits and pushes to main remain the owner's rule.
 
 Local macOS Electron remains outstanding because there is no local macOS environment. A fresh local `pnpm audit` remains outstanding because automatic approval review rejected registry egress without the required authorization. Passing remote macOS and remote registry-audit jobs are separate evidence and do not relabel either local limitation as completed. Nightly failures and pending runs remain stated in the exit record; their absence or incomplete status is never evidence of green health. The later M5/M6/M8 manual acceptance records and M8 restore drill remain owned by those milestones.
+
+### Post-tag image verification (2026-09-20)
+
+`v0.1.0` remains on exit record `f31a51fd2c3af6b3631a28fc45918245dfac34a1`, whose
+[CI 35514878482](https://github.com/Mythikos/iridium/actions/runs/35514878482) passes all twelve
+required checks. The first tagged release's two MySQL verifications, build, SBOMs and scans
+pass, but its classic Docker image store prevents the second architecture's runtime check.
+The failed [release 35516882462](https://github.com/Mythikos/iridium/actions/runs/35516882462)
+is preserved. Workflow repair `0f3d68f55cf629989e3906b9a218a99212784008` configures containerd;
+read-only [image verification 35518865586](https://github.com/Mythikos/iridium/actions/runs/35518865586)
+then executes and verifies both architectures at the original immutable digest. The tag and
+image are unchanged. [M1-exit.md](M1-exit.md) records both run IDs, platform/source identities,
+artifact hashes and the separate original and supplementary proof responsibilities.

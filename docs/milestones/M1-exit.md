@@ -299,3 +299,33 @@ product tag and already-published image digest. [remote-ci.md](remote-ci.md) rec
 job, successful prerequisite IDs, immutable artifact digest and repair. Supplementary runtime
 verification must be recorded separately; it cannot replace the original SBOMs/scans or erase
 the failed run. The local macOS Electron and fresh local audit items above remain outstanding.
+
+### Completed remote image verification
+
+Repair `0f3d68f55cf629989e3906b9a218a99212784008` is verified by read-only Actions run
+[35518865586](https://github.com/Mythikos/iridium/actions/runs/35518865586), check
+[106099350162](https://github.com/Mythikos/iridium/actions/runs/35518865586/job/106099350162): **PASS**.
+The log confirms Docker 29.8.1 with `io.containerd.snapshotter.v1` and explicit QEMU setup.
+Both platforms execute the original published image, report `0.1.0`, source
+`f31a51fd2c3af6b3631a28fc45918245dfac34a1`, Node 24.21.0 and schema head
+`0055_min_client_version`; the shipped `mysqldump` reports 9.7.2 on x86_64 and aarch64.
+Artifact `10607752207`, digest
+`sha256:21b084271901e2d78109bf541c04ec1c69d5b1eb54cd2378c53ad973349b7850`, preserves
+both runtime identities and the separate product-source/workflow-commit record.
+
+The verified image remains
+`ghcr.io/mythikos/iridium-server@sha256:e2fab1f49fc92594032a04025dee3d94afede5ed102f4f6429275d42a92f9e7e`.
+Its AMD64 manifest is `sha256:4a9fbb2c0a7110e4562f946a3c325805329bfeebc1d4e0009608ff58052b57be`;
+its ARM64 manifest is `sha256:f9418cc150d3fed37f83d74b43442399666cec3ce72c716d2453de75a98eabb0`.
+Registry inspection verifies an attached SBOM and linked provenance on each platform, with
+both provenance source revisions equal to the product tag. Each attached SPDX SBOM records
+364 packages. The original CycloneDX reports record 3,814 AMD64 and 3,813 ARM64 components;
+both original SARIF reports contain zero findings under the unchanged fixed-high/critical gate.
+Those scan results are not a claim that no vulnerability of any kind exists.
+
+The original [release 35516882462](https://github.com/Mythikos/iridium/actions/runs/35516882462)
+remains failed and supplies its successful tagged verification/build/scan prerequisites.
+This completed supplementary run supplies the missing two-platform runtime proof. Neither
+the product tag nor image digest was moved or rebuilt. The raw logs, artifact metadata,
+downloaded identities, registry records and verified file hashes are retained under
+`reports/remote-ci/35516882462-*` and `reports/remote-ci/35518865586-*`.
