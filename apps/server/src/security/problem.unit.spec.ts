@@ -1,5 +1,6 @@
 /** The HTTP failure boundary accepts unknown throws and emits only the closed problem vocabulary. */
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
+import { connect } from 'node:net';
 
 import { ERROR_CODES, ERROR_CODE_STATUS, NoteId, newId, ProblemDetails } from '@iridium/contracts';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -54,6 +55,22 @@ async function requestMethod(
     );
     request.on('error', reject);
     request.end();
+  });
+}
+
+/**
+ * Sends a hand-written request head and returns the raw answer. `httpRequest` cannot express a head
+ * the parser must refuse, so the 431 seam is only reachable through a socket.
+ */
+async function rawRequest(origin: string, head: string): Promise<string> {
+  const { port, hostname } = new URL(origin);
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: hostname, port: Number(port) }, () => socket.write(head));
+    const chunks: string[] = [];
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => chunks.push(chunk));
+    socket.on('error', reject);
+    socket.on('close', () => resolve(chunks.join('')));
   });
 }
 
@@ -462,5 +479,32 @@ describe('security.problem.unit [area:security]', () => {
         expect(ProblemDetails.parse(response.json())).toMatchObject({ code, status });
       },
     );
+
+    it('answers a refused request head with a problem document rather than plain JSON', async () => {
+      // Past Node's 16 KB default maxHeaderSize, so the parser refuses the head outright.
+      const oversized = 'x'.repeat(24_000);
+      const answer = await rawRequest(
+        origin,
+        `GET /api/v1/__probe__/forbidden HTTP/1.1\r\nHost: ${NO_DATABASE_HOST}\r\nX-Pad: ${oversized}\r\n\r\n`,
+      );
+      expect(answer).toContain('431 Request Header Fields Too Large');
+      expect(answer).toContain('application/problem+json');
+      const body: unknown = JSON.parse(answer.slice(answer.indexOf('{')));
+      expect(ProblemDetails.parse(body)).toMatchObject({
+        code: 'request_headers_too_large',
+        status: 431,
+      });
+    });
+
+    it('answers a URL the router refuses with a problem document rather than plain JSON', async () => {
+      // Past Fastify's default maxParamLength, so the router refuses before any route matches.
+      const answer = await rawRequest(
+        origin,
+        `GET /api/v1/__probe__/attachment/${'p'.repeat(200)} HTTP/1.1\r\nHost: ${NO_DATABASE_HOST}\r\nConnection: close\r\n\r\n`,
+      );
+      expect(answer).toContain('application/problem+json');
+      const body: unknown = JSON.parse(answer.slice(answer.indexOf('{')));
+      expect(ProblemDetails.parse(body).status).toBeGreaterThanOrEqual(400);
+    });
   });
 });

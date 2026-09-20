@@ -45,6 +45,7 @@ import { applyDocsRoutePolicy } from './rest/docs.ts';
 import { applyRequestOwnership } from './rest/ownership.ts';
 import { applyRestPlugin } from './rest/plugin.ts';
 import { applyClientVersionGate } from './rest/version.ts';
+import { applyClientError, applyFrameworkError } from './security/client-errors.ts';
 import { applyCsrfGuard } from './security/csrf.ts';
 import { applySecurityPlugin } from './security/plugin.ts';
 
@@ -174,6 +175,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     // the same `config` as its GET. Fastify does that already; keeping the option explicit records
     // that the assertion depends on it.
     exposeHeadRoutes: true,
+    // The two answers that never reach a route, and so never reach the error boundary: a refused
+    // URL (414) and a head the parser would not read (431/408/400). Without these seams Fastify
+    // answers both in `application/json`, which 09-api-reference.md section 1.5 does not allow.
+    frameworkErrors: applyFrameworkError,
+    clientErrorHandler: applyClientError,
   });
 
   app.decorate('iridiumConfig', config);

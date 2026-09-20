@@ -159,6 +159,10 @@ export const ProblemDetails = z.strictObject({
 | `content_invalid` | 409 | `POST …/revisions/:revisionId/restore`, `?fresh=true` on a flagged note | Note flagged by the compaction scan (skeleton A22). |
 | `rate_limited` | 429 | any rate-limited route | `retry-after` header + `retryAfterMs`. |
 | `payload_too_large` | 413 | body/multipart limits | |
+| `malformed_request` | 400 | the HTTP parser, before routing | A head the parser refused, or a URL the router could not read. Answered by `security/client-errors.ts`, not by a route: Fastify would otherwise write `application/json`. |
+| `request_timeout` | 408 | the HTTP parser, before routing | The client did not finish sending its head. Same seam as `malformed_request`. |
+| `uri_too_long` | 414 | the router, before routing | The URL exceeds `maxParamLength`. Reached through Fastify's `frameworkErrors` seam so the answer is a problem document. |
+| `request_headers_too_large` | 431 | the HTTP parser, before routing | `HPE_HEADER_OVERFLOW`. Reached through Fastify's `clientErrorHandler`, which owns a raw socket and no `Reply`, so the document is written by hand. |
 | `method_not_allowed` | 405 | registered HTTP paths | The path exists but has no handler for this method. `Allow` lists its registered methods. Refused before body parsing and route authentication; unknown paths remain `404 not_found`. |
 | `unsupported_media` | 415 | attachment upload, import upload, release upload | MIME not allow-listed or body not multipart. |
 | `validation_failed` | 422 | any schema failure | `errors[]` populated from zod issues (`z.prettifyError` text in `detail`). |
