@@ -925,3 +925,181 @@ Main CI `35497678473` completes successfully on `46f2e8b`, including MySQL 9.7 c
 `106043780576` and merge check `106047789359`. All twelve required jobs pass, including both
 engines' restoration of the promoted fixture. This complete green run is preserved before
 the subsequent test-only synchronization repair is pushed to main.
+
+The fixture commit's aggregate contains 5,786 passes and 84 skips, followed by 428 passing
+guards and ten future skips. Coverage is 91.02% statements, 91.99% lines, 85.88% branches and
+91.53% functions; every unchanged threshold passes. Merged artifact `10601068431` has digest
+`sha256:cc01616bdbd6bea297a035ec26e03d70896cfc38478c15ff51f6006f4f8fd6b7`.
+All six raw lane hashes match their origin records, with zero unhandled errors and all 73
+grouped named exit proofs passed. Both unit platforms pass the six requested NoteSession
+regressions. Each engine independently records all 131 explicit API operation/status pairs
+(136 observations including five defaults, across 38 report files).
+
+## SQL observation repair: `abb968a`
+
+Commit `abb968a1c506b50743f5cf40d30bcc35b30857af` contains the five-line participant-message
+wait and its evidence. [Main CI 35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783)
+and [nightly 35499345923](https://github.com/Mythikos/iridium/actions/runs/35499345923) run
+against that commit. Static check `106048104100` passes; the complete main result and the
+repaired flake run remain pending at this checkpoint.
+
+An explicit comparison with `7176d39` confirms unchanged production and testkit sources,
+unit/property/chaos suites, dependency and build/test configuration, and all nightly job
+definitions before the separate Node 26 job. Only documentation, the promoted fixture,
+CI comments, the independent Node 26 launcher and this integration observation change.
+The still-running D10-6 campaigns therefore retain their named, identical property/chaos
+inputs. This comparison does not label any unfinished job as passing.
+
+At 08:31 UTC, superseded manual rehearsals `35488086906` (`b663d81`) and `35492818517`
+(`bb8a964`) are cancelled after confirming that only their additional fresh mutation jobs
+remain (`106018242092` / `106030678996`). These incomplete campaigns supply no terminal
+score. Their existing failed and passing jobs, logs and fixture artifacts remain intact.
+The cancellation releases runner capacity without cancelling any nightly history or the
+current implementation's full-scope mutation evidence; the `7176d39` fresh rehearsal remains
+a separate ongoing execution.
+The retained final progress observations are 9,940/10,086 tested mutants for `b663d81`
+(98%) and 6,648/10,086 for `bb8a964` (69%). Neither partial observation is a terminal score;
+their mutation-runner assertion failures describe mutant executions, not a failed baseline.
+
+The current commit's full-scope mutation check `106048191187` passes at **74.71223021582733%**,
+with zero pending mutants and all 85 reported source contents matching `abb968a`. It instruments
+87 files/10,607 mutants, passes a fresh 2,086-test baseline, and reuses 10,057 results from
+the `46f2e8b` cache. Counts are 3,849 killed, 305 timeouts, 1,242 survivors, 164 uncovered,
+4,525 compile errors, 521 ignored and one runtime error: 4,154 of 5,560 valid mutants detected.
+Artifact `10602010555` has digest
+`sha256:4ea030fd108911d3f9cb33647076ba4cbadf588e8ee8dc91ed396fb48c4b30f5`;
+the verified report hash is `a4b06a052a87a413d3c05cf9b395d3f1e5003176d2913a9b2c943182cdd234bf`.
+Main's `mutation-scoped` check `106048380551` is a successful no-op and supplies no score.
+
+Corrected Node 26 check `106048191301` repeats the same six lifecycle stderr failures, with
+2,729 passes in 227 files (353.06 seconds). Artifact `10601014023` again records Node 26.9.0
+at `/opt/hostedtoolcache/node/26.9.0/x64/bin/node`; the six expected exit codes/signals match,
+and each mismatch is the existing WebStorage ExperimentalWarning. The A4/D10-19 adoption
+disposition is unchanged. Innovation check `106048191277` also repeats its advisory failure:
+93 failed, 27 passed, 291 skipped, artifact `10602065205`.
+
+The fifth nightly's full API jobs `106043686561` / `106043686558` finish red on both engines,
+with artifacts `10602560909` / `10602331488`. Their administrator profiles reproduce the
+signed-cursor and invalidated-fixture authentication findings; each subsequent outsider profile
+reaches the existing 3,600,000 ms completion deadline. No complete outsider coverage is claimed.
+That runtime-bound follow-up joins the full-profile harness work due at M2 under D12-20;
+neither the deadline nor the M1 light-profile gate is weakened.
+
+Current main MySQL 9.7 integration check `106048380555` passes all 481 cases in 84 files
+(753.85 seconds), with report artifact `10601901553`. All three current main Electron checks
+and both unit operating systems pass; the full source run still awaits its remaining jobs.
+
+The repaired flake check `106048203440` passes all three full 411-test, 74-file integration
+runs on `abb968a` (308.85 / 335.07 / 327.27 seconds), with artifact `10602705419`. This is the
+remote verification of the participant-message boundary; failed check `106043702789` remains
+unchanged. The current nightly's first MySQL 8.4 chaos shard `106048191282` passes 67 cases
+(1,690.05 seconds), and both third shards `106048191328` / `106048191350` pass twelve cases
+(177.93 / 182.37 seconds).
+
+The repaired production campaign's MySQL 8.4 property check `106038744887` passes 2,337 tests
+in 156 files at the extended budgets (6,177.02 seconds), with artifact `10602595413`. Its
+other-engine property and remaining chaos results remain separately pending at this checkpoint.
+
+Current main MySQL 8.4 integration check `106048380609` passes the same 481 cases in 84 files
+(785.34 seconds), with report artifact `10602845269`. The current nightly's first MySQL 9.7
+chaos shard `106048191392` passes 67 cases (1,553.39 seconds), completing both first shards.
+The repaired production campaign's second MySQL 8.4 chaos shard `106038745066` passes all
+171 cases in four files (6,983.96 seconds), with artifact `10602377391`.
+
+The corresponding second MySQL 9.7 nightly shard `106038745089` also passes 171 cases in
+four files (7,125.92 seconds), with artifact `10602037888`. Current main's MySQL 8.4 chaos
+check `106048380598` passes 88 cases with 42 skips (1,750.04 seconds), followed by the
+successful MySQL 9.7 chaos check `106048380566`. The final merge check is `106053852281`.
+
+[Main CI 35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783) completes
+green on `abb968a`, with all twelve required check-run IDs verified through GitHub's API.
+Its merged 5,786 passing tests and 84 skips are followed by 428 passing guards and ten future
+skips. Coverage is 91.03% statements, 92.01% lines, 85.86% branches and 91.53% functions,
+with every unchanged global and per-file gate passing. Artifact `10602491467` has digest
+`sha256:da041f3181f1f0965c0228868cc85eef9aeebf3b2cdacb001d465591d77fbf8f`.
+All six raw origin hashes match, all 73 grouped named exit proofs pass, and the six requested
+NoteSession regressions pass on both unit operating systems. Each database artifact independently
+contains all 131 explicit API response pairs, plus five defaults, across 38 report files.
+
+Both extended property jobs now pass on the repaired production inputs: the MySQL 9.7 check
+`106038745152` also passes 2,337 tests in 156 files (7,362.23 seconds), with artifact
+`10602811078`. Together with the prior 8.4 result, this completes both extended property
+proofs. Only the fourth crash shards remain unfinished in the collected nightly gate set.
+
+The current full MySQL 8.4 API check `106048191335` repeats the D12-20 findings in artifact
+`10602451643`: the administrator profile fails signed-cursor generation and fixture
+authentication; the outsider profile completes 26,756 generated cases with the known
+transport-level HTTP 431 returning `application/json` instead of `application/problem+json`.
+That completed profile is a failure, distinct from the earlier outsider timeouts.
+
+## First scheduled nightly
+
+The history refresh includes [scheduled run 35498879078](https://github.com/Mythikos/iridium/actions/runs/35498879078),
+started at `2026-09-20T08:11:28Z` on `46f2e8b`, alongside the six manual rehearsals.
+It is an actual scheduled execution; the exit record must include it rather than infer an
+absence of scheduled history. Its still-running jobs do not establish green health.
+
+Scheduled mutation check `106046908330`, all three full Electron jobs and flake check
+`106046924107` pass. The flake job completes three 411-test, 74-file repetitions in
+378.24 / 379.91 / 360.64 seconds, artifact `10600759619`. This older-source success does
+not replace the final implementation's verification of the repaired SQL observation boundary.
+
+Both full API jobs fail (`106046908176` / `106046908363`), retaining artifacts
+`10602646174` / `10603020664`. Their administrator profiles repeat signed-cursor validation
+and invalidated fixture authentication. The 8.4 outsider profile completes 23,434 generated
+cases with one unique failure and 6,326 skips, reproducing the HTTP 431 content-type mismatch.
+The 9.7 outsider profile instead reaches the existing one-hour completion deadline.
+These remain the separately scoped D12-20 follow-ups, not passing API evidence.
+
+Corrected Node 26 check `106046908339` also repeats the six lifecycle stderr failures,
+with 2,729 passes (442.77 seconds), artifact `10601479551`. The recorded comparisons show
+the same WebStorage ExperimentalWarning; the advisory adoption disposition is unchanged.
+Innovation check `106046908306` fails separately. The first and third chaos shards pass
+on both engines; the extended properties and second/fourth shards remain pending at this
+checkpoint. The watcher now includes the scheduled run as well as every manual rehearsal.
+
+The final-source MySQL 9.7 full API check `106048191306` also finishes red, with artifact
+`10602846736`. Its administrator profile generates 1,979 cases and retains the existing
+signed-cursor/authentication findings; the outsider profile reaches the one-hour deadline.
+Together with check `106048191335`, both final-source full API outcomes are now explicit.
+
+The repaired production campaign's full MySQL 9.7 fourth crash shard `106038745098`
+passes all 695 cases in three files (9,510.49 seconds). This includes all 680 durable-ack
+cases at the unchanged nightly budgets. Its complete job log is retained as
+`35495934601-chaos-4-97.log`; no artifact ID is inferred when the upload has no report files.
+The corresponding full 8.4 fourth shard remains the last pending M1 proof at this checkpoint.
+
+The fifth manual rehearsal also completes both second crash shards successfully:
+`106043686629` / `106043686609`, each 171 cases in four files, 7,133.18 / 7,119.79 seconds,
+artifacts `10603126104` / `10602877640`. Its MySQL 9.7 property check `106043686567`
+passes 2,337 tests in 156 files (7,165.69 seconds), artifact `10603160976`.
+
+Final-source extended MySQL 9.7 property check `106048191329` passes the same 2,337 tests
+in 156 files (5,273.83 seconds), with artifact `10603181486`. This is an additional result
+on `abb968a`; earlier successful campaigns retain their actual source identities.
+
+The full MySQL 8.4 fourth shard `106038745101` also passes all 695 cases in three files
+(10,316.67 seconds), including the 680-case durable-ack file. Both 200-iteration kill methods
+pass on both engines. As on 9.7, the successful log is the proof and the upload has no report
+files. All eight full chaos shards and both extended properties on the repaired production
+inputs are now green. Run `35495934601` itself finishes with `failure` because the separately
+scoped full API and advisory jobs remain red; its whole-run result is not relabeled.
+
+## M1 exit landing
+
+[M1-exit.md](M1-exit.md) records implementation `abb968a1c506b50743f5cf40d30bcc35b30857af`,
+main CI `35499314783`, all twelve required check-run IDs, both integration engines, merged
+coverage, the full-scope mutation score, the promoted fixture and fourteen completed due
+nightly checks. The captured workflow history includes six manual rehearsals and one scheduled
+run. Both requested NoteSession findings are fixed; the separate local macOS/audit limitations
+and full-API/advisory follow-ups remain stated explicitly.
+
+This following record commit advances `CURRENT` to `M1`, after M0's marker and formal closure.
+Its own required main checks precede the hand-cut `v0.1.0` tag on that record commit. Tagged
+release verification and the due server-image publication remain distinct remote executions;
+the local release preflight is not described as their result.
+
+Local exit checks pass all 428 guards with ten future skips, all 468 test-name references
+and repository formatting. The initial guard run caught the generated acceptance map's
+`currentMilestone: M0`; its generator changes only that stamp to `M1`, and the final guard
+run passes. Both logs remain as `m1-exit-guards.log` and `m1-exit-final-guards.log`.
