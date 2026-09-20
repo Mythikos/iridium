@@ -8,7 +8,7 @@
  * the loader and the compactor are the product's. Only the store and the clock are doubles.
  */
 import { decodeServerNoteMessage, LIMITS, noteDocName, vaultDocName } from '@iridium/contracts';
-import { getContent, projectMarkdown } from '@iridium/crdt';
+import { createNoteDoc, getContent, projectMarkdown } from '@iridium/crdt';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CollabOwnershipLost } from '../owner-lease.ts';
@@ -22,6 +22,7 @@ import {
   statelessPayloads,
   type FakeSocket,
 } from '../testing/fake-hocuspocus.ts';
+import { step2Frame, updateFrame } from '../testing/frames.ts';
 import {
   afterLoadPayload,
   afterUnloadPayload,
@@ -31,6 +32,7 @@ import {
   hookHarness,
   hookOf,
   loadPayload,
+  messagePayload,
   statelessPayload,
   storePayload,
 } from '../testing/hook-deps.ts';
@@ -95,6 +97,49 @@ function type(s: ReturnType<typeof scene>, connection: unknown, text: string): v
 
 describe('collab.persistence-hook.unit [hp:HP-2]', () => {
   describe('loading', () => {
+    it.each(
+      (['content-invalid', 'oversize', 'writable'] as const).flatMap((kind) => [
+        { kind, frameName: 'SyncStep2', frame: step2Frame },
+        { kind, frameName: 'Update', frame: updateFrame },
+      ]),
+    )(
+      'enforces $kind before a queued $frameName while connected hooks are still pending',
+      async ({ kind, frame }) => {
+        const s = scene();
+        const stored = s.harness.store.note(s.noteId);
+        if (stored === undefined) throw new Error('The fixture must be seeded.');
+        stored.contentInvalid = kind === 'content-invalid';
+        stored.oversize = kind === 'oversize';
+        await load(s);
+        const { connection, socket } = fakeConnection(s.document, s.context);
+        const peer = createNoteDoc();
+        let update: Uint8Array = new Uint8Array();
+        peer.on('update', (bytes: Uint8Array) => {
+          update = bytes;
+        });
+        getContent(peer).insert(0, 'queued-edit');
+        connection.beforeHandleMessage(async (_connection, bytes) => {
+          await hookOf(s.extension, 'beforeHandleMessage')(messagePayload(connection, bytes));
+        });
+        try {
+          connection.handleMessage(frame(s.document.name, update));
+          await connection.waitForPendingMessages();
+          expect(connection.readOnly).toBe(kind !== 'writable');
+          expect(projectMarkdown(s.document).includes('queued-edit')).toBe(kind === 'writable');
+          await s.harness.persistence.writerOfDocument(s.document.name)?.drain();
+          expect(s.harness.store.note(s.noteId)?.headSeq).toBe(kind === 'writable' ? 2 : 1);
+          const notices = messages(socket).length;
+          await hookOf(s.extension, 'connected')(connectedPayloadFor(connection));
+          expect(messages(socket)).toHaveLength(notices);
+        } finally {
+          connection.close();
+          s.harness.persistence.detach(s.document.name);
+          s.document.destroy();
+          peer.destroy();
+        }
+      },
+    );
+
     it('loads the committed state into the document and attaches the writer with the vault index', async () => {
       const s = scene('hello');
       await load(s);

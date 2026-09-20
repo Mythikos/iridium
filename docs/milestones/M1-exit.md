@@ -2,8 +2,10 @@
 
 **Formal M1 exit is pending.** Candidate record commit `2d62b99d17bca30e8d2d842a1a88c73b15ba0284`
 failed its own MySQL 9.7 integration check in [CI 35504070807](https://github.com/Mythikos/iridium/actions/runs/35504070807).
-No `v0.1.0` tag was created. `CURRENT` returns to `M0` while the OPS-12 timeout-sweep correction
-is verified; M0's formal closure and `v0.0.0` marker remain complete.
+No `v0.1.0` tag was created. `CURRENT` remains `M0`. Both required integration engines pass
+the OPS-12 correction in run `35505687511`; that run then exposes an Electron download failure,
+and nightly `35505721446` exposes a first-frame persistence-latch race. Their corrections need
+fresh remote verification. M0's formal closure and `v0.0.0` marker remain complete.
 
 The following evidence belongs to implementation `abb968a1c506b50743f5cf40d30bcc35b30857af`
 and its named predecessor campaigns. It is retained with its original inputs and capture time;

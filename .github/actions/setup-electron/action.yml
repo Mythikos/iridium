@@ -1,0 +1,22 @@
+name: Install the pinned Electron binary
+description: Download and verify Electron before collecting desktop tests or packaging the shell.
+
+runs:
+  using: composite
+  steps:
+    # Electron 44 downloads lazily on its first import. Install explicitly so a transient
+    # release-download failure is handled during setup, without retrying a test failure.
+    - name: Install Electron
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if pnpm --filter @iridium/desktop exec install-electron; then
+            exit 0
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            echo '::error::Electron binary installation failed after three attempts.'
+            exit 1
+          fi
+          echo "::warning::Electron binary installation failed on attempt $attempt; retrying setup."
+          sleep "$((attempt * 5))"
+        done

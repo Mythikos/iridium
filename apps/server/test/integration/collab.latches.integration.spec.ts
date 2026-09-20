@@ -11,6 +11,8 @@ describe('collab.latches.integration [hp:HP-3] [hp:HP-5]', () => {
     'preserves the %s latch across role changes, epoch refresh, and token revalidation',
     async (kind) => {
       const harness = await startCollab();
+      const connectionSetup = Promise.withResolvers<void>();
+      let lateConnectionObserved = false;
       try {
         const cast = await harness.server.seed.kernel();
         const client = await harness.open(cast.editorA, cast.note.id, { flushDelayMs: false });
@@ -42,6 +44,15 @@ describe('collab.latches.integration [hp:HP-3] [hp:HP-5]', () => {
         ).toBe(200);
         await expect.poll(() => client.session.input.role).toBe('viewer');
         const beforeRoleUpgrade = [...document.getConnections()];
+        // Native queued frames run before connected finishes. Hold that real hook chain so
+        // the first-frame latch proof cannot depend on participant identity SQL being fast.
+        app.collab.server.hocuspocus.configuration.extensions.unshift({
+          extensionName: 'HoldConnectionSetup',
+          async connected() {
+            lateConnectionObserved = true;
+            await connectionSetup.promise;
+          },
+        });
         expect(
           (
             await cast.admin.client.put(memberPath, {
@@ -55,7 +66,9 @@ describe('collab.latches.integration [hp:HP-3] [hp:HP-5]', () => {
         await expect
           .poll(() => client.provider?.isAuthenticated === true && client.provider.synced)
           .toBe(true);
+        expect(lateConnectionObserved).toBe(true);
         expect(document.getConnections().every((connection) => connection.readOnly)).toBe(true);
+        connectionSetup.resolve();
         expect(
           client.session.input[kind === 'content-invalid' ? 'contentInvalid' : 'oversize'],
         ).toBe(true);
@@ -94,6 +107,7 @@ describe('collab.latches.integration [hp:HP-3] [hp:HP-5]', () => {
           client.stateless.some((message) => message.t === 'role' && message.recovered === true),
         ).toBe(false);
       } finally {
+        connectionSetup.resolve();
         await harness.close();
       }
     },

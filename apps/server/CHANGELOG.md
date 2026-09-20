@@ -12,6 +12,8 @@ The runtime image applies Debian security updates, removes unused package-manage
 
   Reject unknown initial vault members with a transactional 404 and accept both single and repeated user-status query filters.
 
+  Enforce a reattached note's persistence latches before its first queued sync frame, including while participant identity lookup is still pending. Invalid and oversized notes stay read-only across role changes and reauthentication.
+
   Build the server image for AMD64 and ARM64 with the same signed, hash-pinned MySQL 9.7.2 client tools. Embed the source commit in the image and CLI, with release verification against the tagged commit.
 
   [migration] Apply forward migrations 0049–0055 with `iridium migrate up`. The administrator mutex serializes user creation and last-administrator checks, and durable session-revocation commands execute in the serving owner, and an ownership-generation fence prevents a replaced owner from committing stale collaboration transactions; migration 0054 records actual per-table grant application or skip provenance, and 0055 seeds the client-version floor without lowering an existing operator value. Existing audit and note history is retained.

@@ -360,8 +360,8 @@ export class NoteWriter implements Schedulable {
   }
 
   /**
-   * `connected`: a connection created after a latch was set is read-only from its first frame and
-   * is told why, because `setAllReadOnly` reached only the connections that existed at the time.
+   * The first incoming frame or `connected`, whichever runs first, initializes a later connection's
+   * latches and notices; `setAllReadOnly` reached only connections that existed at latch time.
    */
   applyLatches(connection: WriterConnection): void {
     const userId = connection.context.userId;

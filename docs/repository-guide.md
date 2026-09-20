@@ -253,7 +253,7 @@ The server reads its environment once, in `apps/server/src/config/env.ts` (`EnvS
 ## Milestone Status
 
 - `CURRENT` names the last formally exited milestone and is **M0**. [M0-exit.md](milestones/M0-exit.md) records its complete remote matrix and `v0.0.0` marker.
-- M1 is implemented and versioned at `0.1.0`. The [exit candidate](milestones/M1-exit.md) remains provisional: commit `2d62b99` failed its own MySQL 9.7 audit contention proof. The OPS-12 timeout-sweep correction is being verified before a replacement exit record and `v0.1.0` tag.
+- M1 is implemented and versioned at `0.1.0`. The [exit candidate](milestones/M1-exit.md) remains provisional: commit `2d62b99` failed its own MySQL 9.7 audit contention proof. Both engines pass the OPS-12 correction, while subsequent Electron setup and first-frame latch repairs need remote verification before a replacement exit record and `v0.1.0` tag.
 - Both requested NoteSession findings are fixed. Local macOS Electron and a fresh local registry audit remain outstanding as directed. [remote-ci.md](milestones/remote-ci.md) preserves actual scheduled/manual history and failed runs.
 - Commit and push directly to main; no branches or pull requests. The M1 changeset is consumed, and no version-PR job exists.
 - M2 remains the next milestone after M1's formal exit; no M2 work is started here.

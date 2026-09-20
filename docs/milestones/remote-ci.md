@@ -1146,3 +1146,53 @@ ten future skips, all 468 name references resolve, and formatting passes. The fa
 job snapshot is retained before the corrective push; standard main-branch concurrency may
 cancel its still-running chaos jobs when the new CI starts. That supersession does not change
 the completed 9.7 failure or substitute for the correction's required remote verification.
+
+## Explicit Electron setup and first-frame latch repair
+
+The SQL correction's [main CI 35505687511](https://github.com/Mythikos/iridium/actions/runs/35505687511)
+passes both required integration engines (checks `106065202399` / `106065202416`). Windows
+Electron check `106065202428` fails before collecting a test: the pinned Electron package
+tries its lazy binary download during fixture import and reports `TypeError: fetch failed`.
+Artifact `10603154765` and `35505687511-electron-windows.log` preserve that failure.
+
+The shared setup-electron action now invokes the pinned package's own install-electron binary
+before desktop tests or packaging in CI, nightly and release. The installer retains its embedded
+checksums. Three bounded setup attempts handle transient download failures, with five- and
+ten-second delays; exhaustion fails the job. Test commands have no new retry. The actual Windows
+installer succeeds locally, and shell fault probes verify first/second/third-attempt success and
+failure after exactly three attempts. All 428 workflow/repository guards pass with ten future skips.
+The pinned [Electron installation instructions](https://github.com/electron/electron/blob/v44.3.0/docs/tutorial/installation.md)
+document this explicit binary-install command.
+
+Nightly [35505721446](https://github.com/Mythikos/iridium/actions/runs/35505721446) exposes a
+separate first-frame latch race in flake check `106065102033`: 410 passes and one failure
+in the first 411-case repetition, with artifact `10604255106`. A reattached oversize note
+has a writable native connection before the connected hook's identity SQL completes. Its
+`35505721446-flake.log` remains unchanged; the second and third repetitions did not run.
+
+A17 now applies initial writer latches before the first native incoming frame, with connected
+covering idle clients. Both paths share one initialization so late connected completion does not
+duplicate notices. The native-frame regression fails both content-invalid and oversize against
+the former implementation; its writable control passes after correcting a stale in-memory-store
+reference in the test. The real MySQL 8.4 reproduction holds the actual connected chain and
+fails the oversize client-latch assertion. Those negative logs are retained as
+`latch-before-unit-final.log` and `latch-before-84.log`. No assertion is replaced with a delay.
+
+Final local validation passes all 2,338 unit tests in 153 files, including six first-frame
+SyncStep2/Update cases and both hook error-containment matrices. The controlled latch and
+steady-state epoch suites pass all five cases on each engine (30.15 / 29.30 seconds), retaining
+zero app SQL in steady state and exactly two reads at one epoch mismatch. Types, lint, the
+server bundle, 428 guards, 468 documentation references and formatting pass. Logs use the
+`latch-final-*` and `latch-after-{84,97}` prefixes.
+
+The preceding nightly mutation check `106065083633` passes 74.71223021582733% with 4,154
+detected of 5,560 valid mutants, zero pending and 85 report sources matching `9f269b9`.
+Artifact `10603384635` holds report SHA-256
+`78fea0f0f23eb16b827a917a6aa6211b3411bc07e4782380326e52835a90c7cd`.
+The actual Node 26 check `106065083771` fails the same six lifecycle stderr assertions with
+2,737 other passes; artifact `10603619399` preserves its advisory result.
+
+The failed main-run snapshot is retained before the next corrective push. Normal main
+concurrency may cancel its remaining chaos jobs, while the completed Windows failure remains
+visible. The new production latch boundary requires fresh remote evidence; neither that
+supersession nor the prior green mutation campaign certifies the repaired implementation.

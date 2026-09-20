@@ -98,6 +98,7 @@ export function createPersistenceExtension(
 ): Extension<CollabHookContext> {
   const loaded = new Map<string, LoadedState>();
   const flushWindows = new WeakMap<Connection<CollabHookContext>, RateWindow>();
+  const initializedConnections = new WeakSet<Connection<CollabHookContext>>();
   const hookDeps: SafeHookDeps = {
     logger: deps.logger,
     hookErrors: () => deps.metrics()?.collabHookErrorsTotal ?? null,
@@ -106,6 +107,7 @@ export function createPersistenceExtension(
   const beforeHandleMessage = async (
     data: beforeHandleMessagePayload<CollabHookContext>,
   ): Promise<void> => {
+    applyInitialLatches(data.connection);
     if (!data.connection.readOnly) return;
     const header = peekFrame(data.update);
     if (
@@ -190,12 +192,19 @@ export function createPersistenceExtension(
     if (!scan.ok) writer.lockContentInvalid(scan.reason);
   };
 
-  /** A connection created after the latches were set is read-only from its first frame. */
-  const connected = async (data: connectedPayload<CollabHookContext>): Promise<void> => {
-    if (!isNote(data.documentName)) return;
-    const writer = deps.persistence.writerOfDocument(data.documentName);
+  // Hocuspocus drains queued frames before connected, whose auth hook awaits identity SQL.
+  // Initialize at whichever boundary runs first, before native sync can apply an update.
+  const applyInitialLatches = (connection: Connection<CollabHookContext>): void => {
+    if (initializedConnections.has(connection)) return;
+    const writer = deps.persistence.writerOfDocument(connection.document.name);
     if (writer === undefined) return;
-    writer.applyLatches(data.connection);
+    writer.applyLatches(connection);
+    initializedConnections.add(connection);
+  };
+
+  /** Also notify a connection that has not sent its first frame. */
+  const connected = async (data: connectedPayload<CollabHookContext>): Promise<void> => {
+    applyInitialLatches(data.connection);
   };
 
   const answerBaseline = async (data: onStatelessPayload): Promise<void> => {
