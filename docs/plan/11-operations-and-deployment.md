@@ -456,7 +456,7 @@ One multi-stage Dockerfile produces the only production image, `ghcr.io/<org>/ir
 
 `tini` is the PID 1 so SIGTERM from `docker stop` reaches Node exactly once and zombie worker processes are reaped; Node's own signal handling then runs the drain sequence.
 
-Multi-architecture: `linux/amd64` and `linux/arm64` are built by `docker/build-push-action@v7.3.0` with `provenance: mode=max` and `sbom: true`; syft produces a CycloneDX SBOM attached to the release and grype scans it (both tools pinned by digest at M0; a `critical` or `high` finding with a fix available fails `release.yml`).
+Multi-architecture: `linux/amd64` and `linux/arm64` are built by `docker/build-push-action@v7.3.0` with `provenance: mode=max` and `sbom: true`; syft produces a CycloneDX SBOM attached to the release and grype scans it (both tools pinned by digest at M0; a `critical` or `high` finding with a fix available fails `release.yml`). **OPS-04 amendment (2026-09-20):** the workflow scans both platforms explicitly at the same pushed index digest, retaining separate CycloneDX and vulnerability reports; a runner-default scan of only its native platform is insufficient. Image hygiene executes the version/commit and shipped-client checks on both architectures. Report upload also preserves partial evidence on a failed release.
 
 ### Image hygiene checks that run in CI
 

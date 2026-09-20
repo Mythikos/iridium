@@ -28,6 +28,8 @@
  * identifies, and `until-disarmed` fires until `DELETE /__test__/faults`. `arg` is milliseconds for the
  * two `:<ms>` points and is never a count.
  */
+import { NoteId } from '@iridium/contracts';
+
 import type { Clock } from './clock.ts';
 
 /**
@@ -169,6 +171,33 @@ export interface ArmedFault {
   readonly arg: number | undefined;
   /** Remaining firings for a `counted` point; `undefined` means "until disarmed". */
   readonly remaining: number | undefined;
+  /** Optional runtime selector for the two post-acknowledgement wire faults. */
+  readonly ack?: FaultAckTarget;
+}
+
+/** Match an actual wire acknowledgement newer than the selected note's committed baseline. */
+export interface FaultAckTarget {
+  readonly noteId: string;
+  readonly afterSeq: number;
+}
+
+/** The outbound frame's real identity, supplied only by the collaboration transport. */
+export interface FaultAcknowledgement {
+  readonly noteId: string;
+  readonly seq: number;
+}
+
+function isAckTarget(value: unknown): value is FaultAckTarget {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'noteId' in value &&
+    NoteId.safeParse(value.noteId).success &&
+    'afterSeq' in value &&
+    typeof value.afterSeq === 'number' &&
+    Number.isSafeInteger(value.afterSeq) &&
+    value.afterSeq >= 0
+  );
 }
 
 /** What a caller asks for when arming. */
@@ -177,6 +206,8 @@ export interface ArmFaultRequest {
   readonly arg?: number | undefined;
   /** `0` disarms — which is what the testkit's `ArmedFault.disarm()` sends. */
   readonly count?: number | undefined;
+  /** Validated centrally, including requests from the test-only HTTP control route. */
+  readonly ack?: unknown;
 }
 
 /** Why an arm request was refused. Refusals are the caller's bug, so each names the reason. */
@@ -186,6 +217,8 @@ export type ArmRefusal =
   | 'argument_required'
   | 'argument_not_accepted'
   | 'count_not_accepted'
+  | 'ack_not_accepted'
+  | 'invalid_ack'
   | 'invalid_number';
 
 /** The outcome of `arm()`. */
@@ -289,13 +322,23 @@ export class FaultRegistry {
       if (!isNonNegativeInteger(request.count)) return { armed: false, refused: 'invalid_number' };
     }
 
+    let ack: FaultAckTarget | undefined;
+    if (request.ack !== undefined) {
+      if (request.point !== 'store.kill-after-ack' && request.point !== 'ws.drop-after-ack')
+        return { armed: false, refused: 'ack_not_accepted' };
+      if (!isAckTarget(request.ack)) return { armed: false, refused: 'invalid_ack' };
+      ack = { noteId: NoteId.parse(request.ack.noteId), afterSeq: request.ack.afterSeq };
+    }
+
     const fault: ArmedFault = {
       point: request.point,
       arg: descriptor.argument === 'milliseconds' ? request.arg : undefined,
       remaining: descriptor.lifetime === 'counted' ? request.count : undefined,
+      ...(ack === undefined ? {} : { ack }),
     };
     this.#armed.set(request.point, fault);
-    this.#perConnectionFired.delete(request.point);
+    for (const key of this.#perConnectionFired)
+      if (key.startsWith(`${request.point}:`)) this.#perConnectionFired.delete(key);
     this.#logger.warn({ point: fault.point, arg: fault.arg }, 'fault point armed');
     return { armed: true, fault };
   }
@@ -313,10 +356,17 @@ export class FaultRegistry {
    * `connectionId` is required by the one `per-connection` point (`ws.drop-after-ack`): the fault fires
    * once per connection, so the caller supplies the identity the registry counts against.
    */
-  fire(point: string, connectionId?: string): FaultFiring {
+  fire(point: string, connectionId?: string, acknowledgement?: FaultAcknowledgement): FaultFiring {
     if (!this.#enabled) return NOT_FIRED;
     const fault = this.#armed.get(point);
     if (fault === undefined) return NOT_FIRED;
+    if (
+      fault.ack !== undefined &&
+      (acknowledgement === undefined ||
+        acknowledgement.noteId !== fault.ack.noteId ||
+        acknowledgement.seq <= fault.ack.afterSeq)
+    )
+      return NOT_FIRED;
     const descriptor = describeFault(point);
     if (descriptor === undefined) return NOT_FIRED;
 
@@ -382,8 +432,8 @@ export class FaultRegistry {
    * No `finally`, no drain, no flush — that is the point (HP-2). It returns `void` rather than `never`
    * because it is a no-op when the point is not armed, which is every call in production.
    */
-  crash(point: string): void {
-    if (!this.fire(point).fired) return;
+  crash(point: string, acknowledgement?: FaultAcknowledgement): void {
+    if (!this.fire(point, undefined, acknowledgement).fired) return;
     this.#logger.warn({ point }, 'fault point is killing this process with SIGKILL');
     this.#hardKill();
   }

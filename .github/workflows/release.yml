@@ -161,19 +161,50 @@ jobs:
         run: |
           echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: SBOM (syft, CycloneDX)
+      - name: AMD64 SBOM (syft, CycloneDX)
         uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
+        env:
+          SYFT_PLATFORM: linux/amd64
         with:
-          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image: registry:${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: cyclonedx-json
-          artifact-name: iridium-server-sbom.cdx.json
-          output-file: iridium-server-sbom.cdx.json
+          syft-version: v1.52.0
+          artifact-name: iridium-server-sbom-amd64.cdx.json
+          output-file: iridium-server-sbom-amd64.cdx.json
 
-      # A `critical` or `high` finding with a fix available fails the release.
-      - name: Vulnerability scan (grype)
-        uses: anchore/scan-action@8576240a41341d866dbd7ebc72cd9fc0ef023f54 # v7.4.2
+      - name: ARM64 SBOM (syft, CycloneDX)
+        uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
+        env:
+          SYFT_PLATFORM: linux/arm64
         with:
-          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          image: registry:${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          syft-version: v1.52.0
+          artifact-name: iridium-server-sbom-arm64.cdx.json
+          output-file: iridium-server-sbom-arm64.cdx.json
+
+      # Each child of the pushed index must pass, independently of the runner architecture.
+      # A `critical` or `high` finding with a fix available fails the release.
+      - name: AMD64 vulnerability scan (grype)
+        uses: anchore/scan-action@8576240a41341d866dbd7ebc72cd9fc0ef023f54 # v7.4.2
+        env:
+          GRYPE_PLATFORM: linux/amd64
+        with:
+          image: registry:${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          output-file: iridium-server-vulnerabilities-amd64.sarif
+          grype-version: v0.119.0
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+
+      - name: ARM64 vulnerability scan (grype)
+        uses: anchore/scan-action@8576240a41341d866dbd7ebc72cd9fc0ef023f54 # v7.4.2
+        env:
+          GRYPE_PLATFORM: linux/arm64
+        with:
+          image: registry:${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          output-file: iridium-server-vulnerabilities-arm64.sarif
+          grype-version: v0.119.0
           severity-cutoff: high
           only-fixed: true
           fail-build: true
@@ -185,27 +216,31 @@ jobs:
         run: |
           set -euo pipefail
           ref="${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
-          reported="$(docker run --rm "$ref" --version)"
-          echo "iridium --version: $reported"
-          case "$reported" in
-            *"${{ needs.release-plan.outputs.version }}"*) ;;
-            *) echo 'The image version does not equal the Changesets version.'; exit 1 ;;
-          esac
-          docker run --rm "$ref" version --json > image-version.json
+          for architecture in amd64 arm64; do
+            docker run --platform "linux/$architecture" --rm "$ref" version --json > "image-version-$architecture.json"
+            docker run --platform "linux/$architecture" --rm --entrypoint mysqldump "$ref" --version | grep -E '\b9\.7\.'
+          done
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';
-          const identity = JSON.parse(readFileSync('image-version.json', 'utf8'));
-          if (identity.commit !== process.env.GITHUB_SHA) {
-            throw new Error(`Image commit ${identity.commit} differs from tagged commit ${process.env.GITHUB_SHA}`);
+          const expectedVersion = JSON.parse(readFileSync('apps/server/package.json', 'utf8')).version;
+          for (const architecture of ['amd64', 'arm64']) {
+            const identity = JSON.parse(readFileSync(`image-version-${architecture}.json`, 'utf8'));
+            if (identity.version !== expectedVersion || identity.commit !== process.env.GITHUB_SHA) {
+              throw new Error(`${architecture} image identity differs from the tagged package and commit`);
+            }
+            console.log(`${architecture}: ${JSON.stringify(identity)}`);
           }
           NODE
-          docker run --rm --entrypoint mysqldump "$ref" --version | grep -E '\b9\.7\.'
 
-      - name: Upload the SBOM
+      - name: Upload image evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: server-image-sbom
-          path: iridium-server-sbom.cdx.json
+          path: |
+            iridium-server-sbom-*.cdx.json
+            iridium-server-vulnerabilities-*.sarif
+            image-version-*.json
           retention-days: 90
 
   # electron-builder matrix with no signing or notarisation secrets. The E2E fuse variant

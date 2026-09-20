@@ -101,4 +101,21 @@ describe('testkit.fault-registry.unit [area:testkit]', () => {
     expect(FAULT_CONTROL_PATH).toBe('/__test__/faults');
     expect(FAULT_ENV_VAR).toBe('IRIDIUM_FAULT');
   });
+
+  it('validates runtime acknowledgement selectors without silently losing them in an environment spec', () => {
+    const noteId = '01980000-0000-7000-8000-000000000001';
+    const spec = { point: FAULT.storeKillAfterAck, ack: { noteId, afterSeq: 4 } };
+    expect(assertValidFaultSpec(spec)).toEqual(spec);
+    expect(() => formatFaultSpec(spec)).toThrow(/require runtime fault control/);
+    expect(() => assertValidFaultSpec({ ...spec, point: FAULT.storeThrow })).toThrow(
+      /takes no acknowledgement selector/,
+    );
+    expect(() => assertValidFaultSpec({ ...spec, ack: { noteId: 'bad', afterSeq: 4 } })).toThrow(
+      /UUID/i,
+    );
+    for (const afterSeq of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1])
+      expect(() => assertValidFaultSpec({ ...spec, ack: { noteId, afterSeq } })).toThrow(
+        /non-negative safe integer/,
+      );
+  });
 });

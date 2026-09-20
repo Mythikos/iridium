@@ -5,7 +5,7 @@
  *
  * - **at spawn** — `IRIDIUM_FAULT=store.slow:3000,ws.drop-after-ack` in the child or container
  *   environment, rendered by `formatFaultEnv`;
- * - **at runtime** — `POST /__test__/faults {point, arg?, count?}` and `DELETE /__test__/faults`,
+ * - **at runtime** — `POST /__test__/faults {point, arg?, count?, ack?}` and `DELETE /__test__/faults`,
  *   a namespace that exists only when `NODE_ENV === 'test'`, wrapped by `createFaultControl`.
  *
  * `srv.faults.arm(FAULT.storeThrow, { count: 1 })` returns a handle whose `disarm()` clears it, so a
@@ -13,9 +13,11 @@
  * spec is built from a `FAULT` constant and validated against the registry before it leaves the
  * process, which is what makes a typo a synchronous error rather than a fault that silently never fires.
  */
+import { NoteId } from '@iridium/contracts';
+
 import type { RestClient } from '../clients/rest-client.ts';
 import type { FaultPoint } from './points.ts';
-import { describeFault } from './points.ts';
+import { FAULT, describeFault } from './points.ts';
 
 /** The test-only control route (10-testing-and-quality.md; `config.auth = 'test-only'`, skeleton A27). */
 export const FAULT_CONTROL_PATH = '/__test__/faults';
@@ -29,6 +31,8 @@ export interface FaultSpec {
   readonly arg?: number;
   /** How many times a `counted` point fires before disarming itself. Omitted means "until disarmed". */
   readonly count?: number;
+  /** Runtime-only selector; repeated baselines and other notes do not consume the fault. */
+  readonly ack?: { readonly noteId: string; readonly afterSeq: number };
 }
 
 export interface ArmedFault {
@@ -39,7 +43,7 @@ export interface ArmedFault {
 
 export interface FaultControl {
   /** Arm one point and return its handle. */
-  arm(point: FaultPoint, options?: { arg?: number; count?: number }): Promise<ArmedFault>;
+  arm(point: FaultPoint, options?: Omit<FaultSpec, 'point'>): Promise<ArmedFault>;
   /** Clear every armed point (`DELETE /__test__/faults`). */
   disarmAll(): Promise<void>;
 }
@@ -81,12 +85,21 @@ export function assertValidFaultSpec(spec: FaultSpec): FaultSpec {
     }
     assertInteger(spec.count, `${spec.point} count`, 1);
   }
+  if (spec.ack !== undefined) {
+    if (spec.point !== FAULT.storeKillAfterAck && spec.point !== FAULT.wsDropAfterAck)
+      throw new Error(`@iridium/testkit: ${spec.point} takes no acknowledgement selector`);
+    NoteId.parse(spec.ack.noteId);
+    if (!Number.isSafeInteger(spec.ack.afterSeq) || spec.ack.afterSeq < 0)
+      throw new Error('@iridium/testkit: ack.afterSeq must be a non-negative safe integer');
+  }
   return spec;
 }
 
 /** `store.slow:3000`, `store.throw:2`, `ws.drop-after-ack`. */
 export function formatFaultSpec(spec: FaultSpec): string {
   assertValidFaultSpec(spec);
+  if (spec.ack !== undefined)
+    throw new Error('@iridium/testkit: acknowledgement selectors require runtime fault control');
   const suffix = spec.arg ?? spec.count;
   return suffix === undefined ? spec.point : `${spec.point}:${String(suffix)}`;
 }
@@ -144,11 +157,12 @@ export function createFaultControl(rest: RestClient): FaultControl {
         point,
         ...(options.arg === undefined ? {} : { arg: options.arg }),
         ...(options.count === undefined ? {} : { count: options.count }),
+        ...(options.ack === undefined ? {} : { ack: options.ack }),
       });
       const response = await rest.request('POST', FAULT_CONTROL_PATH, { json: spec });
       if (response.status >= 400) {
         throw new Error(
-          `@iridium/testkit: arming ${formatFaultSpec(spec)} answered ${String(response.status)}: ${JSON.stringify(response.body)}`,
+          `@iridium/testkit: arming ${spec.point} answered ${String(response.status)}: ${JSON.stringify(response.body)}`,
         );
       }
       let disarmed = false;

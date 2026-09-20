@@ -2537,6 +2537,31 @@ The release's Grype high-severity, fix-available gate remains unchanged.
 
 ADR mirror: [OPS-04](../adr/ops-04-mysql-client-packaging.md).
 
+### D10-6 amendment (2026-09-20): select the acknowledged revision at the wire fault
+
+Status: accepted. The second remote nightly's fourth chaos shards (`106018032722` /
+`106018032782`, run `35488088005`) each fail 397 durable-ack cases. Nightly database latency
+allows a real client's baseline probe to receive an older committed acknowledgement before
+the new edit commits. Both the next-frame observation and an unqualified post-ack kill can
+therefore select the wrong revision.
+
+The two existing wire faults accept an optional runtime-only `ack: { noteId, afterSeq }`
+selector. Validation and lifetime consumption remain in the one fault registry; the socket
+passes the decoded frame's actual note and sequence synchronously after sending it. Nonmatching
+frames leave the point armed. The client observation uses the same committed sequence floor.
+The selector changes neither the protocol nor production behavior, and does not disable the
+client's baseline probe or change the latency, crash methods, iteration counts or durability
+assertions. Other points reject it; spawn-time serialization cannot silently omit it.
+
+At maximum injected SQL latency, a separate diagnostic records an uncommitted new revision,
+live process and no fired fault or persistence error when the old 30-second observation ends.
+Nightly CH-1 allows 90 seconds to observe the acknowledgement within the unchanged 180-second
+case deadline; normal CI remains 30 seconds. Product statement and retry deadlines are unchanged.
+
+ADR mirror: [D10-6](../adr/d10-6-targeted-ack-faults.md). Regression proofs:
+`ops.faults.unit`, `testkit.fault-registry.unit`, `routes.test-namespace-absent.integration`
+and `collab.durable-ack.chaos`.
+
 ## ARCH-02 amendment: readiness probe lifecycle (2026-09-20)
 
 Concurrent HTTP, boot and periodic readiness callers share one complete serial evaluation.
@@ -2553,3 +2578,16 @@ still follows complete boot, and the chaos scenario, iterations and case deadlin
 ADR mirror: [ARCH-02](../adr/arch-02-readiness-probe-lifecycle.md). Regression proofs:
 `ops.readiness.unit`, `ops.shutdown.unit`, `readyz.integration`,
 `collab.second-process-refused.chaos` and `collab.db-outage.chaos`.
+
+### OPS-04 amendment (2026-09-20): both published platforms are measured
+
+Status: accepted. Release scans select AMD64 and ARM64 explicitly using Syft's and Grype's
+platform settings at the same pushed manifest-index digest. Separate reports prevent one
+architecture's evidence from overwriting the other; each retains the `high` / `only-fixed`
+gate. The action inputs pin Syft 1.52.0 and Grype 0.119.0 to the exact preflight tools rather
+than action-bundled defaults. Image hygiene executes the server version/commit and shipped MySQL client on both
+platforms, and artifact upload retains partial reports on failure. An implicit native-platform
+scan cannot certify both published images. `guards.release-policy.guard` rejects missing,
+disabled or weakened platform scans and colliding SBOM artifact names.
+
+ADR mirror: [OPS-04](../adr/ops-04-mysql-client-packaging.md).

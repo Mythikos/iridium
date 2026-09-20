@@ -2,7 +2,7 @@
  * The test-only control namespace `/__test__` (10-testing-and-quality.md D10-6; 12-milestones.md §5.2's
  * `ops` row).
  *
- * Two routes, `POST /__test__/faults {point, arg?, count?}` and `DELETE /__test__/faults`, and they exist
+ * Two routes, `POST /__test__/faults {point, arg?, count?, ack?}` and `DELETE /__test__/faults`, and they exist
  * **only when `NODE_ENV === 'test'`** — the whole namespace is never registered otherwise, so the prefix
  * answers `404` from the not-found handler in production and in development alike. Some faults have to be
  * armed mid-session, after a document is loaded; spawning a process per fault would make the chaos suite
@@ -42,6 +42,7 @@ interface ArmFaultBody {
   readonly point?: unknown;
   readonly arg?: unknown;
   readonly count?: unknown;
+  readonly ack?: unknown;
 }
 
 /** One operator-facing sentence per refusal; the harness prints it when an arm call fails. */
@@ -51,6 +52,8 @@ const REFUSAL_DETAIL: Readonly<Record<ArmRefusal, string>> = Object.freeze({
   argument_required: 'This point takes a duration in milliseconds, as point:<ms>.',
   argument_not_accepted: 'This point takes no argument.',
   count_not_accepted: 'This point is not counted, so it takes no count.',
+  ack_not_accepted: 'Only the two post-acknowledgement wire faults accept an ack selector.',
+  invalid_ack: 'ack requires a canonical noteId and a non-negative safe integer afterSeq.',
   invalid_number: 'arg and count are non-negative integers.',
 });
 
@@ -85,6 +88,7 @@ export function applyTestRoutes(app: FastifyInstance, faults: FaultRegistry): vo
       point: body.point,
       ...(arg === undefined ? {} : { arg }),
       ...(count === undefined ? {} : { count }),
+      ...(body.ack === undefined ? {} : { ack: body.ack }),
     });
     if (!outcome.armed) {
       throw new ProblemError('validation_failed', { detail: REFUSAL_DETAIL[outcome.refused] });

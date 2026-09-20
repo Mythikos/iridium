@@ -26,13 +26,14 @@
  */
 import fastifyWebsocket from '@fastify/websocket';
 import { Hocuspocus, type Extension, type WebSocketLike } from '@hocuspocus/server';
-import { encodeStateless, LIMITS, parseDocName } from '@iridium/contracts';
+import { decodeServerNoteMessage, encodeStateless, LIMITS, parseDocName } from '@iridium/contracts';
 import { FRAME_TYPE, peekFrame, peekStatelessPayload, type FrameHeader } from '@iridium/crdt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type WebSocket from 'ws';
 
 import type { IridiumConfig } from '../config/env.ts';
 import type { Clock, TimerHandle } from '../ops/clock.ts';
+import type { FaultAcknowledgement } from '../ops/faults.ts';
 import type { CollabHookContext } from './context.ts';
 import type { CollabLimits } from './limits.ts';
 import type { CollabMetrics } from './metrics.ts';
@@ -151,8 +152,13 @@ function canonicalRoutingKey(header: FrameHeader): boolean {
 
 /** The fault registry slice the socket layer fires. */
 export interface SocketFaults {
-  fire(point: string, connectionId?: string): { readonly fired: boolean };
-  crash(point: string): void;
+  readonly enabled: boolean;
+  fire(
+    point: string,
+    connectionId?: string,
+    acknowledgement?: FaultAcknowledgement,
+  ): { readonly fired: boolean };
+  crash(point: string, acknowledgement?: FaultAcknowledgement): void;
 }
 
 /** What the server needs. */
@@ -232,12 +238,18 @@ function outboundBytes(data: string | ArrayBufferLike | Blob | ArrayBufferView):
   return new Uint8Array(data);
 }
 
-/** Whether an outbound frame is the `persisted` acknowledgement (the post-ack fault points). */
-export function isPersistedFrame(bytes: Uint8Array): boolean {
+/** Decode the real note and sequence for the two post-acknowledgement fault points. */
+function persistedAckOfFrame(bytes: Uint8Array): FaultAcknowledgement | null {
   const header = peekFrame(bytes);
-  if (header === null || header.type !== FRAME_TYPE.stateless) return false;
+  if (header === null || header.type !== FRAME_TYPE.stateless) return null;
+  const note = parseDocName(header.documentName);
+  if (note?.channel !== 'note') return null;
   const payload = peekStatelessPayload(bytes, header);
-  return payload !== null && payload.includes('"t":"persisted"');
+  if (payload === null) return null;
+  const decoded = decodeServerNoteMessage(payload);
+  return decoded.ok && decoded.message.t === 'persisted'
+    ? { noteId: note.id, seq: decoded.message.seq }
+    : null;
 }
 
 /** Builds the server. */
@@ -315,10 +327,13 @@ export function createCollabServer(options: CollabServerOptions): CollabServer {
           send: (data) => {
             if (!current()) return;
             socket.send(data);
+            if (!faults.enabled) return;
             const bytes = outboundBytes(data);
-            if (bytes === null || !isPersistedFrame(bytes)) return;
-            if (faults.fire('ws.drop-after-ack', socketId).fired) socket.terminate();
-            faults.crash('store.kill-after-ack');
+            const acknowledgement = bytes === null ? null : persistedAckOfFrame(bytes);
+            if (acknowledgement === null) return;
+            if (faults.fire('ws.drop-after-ack', socketId, acknowledgement).fired)
+              socket.terminate();
+            faults.crash('store.kill-after-ack', acknowledgement);
           },
         };
         const connection = hocuspocus.handleConnection(wire, webRequest, {

@@ -102,6 +102,34 @@ describe('routes.test-namespace-absent.integration [area:ops]', () => {
       expect(testEnv.app.faults.armed).toEqual([]);
     });
 
+    it('retains a valid acknowledgement selector and refuses invalid or misplaced selectors', async () => {
+      const ack = { noteId: '01980000-0000-7000-8000-000000000001', afterSeq: 4 };
+      const armed = await testEnv.app.inject({
+        method: 'POST',
+        url: FAULT_CONTROL_PATH,
+        headers: WEB_HEADERS,
+        payload: { point: 'store.kill-after-ack', ack },
+      });
+      expect(armed.statusCode).toBe(204);
+      expect(testEnv.app.faults.armed[0]?.ack).toEqual(ack);
+      await testEnv.app.inject({ method: 'DELETE', url: FAULT_CONTROL_PATH, headers: WEB_HEADERS });
+      for (const payload of [
+        { point: 'store.throw', ack },
+        { point: 'store.kill-after-ack', ack: null },
+        { point: 'store.kill-after-ack', ack: { ...ack, afterSeq: -1 } },
+      ]) {
+        // eslint-disable-next-line no-await-in-loop -- each refused request must leave the registry empty
+        const refused = await testEnv.app.inject({
+          method: 'POST',
+          url: FAULT_CONTROL_PATH,
+          headers: WEB_HEADERS,
+          payload,
+        });
+        expect(refused.statusCode).toBe(422);
+        expect(testEnv.app.faults.armed).toEqual([]);
+      }
+    });
+
     it('refuses a body with no point, and a malformed argument', async () => {
       const noPoint = await testEnv.app.inject({
         method: 'POST',

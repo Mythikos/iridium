@@ -180,6 +180,54 @@ function workflowIssues(source: string): string[] {
   ]) {
     if (!server.includes(setting)) issues.push(`Missing M1 publication requirement ${setting}`);
   }
+  const serverSteps = server.split(/^      - /m);
+  for (const architecture of ['amd64', 'arm64']) {
+    for (const [action, variable, requirements] of [
+      [
+        'sbom',
+        'SYFT_PLATFORM',
+        [
+          'format: cyclonedx-json',
+          'syft-version: v1.52.0',
+          `artifact-name: iridium-server-sbom-${architecture}.cdx.json`,
+          `output-file: iridium-server-sbom-${architecture}.cdx.json`,
+        ],
+      ],
+      [
+        'scan',
+        'GRYPE_PLATFORM',
+        [
+          'severity-cutoff: high',
+          'only-fixed: true',
+          'fail-build: true',
+          'grype-version: v0.119.0',
+          `output-file: iridium-server-vulnerabilities-${architecture}.sarif`,
+        ],
+      ],
+    ] as const) {
+      const step = serverSteps.find(
+        (candidate) =>
+          candidate.includes(`uses: anchore/${action}-action@`) &&
+          new RegExp(`^          ${variable}: linux/${architecture}$`, 'm').test(candidate),
+      );
+      if (
+        step === undefined ||
+        /^        if:/m.test(step) ||
+        !step.includes('image: registry:${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}') ||
+        requirements.some((requirement) => !step.includes(requirement))
+      ) {
+        issues.push(
+          `Missing unconditional ${architecture} ${action} evidence at the pushed digest`,
+        );
+      }
+    }
+  }
+  if (
+    !server.includes('for architecture in amd64 arm64; do') ||
+    !server.includes('--platform "linux/$architecture"')
+  ) {
+    issues.push('Image hygiene must execute both released architectures');
+  }
   return issues;
 }
 
@@ -550,6 +598,30 @@ describe('guards.release-policy.guard [area:release]', () => {
       "mysql: ['mysql:8.4.11']",
     ],
     ['missing SBOM', 'sbom: true', 'sbom: false'],
+    ['host-only SBOM', 'SYFT_PLATFORM: linux/arm64', 'SYFT_PLATFORM: linux/amd64'],
+    ['host-only scan', 'GRYPE_PLATFORM: linux/arm64', 'GRYPE_PLATFORM: linux/amd64'],
+    ['SBOM tool drift', 'syft-version: v1.52.0', 'syft-version: v1.51.1'],
+    ['scanner tool drift', 'grype-version: v0.119.0', 'grype-version: v0.118.0'],
+    [
+      'colliding SBOM artifacts',
+      'artifact-name: iridium-server-sbom-arm64.cdx.json',
+      'artifact-name: iridium-server-sbom-amd64.cdx.json',
+    ],
+    [
+      'weakened ARM64 cutoff',
+      'output-file: iridium-server-vulnerabilities-arm64.sarif\n          grype-version: v0.119.0\n          severity-cutoff: high',
+      'output-file: iridium-server-vulnerabilities-arm64.sarif\n          grype-version: v0.119.0\n          severity-cutoff: critical',
+    ],
+    [
+      'disabled ARM64 scan',
+      '- name: ARM64 vulnerability scan (grype)',
+      '- name: ARM64 vulnerability scan (grype)\n        if: false',
+    ],
+    [
+      'host-only image execution',
+      'for architecture in amd64 arm64; do',
+      'for architecture in amd64; do',
+    ],
     ['missing source identity', 'SOURCE_COMMIT=${{ github.sha }}', 'SOURCE_COMMIT=unknown'],
     [
       'missing image identity check',

@@ -6207,6 +6207,17 @@
         "the Location convention"
       ]
     },
+    "ops.faults.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/ops/faults.unit.spec.ts",
+      "tag": "[area:ops]",
+      "asserts": "M1 — Faults remain inert outside test mode; validated runtime acknowledgement selectors preserve lifetimes across baseline and unrelated-note frames and retain the synchronous kill boundary.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "ops.key-rotation.drill": {
       "layer": "L5",
       "sinceMilestone": "M8",
@@ -7095,6 +7106,17 @@
       "file": "packages/testkit/src/testkit.db-probes.unit.spec.ts",
       "tag": "[area:testing]",
       "asserts": "M0 — Named SQL probes preserve caller transactions, parameter binding, callback overloads, native errors/results and operation-only logs; unsafe identifiers and non-product grant scripts are refused before I/O.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.fault-registry.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.fault-registry.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M1 — Fault vocabulary, lifetimes and control serialization agree; runtime acknowledgement selectors cannot be silently lost in an environment spec.",
       "inventories": [
         "Inventory completeness — M1 completion regressions."
       ]

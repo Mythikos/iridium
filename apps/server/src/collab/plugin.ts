@@ -274,8 +274,12 @@ export async function applyCollabPlugin(
     extensions,
     ownerLease,
     faults: {
-      fire: (point, connectionId) => app.faults.fire(point, connectionId),
-      crash: (point) => app.faults.crash(point),
+      get enabled(): boolean {
+        return app.faults.enabled;
+      },
+      fire: (point, connectionId, acknowledgement) =>
+        app.faults.fire(point, connectionId, acknowledgement),
+      crash: (point, acknowledgement) => app.faults.crash(point, acknowledgement),
     },
     metrics,
     preValidation: [

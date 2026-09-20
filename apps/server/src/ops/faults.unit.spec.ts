@@ -11,7 +11,6 @@
  * `hardKill` is injected, because the real one is `process.kill(process.pid, 'SIGKILL')` and the test
  * runner is that process.
  *
- * There is no inventory row for this name yet; the platform stream's report asks for one.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -152,6 +151,29 @@ describe('ops.faults.unit [area:ops]', () => {
   });
 
   describe('arming at runtime', () => {
+    it('refuses malformed acknowledgement selectors and selectors on unrelated points', () => {
+      const { faults } = registry();
+      const noteId = '01980000-0000-7000-8000-000000000001';
+      expect(faults.arm({ point: 'store.throw', ack: { noteId, afterSeq: 0 } })).toEqual({
+        armed: false,
+        refused: 'ack_not_accepted',
+      });
+      for (const ack of [
+        null,
+        {},
+        { noteId: 'not-a-note', afterSeq: 0 },
+        { noteId, afterSeq: -1 },
+        { noteId, afterSeq: 0.5 },
+        { noteId, afterSeq: Number.MAX_SAFE_INTEGER + 1 },
+      ]) {
+        expect(faults.arm({ point: 'store.kill-after-ack', ack })).toEqual({
+          armed: false,
+          refused: 'invalid_ack',
+        });
+      }
+      expect(faults.armed).toEqual([]);
+    });
+
     it('refuses an unknown point and names the registry', () => {
       const { faults } = registry();
       expect(faults.arm({ point: 'store.explode' })).toEqual({
@@ -193,6 +215,52 @@ describe('ops.faults.unit [area:ops]', () => {
   });
 
   describe('lifetimes', () => {
+    it.each(['store.kill-after-ack', 'ws.drop-after-ack'])(
+      'keeps %s armed across baseline replies and other notes until the selected commit',
+      (point) => {
+        const { faults } = registry();
+        const noteId = '01980000-0000-7000-8000-000000000001';
+        const otherNote = '01980000-0000-7000-8000-000000000002';
+        expect(faults.arm({ point, ack: { noteId, afterSeq: 4 } }).armed).toBe(true);
+        expect(faults.fire(point, 'socket').fired).toBe(false);
+        expect(faults.fire(point, 'socket', { noteId, seq: 4 }).fired).toBe(false);
+        expect(faults.fire(point, 'socket', { noteId: otherNote, seq: 5 }).fired).toBe(false);
+        expect(faults.armed).toHaveLength(1);
+        expect(faults.fire(point, 'socket', { noteId, seq: 5 }).fired).toBe(true);
+        expect(faults.fire(point, 'socket', { noteId, seq: 6 }).fired).toBe(false);
+      },
+    );
+
+    it('applies the acknowledgement selector at the synchronous crash boundary', () => {
+      const scene = registry();
+      const noteId = '01980000-0000-7000-8000-000000000001';
+      scene.faults.arm({ point: 'store.kill-after-ack', ack: { noteId, afterSeq: 4 } });
+      scene.faults.crash('store.kill-after-ack', { noteId, seq: 4 });
+      expect(scene.kills).toBe(0);
+      scene.faults.crash('store.kill-after-ack', { noteId, seq: 5 });
+      expect(scene.kills).toBe(1);
+    });
+
+    it('normalizes the selected note ID just like the wire contract', () => {
+      const { faults } = registry();
+      const noteId = '01980000-0000-7000-8000-00000000000a';
+      faults.arm({
+        point: 'store.kill-after-ack',
+        ack: { noteId: noteId.toUpperCase(), afterSeq: 0 },
+      });
+      expect(faults.fire('store.kill-after-ack', undefined, { noteId, seq: 1 }).fired).toBe(true);
+    });
+
+    it('rearms a selected per-connection fault for a later revision on the same socket', () => {
+      const { faults } = registry();
+      const noteId = '01980000-0000-7000-8000-000000000001';
+      faults.arm({ point: 'ws.drop-after-ack', ack: { noteId, afterSeq: 4 } });
+      expect(faults.fire('ws.drop-after-ack', 'socket', { noteId, seq: 5 }).fired).toBe(true);
+      faults.arm({ point: 'ws.drop-after-ack', ack: { noteId, afterSeq: 5 } });
+      expect(faults.fire('ws.drop-after-ack', 'socket', { noteId, seq: 5 }).fired).toBe(false);
+      expect(faults.fire('ws.drop-after-ack', 'socket', { noteId, seq: 6 }).fired).toBe(true);
+    });
+
     it('fires a one-shot point exactly once', () => {
       const { faults } = registry();
       faults.arm({ point: 'store.crash-before-commit' });

@@ -80,15 +80,44 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
             )
               kills.push(harness.server.kill('SIGKILL'));
           };
-          if (method === 'fault') await harness.server.faults.arm(FAULT.storeKillAfterAck);
+          if (method === 'fault')
+            await harness.server.faults.arm(FAULT.storeKillAfterAck, {
+              ack: { noteId: cast.note.id, afterSeq: before.head },
+            });
           else clients.forEach((client) => client.provider?.on('stateless', onAck));
           // The synchronous fault follows the first broadcast recipient, not necessarily the editor.
+          // A delayed prefix/baseline acknowledgement is not the revision being crashed.
           const acknowledged = Promise.any(
-            clients.map((client) => client.waitForAck(undefined, { timeoutMs: 30_000 })),
+            clients.map((client) =>
+              client.waitForAck(before.head + 1, {
+                // Nightly latency applies to every SQL round trip, before the crash boundary.
+                timeoutMs: NIGHTLY_CHAOS ? 90_000 : 30_000,
+              }),
+            ),
           );
           const marker = editor.marker(`durable-${String(iteration)}`);
           const editedVector = stateVector(editor.ydoc);
-          const ack = await acknowledged;
+          const ack = await acknowledged.catch(async (cause: unknown) => {
+            throw new Error(
+              `Post-edit acknowledgement missing: ${JSON.stringify({
+                before: before.head,
+                committed: (await harness.committed(cast.note.id)).head,
+                exit: harness.server.lastExit,
+                clients: clients.map((client) => ({
+                  state: client.saveState,
+                  acknowledgements: client.stateless
+                    .filter((message) => message.t === 'persisted')
+                    .map((message) => message.seq),
+                  failures: client.stateless.filter((message) => message.t === 'persist-failed'),
+                })),
+                faults: harness.logs.filter((line) => line.includes('"event":"fault.fired"')),
+                persistenceFailures: harness.logs.filter((line) =>
+                  line.includes('"event":"persist.failed"'),
+                ),
+              })}`,
+              { cause },
+            );
+          });
           expect(ack.seq).toBeGreaterThan(before.head);
           expect(dominates(decodeStateVector(asStateVector(ack.sv)), editedVector)).toBe(true);
           clients.forEach((client) => client.provider?.off('stateless', onAck));
@@ -194,7 +223,7 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
             )
             .toBe(true);
         })();
-        const nextAck = editor.waitForAck();
+        const nextAck = editor.waitForAck(before.head + 1);
         editor.marker(`visibility-${String(iteration)}`);
         const [ack] = await Promise.all([nextAck, visible]);
         expect(ackAt).not.toBeNull();

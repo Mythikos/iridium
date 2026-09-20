@@ -2,7 +2,7 @@
   "format": "iridium-upgrade-fixture/1",
   "milestone": "M1",
   "version": "v0.1.0",
-  "generated_at": "2026-09-19T10:32:11.223Z",
+  "generated_at": "2026-09-20T05:59:16.536Z",
   "dataset": "seed.kernel",
   "mysql_line": "8.4",
   "mysql_version": "8.4.11",
@@ -10,8 +10,8 @@
   "dump": {
     "file": "dump.sql.gz",
     "compression": "gzip",
-    "bytes": 19024,
-    "sha256": "d1922c1197a3b4593a42aa5fb7aadf2f5eae2b1b3fd367c243251baea84da1d9",
+    "bytes": 19104,
+    "sha256": "dca322b05696e45cbb3fde7b7495ff78a81a959ab9bd3b0f535576db298de47e",
     "argv": [
       "--single-transaction",
       "--hex-blob",
@@ -75,32 +75,32 @@
     "files": []
   },
   "kernel": {
-    "vault_id": "01a0b939-12ca-7336-a5cc-c1ecb6631f4f",
-    "note_id": "01a0b939-12fe-74a5-a082-9d7ab7881277",
+    "vault_id": "01a0bd65-6a15-754f-a3f9-b8c700ad0be3",
+    "note_id": "01a0bd65-6a72-78a0-9161-59ba07f2e6b7",
     "markdown": "⟦IMPORT-MARK⟧ kernel note\n",
     "users": [
       {
-        "id": "01a0b939-1229-73d0-a490-3107fb7d87b5",
+        "id": "01a0bd65-67c6-713d-b701-493facb76d31",
         "email": "admin@iridium.test"
       },
       {
-        "id": "01a0b939-1294-7bd1-b6b5-232888d9bd1d",
+        "id": "01a0bd65-6985-7ac2-8706-556dbe2ff5e7",
         "email": "editorA@iridium.test"
       },
       {
-        "id": "01a0b939-1294-7bd2-9d4b-a56c33a58b9d",
+        "id": "01a0bd65-698b-7158-95a2-150d7c57e924",
         "email": "editorB@iridium.test"
       },
       {
-        "id": "01a0b939-1298-7880-acfd-8bf2b9513bc7",
+        "id": "01a0bd65-6995-7f05-a274-6f853da901b3",
         "email": "editorC@iridium.test"
       },
       {
-        "id": "01a0b939-1298-7881-a432-f1816775e7d1",
+        "id": "01a0bd65-6997-75cc-b11e-5e3324ce1068",
         "email": "viewer@iridium.test"
       },
       {
-        "id": "01a0b939-1298-7882-947f-e533aeb9000f",
+        "id": "01a0bd65-699f-7a32-9d61-ad4bc39a98ab",
         "email": "outsider@iridium.test"
       }
     ]

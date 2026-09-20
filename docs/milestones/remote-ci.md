@@ -547,3 +547,197 @@ oxfmt exits 2 because no target remains. The staged formatter now uses its docum
 [pre-commit hooks](https://oxc.rs/docs/guide/usage/formatter/ci#pre-commit-hook). Existing ignore
 rules and the repository-wide CI format check stay intact. Before/after executions of the same
 ignored path return 2 and 0 respectively; both logs are retained as `public-resume-format-hook-*`.
+
+The corrected tree `bb8a96425593a6099c2c0f6061eb795f6fe2f528` starts
+[main CI 35492818679](https://github.com/Mythikos/iridium/actions/runs/35492818679) and
+[M1 rehearsal 35492818517](https://github.com/Mythikos/iridium/actions/runs/35492818517).
+Both static checks pass, followed by both unit and all three Electron jobs. The rehearsal's
+9.7 integration check `106030678981` passes 480 tests in 84 files in 469.16 seconds.
+The remaining matrix jobs and full mutation are still running at this checkpoint.
+
+The third nightly passes all three Electron jobs, Node 26 `106029939091` (2,727 tests in
+227 files), and its third chaos shard on both engines (`106029939117` / `106029939134`,
+twelve cases each). The innovation advisory `106029939076` repeats the known fixture
+override/version-floor failure: 93 failures, 27 passes and 290 skips. D10-42 explicitly makes
+that early-warning job non-blocking; its failure is retained, not reported as engine support.
+The second nightly's second shards also finish: `106018032677` / `106018032784` each pass
+171 cases in four files, taking 6,992.02 / 7,068.96 seconds. These are results for `b663d81`.
+
+## Release platform evidence
+
+Pre-tag workflow review finds that the release builds a two-platform image index while its
+standalone Syft/Grype scans implicitly select the runner's native architecture. The corrected
+workflow explicitly scans AMD64 and ARM64 at the same immutable registry digest, with separate
+CycloneDX and vulnerability report names. Both retain the high-severity, fix-available gate.
+The version/commit and shipped-client hygiene commands also execute on both platforms, and
+artifact upload retains any partial evidence if a later release step fails.
+
+The dated [OPS-04 amendment](../adr/ops-04-mysql-client-packaging.md) records this correction.
+All 63 release-policy guard cases pass, including eight adversarial variants for a missing
+platform, colliding SBOM artifact, tool drift, weaker cutoff, disabled scan or missing ARM64 execution;
+TypeScript, focused type-aware lint and all 466 documentation references pass. This is workflow
+validation before the tag; the actual tagged scans and image identities still need Actions.
+
+The pinned SBOM action bundles Syft 1.51.1, while the completed image preflight used 1.52.0.
+Explicit action inputs now select Syft 1.52.0 and Grype 0.119.0, matching the preflight tools.
+Both exact local scanner binaries confirm `platform: linux/arm64` from the environment setting;
+this configuration check is separate from the actual tagged scans still due.
+
+## Actions-produced M1 upgrade fixture
+
+The M1 rehearsal's 8.4 producer `106030679007` passes all 480 tests in 84 files and uploads
+artifact `10600305875` (`upgrade-fixture-v0.1.0`), digest
+`sha256:2e62ce27f9dd91fcf786c0729a4c9d8e05715fb04bdfb9769b90d74149ee968b`.
+It generates the fixture at `2026-09-20T05:59:16.536Z` from `bb8a96425593a6099c2c0f6061eb795f6fe2f528`.
+The downloaded manifest, producing job's successful conclusion and timestamp, captured commit,
+55 migrations, seed counts, unchanged public fixture keys, empty attachment inventory and exact
+dump hash/length all validate before promotion. No bytes in the artifact are rewritten.
+
+The promoted dump is 19,104 bytes, SHA-256
+`dca322b05696e45cbb3fde7b7495ff78a81a959ab9bd3b0f535576db298de47e`;
+manifest SHA-256 is `52cf4f181850d5015fd9f7fe56a357f7edd8f91b059eea0746ba49d667263286`.
+The report `35492818517-fixture-promotion.json` records promotion at 06:11 UTC. Both required
+Actions integration engines pass on the producing tree. Separate checks of the newly promoted
+fixture follow; the old fixture and failed earlier producers retain their original evidence.
+
+The complete grants/fixture file subsequently passes both cases on each local engine, with
+fixture writing explicitly disabled: 62.79 seconds on 8.4 and 60.83 seconds on 9.7. The dump
+hash is unchanged afterward. These checks use `iridium-server:m1-fixture-validation`, image
+`sha256:6d32cf371a2bf64846637de3e43f2d5f9a6ac9178c29fea3b061245cf7a9bf67`, reporting version
+`0.1.0`, commit `f8390f1a3ef577a3d58672dfb77234ca978c86c2` and schema head
+`0055_min_client_version`. Product sources, migrations, packages, Docker recipe, mutation inputs
+and dependency manifests are byte-identical between that image source and the producing
+`bb8a964` tree; its later delta is the documented inventory/hook correction. This identifies
+the actual local restore inputs without claiming that an older image embeds the later commit.
+Logs are `public-fixture-restored-{84,97}.log`; the final committed fixture is also subject to
+both required Actions integration lanes before M1 exit.
+
+Further completed nightly evidence: the second run's 8.4 property job `106018032553` passes
+2,327 tests in 155 files at the full 5,000-run / 300-command budgets, taking 7,450.37 seconds.
+The third run's flake hunt `106029956106` passes all 410 integration tests in each of three
+repetitions (360.53 / 340.28 / 352.78 seconds). Other pending jobs still carry no inferred result.
+
+The second run's 9.7 property job `106018032626` also passes: 2,327 tests in 155 files,
+8,344.19 seconds, at the full budgets. The third nightly's first chaos shards now pass on both
+engines (`106029939115` / `106029939112`, 67 cases in four files each, 1,666.85 / 1,602.80
+seconds). These are the completed remote checks of the readiness lifecycle correction,
+including CH-16 and database blackhole recovery. Their logs are preserved alongside the
+earlier failed first shards.
+
+## Further completed failures
+
+The older rehearsal `35478419591` reaches GitHub's six-hour maximum on mutation job
+`105991867100`. Its annotation and complete log are retained as `35478419591-mutation-*`.
+The last progress line reports 8,829 of 10,086 non-ignored mutants tested; no terminal mutation
+report or passing score is inferred. The current public-runner full campaign remains separate.
+
+The second nightly's fourth chaos shards `106018032722` / `106018032782` finish with 397
+failures and 298 passes in three files, taking 5,177.53 / 5,805.29 seconds. All failures occur
+in the durable-ack file: the observed acknowledgement sequence equals the pre-edit committed
+head. The first two-method local reproduction, at the unchanged nightly latency budget,
+fails both cases with `expected 2 to be greater than 2` (`durable-ack-nightly-before-84.log`).
+The observer previously accepted the next arriving frame, which may be a delayed prefix or
+baseline acknowledgement. It now asks the existing testkit API for `seq >= before.head + 1`,
+matching the crash trigger and the assertion. The held-COMMIT case uses the same explicit floor.
+No acknowledgement is fabricated, and the state-vector, committed-row, fresh-client recovery,
+exact-once, crash methods, latency and iteration requirements remain intact. Validation of the
+repair is recorded separately from those failed runs.
+
+The second nightly's full API jobs `106018032655` / `106018032793` also fail. Their logs and
+artifacts (`10598712899` / `10598957330`) preserve the signed-cursor generation and isolated
+administrator authentication failures. These remain the explicit D12-20 full-profile follow-ups;
+neither job establishes full-profile coverage.
+
+## Resumed main is green
+
+[Main CI 35492818679](https://github.com/Mythikos/iridium/actions/runs/35492818679) completes
+successfully on `bb8a96425593a6099c2c0f6061eb795f6fe2f528`. GitHub's check-runs API confirms
+the following twelve successful required checks on that commit:
+
+| Check | Check-run ID |
+|---|---|
+| static | `106030558210` |
+| unit, Linux / Windows | `106030668215` / `106030668152` |
+| integration, MySQL 8.4 / 9.7 | `106030668206` / `106030668149` |
+| chaos-core, MySQL 8.4 / 9.7 | `106030668122` / `106030668134` |
+| Electron, Linux / Windows / macOS | `106030668144` / `106030668250` / `106030668374` |
+| mutation-scoped | `106030668147` |
+| merge-reports | `106034425458` |
+
+Each integration engine passes 480 tests in 84 files. Each required chaos engine passes 88
+tests with 42 documented future/nightly skips; no due durability case is skipped. The merge
+reconciles 5,770 passes and 84 skips across the six Vitest lanes and passes the unchanged
+global/per-file coverage gates: 91.03% statements, 92% lines, 85.84% branches, 91.53% functions.
+All 420 guards pass, with ten future skips. Artifact `10600437007` contains the merged reports;
+check metadata, artifact digests and logs are retained under `reports/remote-ci/35492818679*`.
+
+The mutation-scoped check on this documentation/hook push correctly reports no changed target;
+its success is not a mutation score. The separate fresh full-scope M1 rehearsal still has to
+finish. This complete green main run unblocks the final implementation landing; the promoted
+fixture, durable-ack observation repair and release platform checks require their own subsequent
+main run before the exit record names that implementation commit.
+
+## Targeted acknowledgement fault
+
+Requiring a newer acknowledgement alone exposes the second half of the nightly race:
+`durable-ack-nightly-after-{84,97}.log` record five / four failures out of fourteen selected
+cases. The unqualified synchronous fault still consumes a repeated baseline before the new
+edit commits. Kernel-signal and held-COMMIT cases pass. No test timeout is raised to mask this.
+
+The [D10-6 amendment](../adr/d10-6-targeted-ack-faults.md) adds an optional runtime-only
+note/sequence selector to the two existing post-ack wire faults. The one registry validates
+the target and keeps the point armed across older baselines and unrelated notes; the socket
+supplies the actual decoded outbound frame before the synchronous kill. Unqualified faults
+retain their behavior. This preserves the client's five-second baseline probe and both real
+crash mechanisms. The test's wait and its fault now name the same post-baseline revision.
+
+Three new unit regressions fail before the selector exists and pass afterward. Type checking
+then catches the collaboration plugin's forwarding adapter; two intermediate local runs are
+stopped when that missing adapter is found, with their partial logs preserved and no result
+claimed. The completed control-route file passes ten cases on each engine (48.10 / 49.30
+seconds), including invalid-target refusals and production/development namespace absence.
+All 428 guards pass with ten future skips. Final crash/recovery results follow separately.
+
+The third nightly's mutation job `106029938957` finishes successfully in 46 minutes 46 seconds:
+74.71223021582733%, 4,154 detected out of 5,560 valid mutants. It instruments 87 files / 10,607
+mutants and reuses 9,280 prior results; the 2,047-test dry run and completed report remain
+distinct from the fresh full-scope campaign. Its 85 reported source contents match `f8390f1`,
+with zero pending mutants. Counts are 3,849 killed, 305 timeouts, 1,242 survivors, 164 uncovered,
+4,525 compile errors, 521 ignored and one runtime error; the runtime error is excluded, not
+called killed. Artifact `10599743441` and report hash
+`3e44ce4d3042836b971a00a871ded09f68e1d66b34c1dc5839cc16ccf0d0ec14` are retained under
+`reports/remote-ci/35492580406-mutation*`.
+
+The complete unit project then passes 2,323 cases in 153 files. Naming the two existing fault
+unit suites in the new ADR reveals missing inventory rows; both rows are added and the generated
+acceptance map now resolves all 468 names. The maximum-latency diagnostic (iteration 27,
+1,997 ms plus jitter per SQL packet) records an old committed head, live server, no fired
+fault and no persistence error when the original 30-second observation expires. The nightly
+acknowledgement observation becomes 90 seconds inside the existing 180-second case deadline;
+normal CI remains 30 seconds. This explicit D10-6 amendment does not change product deadlines.
+The failed 30-second observations remain in `durable-ack-wire-after-*` and
+`durable-ack-max-latency-*`; the repaired targeted result is recorded only after completion.
+
+At 06:52 UTC, the workflow history API still lists exactly three nightly runs, all manual
+rehearsals. No scheduled nightly has completed or started. The third run's full API jobs
+`106029939104` / `106029939171` repeat the carried full-profile failures; artifacts
+`10599823933` / `10599914198` retain the evidence. The D12-20 scope disposition remains explicit.
+
+Final targeted nightly validation passes all sixteen selected cases on both engines: 334.30
+seconds on 8.4 and 275.67 seconds on 9.7 (`durable-ack-final-nightly-{84,97}.log`). Selection
+covers both crash mechanisms, each prefix length, the maximum injected latency at iteration 27,
+and both 3,000 ms / 50 ms held-COMMIT observations. The slowest 8.4 maximum-latency case takes
+81.383 seconds end to end and recovers the real acknowledged revision. These are targeted local
+checks, not the complete 680-case nightly file or remote evidence for the repair.
+
+Review also finds that rearming `ws.drop-after-ack` deletes a bare point name although its
+consumed keys include socket IDs. The registry now resets that point's actual socket keys;
+the new rearm regression fails before and passes after the fix. All 39 focused fault tests and
+the complete 2,324-test unit project pass. Build, full types, focused type-aware lint, formatting,
+all 428 guards and all 468 name references pass. All nine generated artifacts reproduce with
+`pnpm gen --skip-db`; the earlier command's incorrectly named skip variable and consequent
+unavailable-container failure remain in `durable-ack-final-generation.log`.
+
+The following repaired-tree Actions rehearsal must regenerate its own fixture and mutation
+evidence before the final fixture promotion and implementation/exit-record landing. The earlier
+`bb8a964` fixture and green run remain identified above and are not relabeled as this later tree.

@@ -33,7 +33,19 @@ and architecture errors. `db-grants.integration` still dumps and restores throug
 shipped tools against MySQL 8.4.11 and 9.7.2, including the backup role and binary logs.
 Release publishing still requires both image architectures, SBOM and provenance.
 
+The release workflow selects each child of the pushed manifest index explicitly with
+`SYFT_PLATFORM` and `GRYPE_PLATFORM`, generating separate AMD64 and ARM64 reports from the
+same immutable registry digest. Defaulting to the scanner runner's platform leaves the other
+published image unmeasured. Each architecture retains the `high` / `only-fixed` failure gate;
+the action inputs explicitly pin Syft 1.52.0 and Grype 0.119.0 to the tools used in preflight,
+instead of silently using a different action-bundled default.
+The release also executes the server identity command and shipped client on each platform.
+Report upload runs after failures too, preserving whichever evidence was produced. The release
+guard refuses an omitted platform, a colliding report, a disabled scan or a weaker ARM64 cutoff.
+
 Sources: [Oracle's Debian repository metadata](https://repo.mysql.com/apt/debian/dists/bookworm/Release),
 [the MySQL 9.7 YUM repository](https://repo.mysql.com/yum/mysql-9.7-community/el/9/),
 [Syft's package ownership precedence](https://github.com/anchore/syft/blob/v1.52.0/internal/relationship/exclude_binaries_by_file_ownership_overlap.go),
+[Syft's platform setting](https://oss.anchore.com/docs/reference/syft/configuration/),
+[Grype's platform setting](https://oss.anchore.com/docs/reference/grype/configuration/),
 and the OPS-04 amendment in [the decision log](../plan/13-decision-log.md).
