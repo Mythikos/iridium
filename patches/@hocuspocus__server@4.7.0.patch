@@ -1,5 +1,5 @@
 diff --git a/dist/hocuspocus-server.cjs b/dist/hocuspocus-server.cjs
-index 6b46aae0f7b1fa90a3e790e8f007810eab29f89f..b45b67e7c890d083adab6c34cac6b994d8670221 100644
+index 6b46aae..ead50cf 100644
 --- a/dist/hocuspocus-server.cjs
 +++ b/dist/hocuspocus-server.cjs
 @@ -231,10 +231,18 @@ var MessageReceiver = class {
@@ -31,8 +31,32 @@ index 6b46aae0f7b1fa90a3e790e8f007810eab29f89f..b45b67e7c890d083adab6c34cac6b994
  				removed.forEach((clientId) => entry.clients.delete(clientId));
  			}
  		}
+@@ -1510,7 +1518,8 @@ var Hocuspocus = class {
+ 			});
+ 		} catch (e) {
+ 			this.closeConnections(documentName);
+-			this.unloadDocument(document);
++			// An unpublished document is outside unloadDocument ownership.
++			document.destroy();
+ 			throw e;
+ 		}
+ 		document.isLoading = false;
+@@ -1518,7 +1527,12 @@ var Hocuspocus = class {
+ 			document.lastChangeTime = Date.now();
+ 			this.handleDocumentUpdate(document, origin, update);
+ 		});
+-		await this.hooks("afterLoadDocument", hookPayload);
++		try {
++			await this.hooks("afterLoadDocument", hookPayload);
++		} catch (e) {
++			document.destroy();
++			throw e;
++		}
+ 		document.beforeBroadcastStateless((document, stateless) => {
+ 			const hookPayload = {
+ 				document,
 diff --git a/dist/hocuspocus-server.esm.js b/dist/hocuspocus-server.esm.js
-index d4acd27730f34118e315126657987a43f7c7f51c..138c522fc06f5684c13a5386ccbfd5d02a7143c5 100644
+index d4acd27..c45f9a0 100644
 --- a/dist/hocuspocus-server.esm.js
 +++ b/dist/hocuspocus-server.esm.js
 @@ -201,10 +201,18 @@ var MessageReceiver = class {
@@ -64,8 +88,32 @@ index d4acd27730f34118e315126657987a43f7c7f51c..138c522fc06f5684c13a5386ccbfd5d0
  				removed.forEach((clientId) => entry.clients.delete(clientId));
  			}
  		}
+@@ -1480,7 +1488,8 @@ var Hocuspocus = class {
+ 			});
+ 		} catch (e) {
+ 			this.closeConnections(documentName);
+-			this.unloadDocument(document);
++			// An unpublished document is outside unloadDocument ownership.
++			document.destroy();
+ 			throw e;
+ 		}
+ 		document.isLoading = false;
+@@ -1488,7 +1497,12 @@ var Hocuspocus = class {
+ 			document.lastChangeTime = Date.now();
+ 			this.handleDocumentUpdate(document, origin, update);
+ 		});
+-		await this.hooks("afterLoadDocument", hookPayload);
++		try {
++			await this.hooks("afterLoadDocument", hookPayload);
++		} catch (e) {
++			document.destroy();
++			throw e;
++		}
+ 		document.beforeBroadcastStateless((document, stateless) => {
+ 			const hookPayload = {
+ 				document,
 diff --git a/src/Document.ts b/src/Document.ts
-index 9fa5f85f392eb528ddecdefdc08ea19d5a233308..d36deee35afed38615c293ee5501da241830abe6 100644
+index 9fa5f85..d36deee 100644
 --- a/src/Document.ts
 +++ b/src/Document.ts
 @@ -260,7 +260,8 @@ export class Document extends Doc {
@@ -78,8 +126,36 @@ index 9fa5f85f392eb528ddecdefdc08ea19d5a233308..d36deee35afed38615c293ee5501da24
  				removed.forEach((clientId: any) => entry.clients.delete(clientId));
  			}
  		}
+diff --git a/src/Hocuspocus.ts b/src/Hocuspocus.ts
+index 9f9087a..f7c5568 100644
+--- a/src/Hocuspocus.ts
++++ b/src/Hocuspocus.ts
+@@ -429,7 +429,8 @@ export class Hocuspocus<Context = any> {
+ 			);
+ 		} catch (e) {
+ 			this.closeConnections(documentName);
+-			this.unloadDocument(document);
++			// An unpublished document is outside unloadDocument ownership.
++			document.destroy();
+ 			throw e;
+ 		}
+ 
+@@ -443,7 +444,12 @@ export class Hocuspocus<Context = any> {
+ 			},
+ 		);
+ 
+-		await this.hooks("afterLoadDocument", hookPayload);
++		try {
++			await this.hooks("afterLoadDocument", hookPayload);
++		} catch (e) {
++			document.destroy();
++			throw e;
++		}
+ 
+ 		document.beforeBroadcastStateless(
+ 			(document: Document, stateless: string) => {
 diff --git a/src/MessageReceiver.ts b/src/MessageReceiver.ts
-index d6b185f516d1efe18f0f67aa6ff3bd1624f88fc1..0869f41a0b4430e6667c692da1dcd5cf9c053400 100644
+index d6b185f..0869f41 100644
 --- a/src/MessageReceiver.ts
 +++ b/src/MessageReceiver.ts
 @@ -87,8 +87,16 @@ export class MessageReceiver {

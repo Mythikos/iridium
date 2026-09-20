@@ -53,6 +53,14 @@ let text = ''; for await (const part of process.stdin) text += part;
 try { console.log(JSON.stringify(inspectRelease(JSON.parse(text), 'v0.1.0'))); }
 catch (error) { console.log(JSON.stringify({ error: error.message })); }
 `;
+const IMAGE_REPOSITORY_SCRIPT = `
+import { releaseImageRepository, releaseImageTags } from './scripts/lib/release-policy.ts';
+let text = ''; for await (const part of process.stdin) text += part;
+console.log(JSON.stringify(JSON.parse(text).map((repository) => {
+  try { return { repository: releaseImageRepository(repository), tags: releaseImageTags('0.1.0', repository) }; }
+  catch (error) { return { error: error.message }; }
+})));
+`;
 
 function jobBlocks(source: string): Map<string, string> {
   const lines = source.replaceAll('\r\n', '\n').split('\n');
@@ -107,6 +115,7 @@ function workflowIssues(source: string): string[] {
     'version',
     'milestone',
     'image_tags',
+    'image_repository',
     ...Object.values(required).map((job) => job.output),
   ]) {
     if (!plan.includes(`      ${key}: \${{ steps.select.outputs.${key} }}`)) {
@@ -155,6 +164,8 @@ function workflowIssues(source: string): string[] {
   const server = jobs.get('server-image') ?? '';
   if (!server.includes('tags: ${{ needs.release-plan.outputs.image_tags }}'))
     issues.push('Image tags must come from the tested selector');
+  if (!server.includes('IMAGE_NAME: ${{ needs.release-plan.outputs.image_repository }}'))
+    issues.push('Image scans must use the same canonical repository as the published tags');
   for (const setting of [
     'platforms: linux/amd64,linux/arm64',
     'push: true',
@@ -469,6 +480,29 @@ describe('guards.release-policy.guard [area:release]', () => {
 
   it('refuses malformed image versions before producing a publishable tag set', () => {
     expect(evaluate(IMAGE_TAG_SCRIPT, ['01.2.3', '1.2.3+build', '1.2.3-rc.01'])).toEqual([
+      { error: expect.any(String) },
+      { error: expect.any(String) },
+      { error: expect.any(String) },
+    ]);
+  });
+
+  it('uses one lowercase image repository for tags and digest-based scans', () => {
+    expect(
+      evaluate(IMAGE_REPOSITORY_SCRIPT, [
+        'ghcr.io/Mythikos/iridium-server',
+        '',
+        'one,two',
+        'one two',
+      ]),
+    ).toEqual([
+      {
+        repository: 'ghcr.io/mythikos/iridium-server',
+        tags: [
+          'ghcr.io/mythikos/iridium-server:0.1.0',
+          'ghcr.io/mythikos/iridium-server:0.1',
+          'ghcr.io/mythikos/iridium-server:0',
+        ],
+      },
       { error: expect.any(String) },
       { error: expect.any(String) },
       { error: expect.any(String) },

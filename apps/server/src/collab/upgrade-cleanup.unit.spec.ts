@@ -2,6 +2,7 @@
 import { errorMonitor, type EventEmitter } from 'node:events';
 import { createConnection, type Socket } from 'node:net';
 
+import { Hocuspocus, type Document } from '@hocuspocus/server';
 import { createDeferred, withDeadline } from '@iridium/testkit';
 import { describe, expect, it } from 'vitest';
 
@@ -35,6 +36,48 @@ function responseOf(socket: Socket): Promise<{ status: number; body: string }> {
 }
 
 describe('collab.upgrade-cleanup.unit [area:collab]', () => {
+  it.each(['onLoadDocument', 'afterLoadDocument'] as const)(
+    'destroys an unpublished document after %s refuses it, then permits a clean retry',
+    async (stage) => {
+      const allocated: Document[] = [];
+      const refusal = new Error('capacity refusal');
+      let refuse = true;
+      const server = new Hocuspocus({
+        quiet: true,
+        extensions: [
+          {
+            async onLoadDocument({ document }) {
+              allocated.push(document);
+              if (refuse && stage === 'onLoadDocument') throw refusal;
+            },
+            async afterLoadDocument() {
+              if (refuse && stage === 'afterLoadDocument') throw refusal;
+            },
+          },
+        ],
+      });
+      const open = () =>
+        server.createDocument('refused-note', new Request('http://localhost'), 'test-socket', {
+          isAuthenticated: true,
+          readOnly: false,
+        });
+      try {
+        await expect(open()).rejects.toBe(refusal);
+        expect(allocated[0]?.isDestroyed).toBe(true);
+        expect(server.documents.size).toBe(0);
+        expect(server.loadingDocuments.size).toBe(0);
+        refuse = false;
+        const replacement = await open();
+        expect(replacement).not.toBe(allocated[0]);
+        expect(replacement.isDestroyed).toBe(false);
+        await server.unloadDocument(replacement);
+        expect(replacement.isDestroyed).toBe(true);
+      } finally {
+        for (const document of allocated) document.destroy();
+      }
+    },
+  );
+
   it('closes an early-denied raw upgrade and completes product shutdown without client assistance', async () => {
     const harness = await buildWithoutDatabase();
     const app = harness.app;

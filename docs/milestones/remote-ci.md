@@ -78,3 +78,30 @@ Renderer sandboxing remains enabled. This does not supply the outstanding local 
 
 A temporary, manually dispatched `runner-diagnostics` workflow isolates the fresh-capacity child
 lifecycle on Linux; it is a diagnostic and cannot stand in for a required matrix run.
+
+## Third repair
+
+Commit `85dbad83e125e6ba41af0b37bb9306cb8d247faa` starts
+[CI 35477325274](https://github.com/Mythikos/iridium/actions/runs/35477325274) and
+[diagnostic 35477333095](https://github.com/Mythikos/iridium/actions/runs/35477333095).
+Static, both unit jobs, macOS Electron and Windows Electron pass. Linux's helper setup initially
+captures Electron 44's lazy-download progress text along with the binary path; explicitly completing
+the download before reading the path corrects the setup. The prior CI was superseded and remains
+cancelled, with its completed failures preserved.
+
+The diagnostic fails in cleanup after all capacity assertions finish, with the child still alive.
+Hocuspocus 4.7.0 attempts normal unload after a failed load, but that document has not yet entered its
+registry; the unpublished document's awareness timer survives. The pinned source and both runtime
+patches now destroy that object on either load-hook failure. Both new lifecycle regressions fail
+before the patch and pass afterward, including a successful retry of the same document name; all
+five cleanup checks pass. The seven-task forced server build, full types and 53 release guards pass.
+The focused fresh-capacity, awareness-identity and kernel smoke integration files also pass against
+local MySQL 8.4 (three tests); their remote confirmation remains pending for this repair.
+The patch was reconstructed from installed package bytes after an offline patch command found no
+cached tarball. A frozen offline install verifies its updated SHA-256 lockfile references and applies
+it without changing dependency versions. The initial Windows junction-permission failure and the
+successful elevated offline retry are retained; this is not a registry audit.
+
+Release preflight also canonicalizes the mixed-case GitHub owner into one lowercase OCI repository
+for publishing, SBOM generation and digest-based scanning; its regression is in the release guards.
+No version PR exists, and the release workflow has no version-PR job.

@@ -65,16 +65,22 @@ export function selectRelease(tag: string, packageVersion: string, current: stri
   };
 }
 
+/** OCI repositories are lowercase even when the GitHub owner contains uppercase letters. */
+export function releaseImageRepository(repository: string): string {
+  if (repository.length === 0 || /[\s,]/.test(repository)) {
+    throw new ReleasePolicyError('IMAGE_NAME must name one image repository');
+  }
+  return repository.toLowerCase();
+}
+
 /** Stable aliases never move to a prerelease. The exact version is always published. */
 export function releaseImageTags(version: string, repository: string): string[] {
   if (productVersion(`v${version}`) === null)
     throw new ReleasePolicyError(`Invalid image version: ${version}`);
-  if (repository.length === 0 || /[\s,]/.test(repository)) {
-    throw new ReleasePolicyError('IMAGE_NAME must name one image repository');
-  }
+  const canonical = releaseImageRepository(repository);
   const [major = '', minor = ''] = version.split('.');
   const versions = version.includes('-') ? [version] : [version, `${major}.${minor}`, major];
-  return versions.map((value) => `${repository}:${value}`);
+  return versions.map((value) => `${canonical}:${value}`);
 }
 
 function punctuation(character: string | undefined): boolean {

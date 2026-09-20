@@ -590,7 +590,7 @@ overrides:
 patchedDependencies:
   '@fastify/websocket@11.3.0': 5f5897925f7edbb277ae588a529941119cf7cc8ad1daed0e1bd481917d7d352d
   '@hocuspocus/provider@4.7.0': 92d3ae408ffd1aa51e91ec86db3e5c456212e68425d837fdf7308ad0fd5be7e5
-  '@hocuspocus/server@4.7.0': b71c1e93712cc7297609a8df57dcf993c828f677d55bd495a18dcdb935d9520a
+  '@hocuspocus/server@4.7.0': 129ecfa5422cd41bd826935f58a4d6446c97d4feb119653f6f641bd592f165d1
   ssh-remote-port-forward@1.0.4: d2159d7f94e8f19b5a1c89e029082ee40125f05aab5dbad761311f3beabe77e9
 
 importers:
@@ -763,7 +763,7 @@ importers:
         version: 4.7.0
       '@hocuspocus/server':
         specifier: 'catalog:'
-        version: 4.7.0(patch_hash=b71c1e93712cc7297609a8df57dcf993c828f677d55bd495a18dcdb935d9520a)(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)
+        version: 4.7.0(patch_hash=129ecfa5422cd41bd826935f58a4d6446c97d4feb119653f6f641bd592f165d1)(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)
       '@iridium/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -8903,7 +8903,7 @@ snapshots:
       y-protocols: 1.0.7(yjs@13.6.32)
       yjs: 13.6.32
 
-  '@hocuspocus/server@4.7.0(patch_hash=b71c1e93712cc7297609a8df57dcf993c828f677d55bd495a18dcdb935d9520a)(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)':
+  '@hocuspocus/server@4.7.0(patch_hash=129ecfa5422cd41bd826935f58a4d6446c97d4feb119653f6f641bd592f165d1)(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)':
     dependencies:
       '@hocuspocus/common': 4.7.0
       async-mutex: 0.5.0

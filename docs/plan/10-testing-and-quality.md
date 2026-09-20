@@ -1631,7 +1631,7 @@ Run once per failure mode: `FAULT.storeThrow`, MySQL proxy `setEnabled(false)`, 
 
 ### CH-9 — Writer backpressure (HP-5; `collab.backpressure.chaos`)
 
-1. Arm `FAULT.storeSlow` at 5 000 ms so the FIFO cannot drain.
+1. Arm the one-shot `FAULT.storeHoldBeforeCommit` and wait for it to hold the first real write. It remains held until explicit disarm, independently of runner speed; other writers can still commit.
 2. Drive updates from two clients until the queue bound (5 000 updates or 32 MiB) is crossed.
 3. Assert: the document becomes read-only for **all** connections; each client receives `persist-failed {reason:'backpressure', retryInMs}`; further inbound updates are answered `SyncStatus(false)`; the `collab_writer_backlog` metric and the readiness backlog-age check reflect it; no update is silently dropped.
 4. Remove the fault. Assert the queue drains, the document becomes writable again, clients recover to `saved`, and the total committed content equals the union of the accepted updates (nothing accepted was lost, nothing rejected was applied).

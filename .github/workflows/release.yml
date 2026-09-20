@@ -40,6 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.select.outputs.version }}
       milestone: ${{ steps.select.outputs.milestone }}
+      image_repository: ${{ steps.select.outputs.image_repository }}
       image_tags: ${{ steps.select.outputs.image_tags }}
       verify: ${{ steps.select.outputs.verify }}
       server_image: ${{ steps.select.outputs.server_image }}
@@ -120,6 +121,8 @@ jobs:
     needs: [release-plan, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      IMAGE_NAME: ${{ needs.release-plan.outputs.image_repository }}
     permissions:
       contents: read
       packages: write

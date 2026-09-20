@@ -10,6 +10,7 @@ import {
   productVersion,
   releaseNoteIssues,
   releaseImageTags,
+  releaseImageRepository,
   ReleasePolicyError,
   selectRelease,
   type ReleasePlan,
@@ -139,6 +140,7 @@ const check: Check = {
         const values = {
           version: inspected.plan.version,
           milestone: inspected.plan.milestone,
+          image_repository: releaseImageRepository(repository),
           image_tags: releaseImageTags(inspected.plan.version, repository).join(','),
           ...inspected.plan.jobs,
         };
