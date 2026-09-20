@@ -1,6 +1,6 @@
 # Iridium Development Plan
 
-Plan of record, revised 2026-09-19; first issued 2026-09-11. M0 has a local validation record with formal exit pending. M1 is implemented, with local final58 verification recorded separately from its pending formal exit. M1 work was authorized by the project owner on 2026-09-17. See `docs/milestones/M0-exit.md` and `docs/milestones/M1-progress.md` for verified results and the remaining external prerequisites.
+Plan of record, revised 2026-09-20; first issued 2026-09-11. M0 is formally closed with its remote CI matrix and `v0.0.0` marker. M1 is implemented and versioned at `0.1.0`, with its final remote verification and exit record still pending. M1 work was authorized by the project owner on 2026-09-17. See `docs/milestones/M0-exit.md` and `docs/milestones/M1-progress.md` for verified results and the remaining exit prerequisites.
 
 The eight questions this plan carried were answered by the project owner on 2026-09-12, and this revision incorporates all eight. Four changed the plan: G1 (Iridium ships its own OAuth 2.1 authorization server in the MVP), G3 (MySQL 8.4 LTS becomes a required target alongside 9.7 LTS), G6 (the desktop application is the supported client at 1.0) and G8 (1.0 ships unsigned zipped desktop bundles). Four confirmed the default the plan already carried: G2, G4, G5 and G7. *Decisions you made*, below, records every answer; §G of `14-risks-and-open-questions.md` records the reading applied to each one.
 

@@ -6242,6 +6242,17 @@
         "named by an acceptance-map entry only"
       ]
     },
+    "ops.readiness.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M1",
+      "project": "unit",
+      "file": "apps/server/src/ops/readiness.unit.spec.ts",
+      "tag": "[area:ops]",
+      "asserts": "M1 — Concurrent boot, HTTP and periodic callers share one complete scan; completion releases the scan for a fresh recovery probe, and a scan finishing during drain cannot reopen admission.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "ops.restore-verify.chaos": {
       "layer": "L5",
       "sinceMilestone": "M8",

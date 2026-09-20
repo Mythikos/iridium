@@ -518,3 +518,32 @@ Actions fixture and verify both restores, then land the implementation/exit-reco
 and tag `v0.1.0` on the record commit. The tagged release still needs its own matrix, published
 image identity, architecture scans, SBOM and provenance. Already-started remote campaigns
 remain running and retain their own commits; they are neither cancelled nor counted as green.
+
+## Public repository: runners resume
+
+The owner changes the repository to public on September 20. At 05:47 UTC,
+[M1 rehearsal 35492579410](https://github.com/Mythikos/iridium/actions/runs/35492579410)
+and [nightly 35492580406](https://github.com/Mythikos/iridium/actions/runs/35492580406)
+start actual runners on `f8390f1a3ef577a3d58672dfb77234ca978c86c2`; this resolves the runner
+allocation blocker. The failed private-repository runs remain intact.
+
+The rehearsal's static check `106029937072` passes its build, all 420 guards (ten future skips),
+types, lint, formatting and generation, then fails `check-test-name-references`: the readiness
+ADR references the new `ops.readiness.unit` suite, but its inventory row was omitted from
+`10-testing-and-quality.md`. The repair adds its M1 row with the actual path and `[area:ops]`
+tag and regenerates `docs/acceptance-map.json` to 466 keys. No test or gate is removed.
+`35492579410-static.log` preserves the failed check; dependent workload jobs skip and merge
+`106030046310` fails on missing inputs, so this rehearsal is not green evidence.
+
+The plan overview and M1 progress summary now reflect M0's formal closure and the resumed
+runner availability. The new nightly remains an execution against its original captured tree,
+independent of this documentation/inventory correction.
+
+The local name-reference check now resolves all 466 inventory keys, and all 420 guards pass
+with ten future skips. The first commit attempt then exposes an independent hook gap: when
+the only formatter-matching staged file is the intentionally ignored generated acceptance map,
+oxfmt exits 2 because no target remains. The staged formatter now uses its documented
+`--no-error-on-unmatched-pattern` option, as recommended for
+[pre-commit hooks](https://oxc.rs/docs/guide/usage/formatter/ci#pre-commit-hook). Existing ignore
+rules and the repository-wide CI format check stay intact. Before/after executions of the same
+ignored path return 2 and 0 respectively; both logs are retained as `public-resume-format-hook-*`.

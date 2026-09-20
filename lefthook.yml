@@ -3,7 +3,8 @@ pre-commit:
   jobs:
     - name: format
       glob: '*.{ts,tsx,cts,mts,js,mjs,cjs,json,jsonc,yaml,yml,css}'
-      run: pnpm exec oxfmt {staged_files}
+      # Generated artifacts can leave this staged selection entirely ignored by oxfmt.
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     - name: lint
       glob: '*.{ts,tsx,cts,mts,js,mjs,cjs}'
