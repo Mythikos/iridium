@@ -368,3 +368,52 @@ is explicitly skipped; both remote integration engines own schema parity), forma
 and 420 guards with ten future skips. The corrected ARM64 image also builds and executes all
 three MySQL tools and the `0.1.0` server CLI with the synthetic preflight source identity.
 Both architecture builds and the local scan are preparation for the versioned remote runs.
+
+## Versioned rehearsal: frozen credential-flood clock
+
+The versioned `b663d81` tree starts [main CI 35488087214](https://github.com/Mythikos/iridium/actions/runs/35488087214),
+[M1 rehearsal 35488086906](https://github.com/Mythikos/iridium/actions/runs/35488086906), and
+[nightly rehearsal 35488088005](https://github.com/Mythikos/iridium/actions/runs/35488088005).
+The two CI runs pass static, both unit jobs and all three Electron jobs. Both 9.7 integration
+jobs pass, including 480 tests in the main run (`106018453010`). Both 8.4 integration jobs
+fail (`106018452991`, `106018242143`): 479 tests pass and the credential-flood case fails its
+final `/readyz` assertion. The fixture upload is skipped in the failed rehearsal; no fixture
+from that job is promoted. The full mutation and remaining chaos jobs are still running at
+this checkpoint, so neither CI run is described as successful.
+
+The flood intentionally freezes its injected clock while attributing all 10,000 real malformed
+bearer requests to exactly zero SQL/native-password work. On the slower runner the flood lasts
+over 30 seconds, so its final readiness probe compares stale fixture time with live MySQL time
+and correctly returns 503 for clock skew. The regression deliberately starts that frozen clock
+31 seconds behind. The first diagnostic hits the resulting negative-uptime schema check; the
+preserved follow-up probes readiness first and confirms `clock_skew: fail` at 38,804 ms with
+every other check healthy or the expected access-log warning.
+
+After query/native-work accounting finishes, both flood cases now jump the fixture clock back
+to wall time without firing scheduled work, then check readiness with the full response in any
+failure message. No product threshold, request count, concurrency, or SQL/native-work assertion
+changes. Both cases pass on each required engine in the local correction run. Logs are retained
+as `credential-flood-clock-before*` and `credential-flood-clock-after-{84,97}.log`.
+
+The corrected ARM64 preflight scan also passes with zero fixable matches under the unchanged
+Grype gate, using the same September 19 database as AMD64. Its image identity is
+`sha256:3cc740e2f00dd64efe08685161f963fe3642b08842cdfdc2345215257448b6bd`.
+The committed-source AMD64 validation image reports version `0.1.0`, commit `b663d81`, and
+schema head `0055_min_client_version`; its identity is
+`sha256:dab7a62adc42a2a387b70ad2bada0d793f4c768877bc3133e2f22ca72bfccd86`.
+These remain local preflights, not published release evidence.
+
+The second nightly passes Node 26 (`106018032696`: 2,724 tests in 226 files) and the third chaos
+shard on each engine (`106018032708`, `106018032668`: twelve cases each). Its first chaos shards
+fail (`106018032671`, `106018032704`): CH-16 encounters Fastify's default onReady timeout under
+injected database latency, and 9.7 also exceeds the blackhole outage readiness-response deadline.
+Each first shard reports 65 passes and two failures. The innovation advisory repeats its fixture
+override/version-floor failure (`106018032681`). Other long-running jobs remain pending.
+These failures are preserved for diagnosis, not counted as green health. There are still only
+two manual nightly runs and no observed scheduled run.
+
+The M0 record's own push CI `35487362872` was superseded by the versioning push: its completed
+static, unit and Electron jobs pass, its four database jobs are cancelled, and its merge fails
+on incomplete inputs. M0's formal source proof remains complete successful `35485518914`, and
+its marker release remains successful `35487366236`; the superseded record run is not substituted
+for either proof.

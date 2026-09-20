@@ -23,6 +23,9 @@ describe('security.credential-flood.integration [area:security]', () => {
   it('rejects ten thousand real malformed bearer requests before SQL or native password work', async () => {
     const target = await startAuthServer({ extraEnv: { METRICS_TOKEN } });
     try {
+      // Model a slow runner deterministically: MySQL's wall clock keeps advancing while this
+      // fixture freezes time to attribute every query and native operation to the flood.
+      target.clock.jump(Date.now() - 31_000);
       const before = target.app.database.queryCounts();
       const nativeBefore = target.app.auth.hasher.operationCounts();
       const metricsBefore = await target.server.metrics();
@@ -56,8 +59,12 @@ describe('security.credential-flood.integration [area:security]', () => {
           (metricsBefore['iridium_token_auth_failures_total{reason="bad_format"}'] ?? 0),
       ).toBe(BEARER_REQUESTS);
       expect(metricsAfter['iridium_db_pool_in_use{pool="app"}']).toBe(0);
+      // SQL attribution is complete. Rejoin real MySQL time before its clock-skew probe;
+      // jump deliberately leaves scheduled probes paused instead of replaying them in a burst.
+      target.clock.jump(Date.now());
+      const ready = await target.server.rest().request('GET', '/readyz');
+      expect(ready.status, JSON.stringify(ready.body)).toBe(200);
       expect((await target.server.rest().request('GET', '/healthz')).status).toBe(200);
-      expect((await target.server.rest().request('GET', '/readyz')).status).toBe(200);
     } finally {
       await target.stop();
     }
@@ -155,7 +162,10 @@ describe('security.credential-flood.integration [area:security]', () => {
             (metricsBefore['iridium_login_failures_total{reason="unknown_user"}'] ?? 0),
         ).toBe(allowedAttempts);
         expect(metricsAfter['iridium_db_pool_in_use{pool="app"}']).toBe(0);
-        expect((await target.server.rest().request('GET', '/readyz')).status).toBe(200);
+        // Native-work accounting is complete; readiness compares against real MySQL wall time.
+        target.clock.jump(Date.now());
+        const ready = await target.server.rest().request('GET', '/readyz');
+        expect(ready.status, JSON.stringify(ready.body)).toBe(200);
       } finally {
         await settled;
       }
