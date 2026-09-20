@@ -143,6 +143,7 @@ export class Readiness {
   readonly #clock: Clock;
   readonly #listeners = new Set<(state: ReadinessState, reason: string) => void>();
   #last: ReadyzBody | null = null;
+  #evaluation: Promise<ReadyzBody> | null = null;
   readonly #gates = new Map<ReadyzCheckName, () => boolean>();
 
   constructor(clock: Clock) {
@@ -210,7 +211,18 @@ export class Readiness {
    * `ReadyzCheckName`: a check that disappears when its subsystem is absent would make the alert
    * expression that matches on it silently stop matching.
    */
-  async evaluate(): Promise<ReadyzBody> {
+  evaluate(): Promise<ReadyzBody> {
+    // HTTP probes, the periodic recheck and boot share one complete scan. Starting a second
+    // sixteen-check scan while MySQL is slow would multiply pool borrowers every five seconds.
+    this.#evaluation ??= Promise.resolve()
+      .then(() => this.#evaluate())
+      .finally(() => {
+        this.#evaluation = null;
+      });
+    return this.#evaluation;
+  }
+
+  async #evaluate(): Promise<ReadyzBody> {
     const checks: ReadyzCheck[] = [];
     for (const name of READYZ_CHECK_NAMES) {
       const check = this.#checks.get(name);

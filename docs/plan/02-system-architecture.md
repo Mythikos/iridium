@@ -171,6 +171,8 @@ The persistence pipeline is the only code that touches `dbPersist`; everything e
 | `child` | harness-reserved `PORT` (or `0` for a new ephemeral port), reported on stdout as `{"listening":<port>}` | SIGTERM drain; SIGKILL by the test | on unless `JOBS_ENABLED=false` | `IRIDIUM_FAULT` when `NODE_ENV=test` | `@iridium/testkit startServer({mode:'child'})`, chaos and E2E lanes |
 | `in-process` | none (`app.inject()`, `app.injectWS()`, or `listen({port:0})` when a real socket is needed) | none | off by default (`jobs.run(type)` callable directly) | `IRIDIUM_FAULT` | Vitest `integration`, `contract`, `mcp` projects |
 
+**ARCH-02 amendment (2026-09-20):** concurrent HTTP, boot and five-second periodic readiness probes share one serial evaluation; the next call after completion starts a fresh scan. Failed outcomes are not cached across later probes, and an evaluation finishing during drain cannot reopen admission. Fastify's plugin/onReady deadline is explicitly 60 seconds in all modes so the sixteen real checks can finish under CH-16's injected database latency. Listening still follows complete boot. Check thresholds, fail-closed behavior and chaos deadlines are unchanged. See [the ADR](../adr/arch-02-readiness-probe-lifecycle.md).
+
 Boot order inside `buildApp` (each step fails fast with a redacted reason and a non-zero exit; nothing listens until the last step):
 
 1. **config** — `config/env.ts` parses `process.env` once with the zod `EnvSchema` (`*_FILE` secrets read, unknown `IRIDIUM_*` keys rejected except the reserved harness namespaces of principle 5, `z.prettifyError` on failure), produces the frozen `IridiumConfig` object and logs the redacted summary. `iridium config check` stops here.

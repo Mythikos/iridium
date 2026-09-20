@@ -417,3 +417,88 @@ static, unit and Electron jobs pass, its four database jobs are cancelled, and i
 on incomplete inputs. M0's formal source proof remains complete successful `35485518914`, and
 its marker release remains successful `35487366236`; the superseded record run is not substituted
 for either proof.
+
+## Completed first remote mutation campaign
+
+The first nightly's full mutation job
+[105984200123](https://github.com/Mythikos/iridium/actions/runs/35475597877/job/105984200123)
+finishes successfully at 04:44 UTC on September 20, after 328 min 31 s of Stryker execution.
+It checks `6da12835fdaa1ccd41d4cbcf2bb74d9847d47fb9`, an earlier tree, and scores
+**74.92810927390366%** against the unchanged 70 threshold. Both the Actions cache miss and
+Stryker's explicit absent incremental-result file establish a fresh full campaign. It instruments
+87 source files and 10,612 mutants; its initial dry run passes 2,034 tests.
+
+The official report metrics reconcile 3,845 killed, 324 timed out, 1,231 survived, 164 uncovered,
+4,526 compile errors, 521 ignored and one runtime error, with zero pending results. Every one
+of the report's 85 source contents matches its checked-out commit. Standard scoring uses
+4,169 detected out of 5,564 valid mutants. Mutant 1091 in `auth/credentials/throttle.ts`
+(`tableCreated: true` to `false`) hits the previously recorded Vitest/Stryker opaque-error
+formatting failure after two worker restart attempts. It is excluded, not killed; conservatively
+counting it as undetected still exceeds 74.9%.
+
+Artifact `10599175688` (`nightly-mutation`) has digest
+`sha256:8b2db02a2e8e418c70e696e95d5777db49bd85b3b36079db588a499823787e1a`.
+The extracted report SHA-256 is
+`a0588883a35353d71174fe3154b91c262b1be2b22762214801d4a55221630717`.
+The log, report, output cache and source/metric reconciliation are retained under
+`reports/remote-ci/35475597877-mutation*`. This is actual remote full-scope evidence for
+`6da1283`; later NoteSession, content and readiness changes are not certified by that score.
+The nightly run as a whole remains failed.
+
+The second nightly's flake hunt also finishes successfully:
+[106018054926](https://github.com/Mythikos/iridium/actions/runs/35488088005/job/106018054926)
+passes 410 tests in 74 files on each of three independent repetitions, taking
+709.17 / 662.93 / 672.33 seconds. Its artifact is `10597439572` (`nightly-flake-hunt`);
+the complete log is retained. This proves that lane at `b663d81`, not a green nightly overall.
+
+## Readiness lifecycle correction
+
+The second nightly's first chaos shards fail on both required engines, as recorded above.
+A local unmodified reproduction of CH-16 iteration 10 on 8.4 fails with the same Fastify
+onReady timeout; `second-owner-startup-before-84.log` preserves that failure. The new concurrency
+regressions initially fail twice because three callers start three scans and receive different
+results (`readiness-single-flight-before.log`).
+
+[ARCH-02](../adr/arch-02-readiness-probe-lifecycle.md) now makes concurrent HTTP, periodic and
+boot probes share one complete serial scan, released on completion so recovery performs fresh
+checks. Drain remains irreversible. The explicit Fastify plugin/onReady limit is 60 seconds
+in every mode, matching the existing child startup handshake; CH-16's latency, twenty nightly
+iterations and 180-second case deadline are unchanged. This corrects the runtime lifecycle
+exposed by the real runner failures.
+
+The focused readiness/shutdown unit check passes all seven cases; the complete unit project
+passes 2,317 tests in 153 files. Build, TypeScript, focused type-aware lint and all 420 guards
+pass (ten future guard cases remain skipped). All nine generated artifacts reproduce with
+the local database generation phase explicitly skipped.
+
+The complete two-file targeted chaos check uses the unchanged nightly budget
+`IRIDIUM_CHAOS_ITERATIONS=200`, selecting all twenty CH-16 iterations and all four database-outage
+modes without a title filter or retry. MySQL 8.4 passes all 24 cases in 923.47 seconds; MySQL 9.7
+passes all 24 in 909.32 seconds. Both run the real child process and retain the acknowledged
+content/owner-fencing assertions. Logs are `readiness-nightly-after-{84,97}.log`. These are
+targeted local regressions, not a full nightly or a substitute for the blocked Actions run.
+
+The subsequent complete readiness HTTP and shutdown-drain files pass all 23 cases on each
+engine (25.13 / 25.76 seconds). They retain the real pending-migration 503-to-200 transition,
+unreachable-database behavior, complete check schema, admission fence and durable drain.
+Logs are `readiness-http-after-{84,97}.log`. All local runtime checks use the same built repair;
+the build is not replaced between child-process restarts.
+
+## Actions billing refusal
+
+At 04:40 UTC, [CI 35489747824](https://github.com/Mythikos/iridium/actions/runs/35489747824)
+for `0118ef24579f0dbeeafa70af20a7ffaffe035c1c` fails before starting a runner. Its static
+check `106022532161` and merge check `106022535840` have no executed steps. GitHub's annotation
+reports failed account payments or an Actions spending limit and directs the owner to
+Billing & plans. The earlier rehearsal's merge `106022287270` and main merge `106022337916`
+receive the same refusal after both of their chaos jobs pass. Their 8.4 integration failures
+remain independently recorded; billing does not explain those earlier test failures.
+
+The annotations are preserved as `35489747824-static-annotations.json`,
+`35488086906-merge-annotations.json` and `35488087214-merge-annotations.json`. Their missing
+job logs are consistent with jobs never starting, not a passing or empty workload. Jobs that
+already obtained runners continue independently. The owner has been asked to resolve the
+account payment/spending setting; no financial setting, repository visibility or CI gate is
+changed to bypass it. Until new runners can start, the repaired tree cannot obtain its required
+remote matrix, fixture-production artifact or final exit evidence. `CURRENT` remains M0 and
+`v0.1.0` is not cut.

@@ -2536,3 +2536,20 @@ fixing the scan's high findings in bundled npm dependencies and `libpcre2-8-0`.
 The release's Grype high-severity, fix-available gate remains unchanged.
 
 ADR mirror: [OPS-04](../adr/ops-04-mysql-client-packaging.md).
+
+## ARCH-02 amendment: readiness probe lifecycle (2026-09-20)
+
+Concurrent HTTP, boot and periodic readiness callers share one complete serial evaluation.
+The next call after completion starts a fresh scan; failed outcomes do not become a persistent
+cache, and completion during drain cannot reopen admission. This prevents the five-second
+recheck from multiplying database borrowers during slow or blackholed connections. All check
+names, order, thresholds and fail-closed decisions remain unchanged.
+
+Fastify's plugin/onReady timeout is explicitly 60 seconds in every server mode. CH-16's
+up-to-500 ms database latency makes the sixteen-check initial scan exceed the framework's
+ten-second default. The new bound matches the existing child startup handshake; listening
+still follows complete boot, and the chaos scenario, iterations and case deadline are unchanged.
+
+ADR mirror: [ARCH-02](../adr/arch-02-readiness-probe-lifecycle.md). Regression proofs:
+`ops.readiness.unit`, `ops.shutdown.unit`, `readyz.integration`,
+`collab.second-process-refused.chaos` and `collab.db-outage.chaos`.

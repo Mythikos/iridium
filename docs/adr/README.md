@@ -127,6 +127,8 @@ single limits policy (`A.1`), and `0059`–`0061` are the three ADRs the project
 
 ## Section decision amendments
 
+- [ARCH-02: readiness probe lifecycle](./arch-02-readiness-probe-lifecycle.md), amended 2026-09-20 after remote latency and blackhole probes.
+
 - [D10-25: nightly chaos runner budget](./d10-25-nightly-chaos-budget.md), amended 2026-09-20 after the first remote four-hour timeout.
 
 - [OPS-04: MySQL client packaging](./ops-04-mysql-client-packaging.md), amended 2026-09-20 for both release architectures.

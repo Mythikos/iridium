@@ -1,6 +1,8 @@
 # M1 verification record
 
-M1 review corrections and implementation are complete locally. The final58 build, both database aggregates, authenticated API fuzzing, database properties, PR chaos, Windows and native Linux desktop, Compose, current 55-migration fixture and fresh full-scope mutation proofs pass. Independent review verifies all 314 selected nightly durability test executions across both engines and the 74.25% mutation score with zero cache reuse. Two original reporting-wrapper failures remain preserved, with their completed workloads separately validated. Final affected checks are recorded below. M0 now closes through the remote proof and marker in [M0-exit.md](M0-exit.md). M1 still requires its versioned fixture and formal exit record; `CURRENT` remains `M0`.
+M1 is implemented and versioned at `0.1.0`; formal exit remains pending. M0 is formally closed through the remote proof and marker in [M0-exit.md](M0-exit.md). The latest remote attempt, [CI 35489747824](https://github.com/Mythikos/iridium/actions/runs/35489747824), cannot start jobs because GitHub reports failed account payments or an Actions spending limit. The owner must resolve that account setting before the repaired tree can obtain new remote proof. The current versioned fixture, complete passing required checks and M1 exit record remain outstanding; `CURRENT` stays `M0`, and `v0.1.0` has not been cut.
+
+The final58 results below are historical local proofs: build, both database aggregates, authenticated API fuzzing, database properties, required chaos, Windows and native Linux desktop, Compose, the 55-migration fixture and a fresh full-scope 74.25% mutation campaign. The two original reporting-wrapper failures remain preserved. Subsequent committed fixes and actual Actions results are tracked in [remote-ci.md](remote-ci.md); earlier passing inputs do not certify the later tree.
 
 ## Status and provenance
 
@@ -11,6 +13,13 @@ M1 implements the authenticated headless note kernel: one authorization core, tr
 The historical 53h production image is `iridium-server:m1-53h`, ID `sha256:0822e5cef59e318b41bbf2495b396e5df230c987834463286dd084088bcdb4c4`. Its build provenance is in `reports/m1-final53h-docker-inputs.json` and `m1-final53h-full-host-build-inputs.json`. Source and all 435 host artifacts stayed unchanged through the image build. The 53h corrections isolated each in-process test server environment, preserved independent API response records, documented two existing refusal statuses and explicitly enabled Chromium sandboxing in the Electron test launcher.
 
 ## Independent review corrections
+
+The two later NoteSession findings are fixed in `97906b7fc3271a23f61ef5942ec455c3279db467`.
+The existing Clock enforces a five-second deadline for an unanswered document CLOSE; expiry
+retires the stale socket generation and reconnects without losing the document, undo state or
+pending edits. Echo, disconnection and disposal cancel the deadline. Grace retries combine the
+server's minimum with the existing exponential delay, including when grace is zero. Six new
+regressions pass in the remote unit jobs. Neither finding is deferred.
 
 The implementation and review fixes were committed and pushed in `29155191d4c116db1897fc083d9939e3ce588f30` (`feat: land the M1 kernel`), including the S01/S02/S14/S06 spike-harness deletions. The following results are targeted historical review evidence; they do not replace the final frozen build, aggregate coverage, mutation, database matrix, or formal exit prerequisites.
 
@@ -128,7 +137,7 @@ The fuzz reports retain 1,035/1,023 skipped cases; 2/1 operations returned only 
 
 The historical **73.63%** mutation score is carried forward from the 53g cache, above the unchanged 70 threshold. The 53h incremental run passed **1,718 initial tests**, reused 9,667 mutant results and evaluated 31 candidates; the other 521 mutants were ignored. It did not freshly execute all 10,219 mutants. The archived 53d baseline reports 66.56% but lacks the later `run.json`/`provenance.json` chain-root capture. Forced reruns of six targets and the 53g full-scope incremental run provide partial execution provenance, not a fresh full-scope campaign. These records remain historical: `reports/m1-mutation53d-baseline/`, `m1-mutation-53g-forced/`, `m1-mutation-53g-full/` and `m1-mutation-53h-full/{run,provenance}.json`. The final58 campaign above now provides the fresh forced full-scope proof after the review corrections, with an absent input cache and zero reused results. Its newly written incremental file is an output artifact, not an input to that proof.
 
-At the historical checkpoint, the CI mutation limit was raised to match nightly's 180 minutes. After observing the fresh final58 Stryker duration of 137 min 23 s, both mutation job limits are now 360 minutes to allow installation, build and slower-runner overhead. Remote mutation timing has not been measured. Full scope, concurrency 4, 200 property runs, seed 42, test/property deadlines, retry 0 and threshold 70 remain unchanged. Reused results are not described as freshly executed mutants.
+At the historical checkpoint, the CI mutation limit was raised to match nightly's 180 minutes. After observing the fresh final58 Stryker duration of 137 min 23 s, both mutation job limits became 360 minutes to allow installation, build and slower-runner overhead. The first completed remote full campaign subsequently takes 328 min 31 s and scores 74.93% at `6da1283`; its report and older source identity are recorded in [remote-ci.md](remote-ci.md). Full scope, concurrency 4, 200 property runs, seed 42, test/property deadlines, retry 0 and threshold 70 remain unchanged. Reused results are not described as freshly executed mutants.
 
 The final 53h 8.4 aggregate passed 2,372 tests with zero failures or skips and the unchanged global/per-file M1 coverage gate: 91.09% lines, 90.07% statements, 84.10% branches and 90.47% functions. All 38 auth/authz files reach 100% in every metric. The 9.7 integration/contract aggregate passed 402 tests with zero failures or skips. Both runs freshly cover all 130 explicit OpenAPI operation/status pairs; the additional auth.createSession 503 matches its default schema. Source and image identities remain unchanged. Evidence: `reports/m1-final53h-aggregate-{84,97}/`, `reports/m1-final53h-aggregate-review.json`.
 
@@ -172,7 +181,7 @@ At the historical 53h checkpoint, the database and desktop snapshots preceded fi
 
 ## Formal exit prerequisites
 
-Remote CI is now running on `main`; its failures and repairs are recorded in [remote-ci.md](remote-ci.md). [CI 35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) is fully green and supports M0's formal record and `v0.0.0` marker. M1's versioned implementation and exit proof follow that predecessor. The owner's direct-main rule defers branch protection and forbids version PR automation. A sealed local Linux checkout is not GitHub Actions evidence. Local macOS Electron remains outstanding; current58 Windows and fresh native Linux desktop proofs pass locally, as recorded above.
+Remote CI has executed on `main`; its failures and repairs are recorded in [remote-ci.md](remote-ci.md). [CI 35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) is fully green and supports M0's formal record and `v0.0.0` marker. GitHub's subsequent billing refusal currently prevents new jobs from starting. M1's versioned fixture and final remote exit proof are still due. The owner's direct-main rule defers branch protection and forbids version PR automation. A sealed local Linux checkout is not GitHub Actions evidence. Local macOS Electron remains outstanding; current58 Windows and fresh native Linux desktop proofs pass locally, as recorded above.
 
 The first nightly workflow was manually dispatched as run `35475597877`; its failures are retained in [remote-ci.md](remote-ci.md). Scheduled nightly history is still absent. The exit record must distinguish that missing history from the actual dispatch results and identify the required workflow runs.
 

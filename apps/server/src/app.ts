@@ -155,6 +155,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const baseLogger: FastifyBaseLogger = logger;
   const app = Fastify({
     loggerInstance: baseLogger,
+    // onReady completes the serial readiness scan before listening. The framework's 10 s
+    // default cannot accommodate sixteen real probes under CH-16's 500 ms database latency.
+    // Keep boot bounded while allowing the same 60 s budget as the child startup handshake.
+    pluginTimeout: 60_000,
     // One `http.request` line per response is written by the ops plugin (ARCH-15), so Fastify's own
     // two lines per request are off. `logController` is the Fastify 5.12 form; the top-level
     // `disableRequestLogging` option it replaces is deprecated and goes away in Fastify 6.
