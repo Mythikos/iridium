@@ -22,6 +22,7 @@ import {
   webHeaders,
   type AuthTestServer,
 } from '../support/auth-app.ts';
+import { rotateDatabaseModelSession } from '../support/persistence-model.ts';
 import { auditRows, seedUser, signInDesktop, signInWeb } from '../support/seed.ts';
 
 let context: AuthTestServer;
@@ -43,6 +44,22 @@ async function sessionRow(sessionId: string) {
 }
 
 describe('auth.logout.integration [area:auth]', () => {
+  it('rotates twelve model sessions without sharing an artificial frozen-clock login bucket', async () => {
+    let admin = await context.server.seed.admin();
+    const originalTime = context.clock.now();
+    for (let rotation = 0; rotation < 12; rotation += 1) {
+      const retiredId = admin.sessionId;
+      // eslint-disable-next-line no-await-in-loop -- each replacement retires the previous session
+      admin = await rotateDatabaseModelSession(context, admin);
+      expect(admin.sessionId).not.toBe(retiredId);
+      // eslint-disable-next-line no-await-in-loop -- verify this retirement before the next one
+      expect((await sessionRow(retiredId)).revoked_reason).toBe('logout');
+      // eslint-disable-next-line no-await-in-loop -- verify this replacement before retiring it
+      expect((await admin.client.get('/auth/me')).status).toBe(200);
+    }
+    expect(context.clock.now()).toBe(originalTime);
+  });
+
   it('clears the cookie, marks Clear-Site-Data, keeps the row as revoked and refuses the cookie afterwards', async () => {
     const user = await seedUser(context, { email: 'logout-web@example.test' });
     const jar = await signInWeb(context, user);

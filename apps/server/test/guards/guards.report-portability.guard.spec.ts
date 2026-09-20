@@ -115,5 +115,8 @@ try {
     );
     expect(ci).toContain("IRIDIUM_COVERAGE_GATE: '1'");
     expect(ci).toContain('playwright merge-reports --config=playwright.config.ts');
+    expect(ci).toMatch(/name: reports-integration-[^\n]+\r?\n\s+path: reports\//);
+    expect(ci).toMatch(/name: mcp-conformance-[^\n]+\r?\n\s+path: results\//);
+    expect(ci).toMatch(/pattern: reports-\*\r?\n\s+merge-multiple: true\r?\n\s+path: reports/);
   });
 });

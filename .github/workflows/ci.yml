@@ -306,14 +306,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload conformance and fuzz reports
+      # Match the static artifact's reports-relative root. Adding results/ here changes
+      # upload-artifact's common ancestor and nests reports/ twice after the merge download.
+      - name: Upload integration reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: reports-integration-${{ steps.image.outputs.slug }}
-          path: |
-            reports/
-            results/
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload MCP conformance results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mcp-conformance-${{ steps.image.outputs.slug }}
+          path: results/
           if-no-files-found: ignore
           retention-days: 14
 

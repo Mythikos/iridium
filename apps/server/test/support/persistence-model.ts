@@ -1,6 +1,6 @@
 /** The shared model's real MySQL adapter; all initial state comes from product routes and CLI. */
 import { idFromBytes, NoteId, SessionId, UserId, VaultId } from '@iridium/contracts';
-import type { SeededVault } from '@iridium/testkit';
+import { signInWeb, type SeededAdmin, type SeededVault } from '@iridium/testkit';
 
 import { idBytes } from '../../src/auth/ids.ts';
 import { KyselyPersistenceStore } from '../../src/collab/persistence/kysely-store.ts';
@@ -12,13 +12,32 @@ import {
   type ModelReal,
   type ModelStore,
 } from '../../src/collab/persistence/testing/model.ts';
-import { startAuthServer, type AuthTestServer, type StartAuthServerOptions } from './auth-app.ts';
+import {
+  startAuthServer,
+  webClient,
+  type AuthTestServer,
+  type StartAuthServerOptions,
+} from './auth-app.ts';
 import { ManualClock } from './manual-clock.ts';
 
 export interface DatabaseModelFixture {
   readonly context: AuthTestServer;
   create(markdown: string, source?: string): Promise<ModelReal>;
   stop(): Promise<void>;
+}
+
+/** @internal Retire a model actor's session and obtain its replacement through the real routes. */
+export async function rotateDatabaseModelSession(
+  context: AuthTestServer,
+  admin: SeededAdmin,
+): Promise<SeededAdmin> {
+  const signedOut = await admin.client.del('/auth/sessions/current');
+  if (signedOut.status !== 204)
+    throw new Error(`model session rotation refused: ${String(signedOut.status)}`);
+  // Each simulated browser profile has its own peer address, like the other auth fixtures. The
+  // model's clock stays fixed, so thousands of examples must not share one ten-logins/minute IP.
+  const session = await signInWeb(webClient(context), admin);
+  return { ...admin, client: session.client, sessionId: session.session.id };
 }
 
 /** One real server/cast per property, one independently route-created note per generated run. */
@@ -121,11 +140,7 @@ export async function startDatabaseModel(
         // used session and sign in again through the real routes before its 600-request budget.
         // No auth hook, rate limit or database initializer is bypassed for fixture creation.
         if (ordinal > 0 && ordinal % 500 === 0) {
-          const signedOut = await admin.client.del('/auth/sessions/current');
-          if (signedOut.status !== 204)
-            throw new Error(`model session rotation refused: ${String(signedOut.status)}`);
-          const session = await context.server.seed.signIn(admin);
-          admin = { ...admin, client: session.client, sessionId: session.session.id };
+          admin = await rotateDatabaseModelSession(context, admin);
           actors = [
             { userId: UserId.parse(admin.id), sessionId: SessionId.parse(admin.sessionId) },
             actors[1],

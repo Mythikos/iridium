@@ -177,3 +177,35 @@ intact owner. It changes that acceptance deadline, not the product retry policy,
 original documents, undo history, exact-once content and overall case deadline as assertions.
 The focused real-outage cases pass on both MySQL 8.4 and 9.7 after that amendment. Full types,
 targeted lint, formatting, Knip and acceptance-map generation checks also pass before the push.
+
+## Complete workload results and artifact layout
+
+Commit `42d15d3683c8d467c147ce5885f35f9ea625c903` runs
+[CI 35480896583](https://github.com/Mythikos/iridium/actions/runs/35480896583). Static and all three
+Electron jobs pass. The Linux and Windows unit artifacts each record 2,314 passes with no unhandled
+errors. Integration jobs `105998579113` (8.4) and `105998579129` (9.7) each pass 479 tests in 84 files.
+Chaos jobs `105998579101` (8.4) and `105998579149` (9.7) each pass 88 cases, with 42 explicitly
+nightly-only cases skipped. These are actual Actions results, including both repaired chaos oracles.
+
+Merge job `106002618060` passes the unchanged coverage thresholds: 91.04% statements, 92.01% lines,
+85.82% branches and 91.55% functions. Playwright merges all 12 passing three-OS Electron cases.
+The following OpenAPI coverage step fails because the integration artifact combines `reports/`
+and `results/`: upload-artifact retains their common parent, so extraction into `reports/` produces
+`reports/reports/openapi-coverage`. The checker correctly refuses that empty expected directory.
+Each downloaded engine artifact independently proves all 131 documented operation/status pairs;
+its authenticated light-fuzz profile also passes (3,361 generated cases on 8.4, 3,156 on 9.7).
+
+Integration reports now use the same reports-relative root as static reports. MCP's separate
+`results/` directory has its own artifact, preserving those files without changing the report root.
+The workflow guard covers the upload/download layout. The failed merge remains preserved;
+local inspection of its artifacts is not a replacement for the corrected remote merge.
+
+The first nightly's extended 9.7 matrix (`105984200106`) finishes with four property failures and
+2,310 passes. One repeats the already-fixed two-U+FEFF initializer defect (seed `-470708079`).
+The remaining failures expose a fixture login bucket: the model's clock is fixed, and rotating
+sessions after every 500 examples eventually exceeds ten logins from one IP. Its original 429 is
+masked by later shrink attempts logging out an already-retired session (401). Each simulated
+replacement browser now uses the existing auth fixture's independent peer address; product limits
+and the property clock stay unchanged. A twelve-rotation regression fails with the original 429,
+then passes on both engines; the complete logout file passes five cases per engine. Full types,
+targeted lint and Knip pass. This repair still needs its remote follow-up; the first nightly is red.
