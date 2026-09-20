@@ -1,10 +1,84 @@
-# M0 exit record (formal exit pending)
+# M0 exit record
+
+Formal closure recorded on 2026-09-20 (UTC), before the M1 exit.
+The original bootstrap implementation was `71915f5`; the remote proves the cumulative tree at
+commit `efa6de83b0cb5b28bc069cc32544787a89471f74`, including the already-landed M1 kernel and CI repairs.
+This record is the second commit of the landing sequence. Hand-cut marker `v0.0.0` targets
+the commit adding this formal section; it publishes no artifacts. `CURRENT` remains `M0`.
+
+The passing source run is [CI 35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914). These are actual Actions check-run IDs,
+including both required database engines and all three Electron runners.
+
+| Required check | Check-run ID | Result |
+|---|---|---|
+| `static` | [106011045588](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011045588) | Pass |
+| `unit (ubuntu-latest)` | [106011279899](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279899) | Pass |
+| `unit (windows-latest)` | [106011279963](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279963) | Pass |
+| `integration (mysql:8.4.11)` | [106011279897](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279897) | Pass |
+| `integration (mysql:9.7.2-oraclelinux9)` | [106011279895](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279895) | Pass |
+| `e2e-electron (ubuntu-latest)` | [106011279966](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279966) | Pass |
+| `e2e-electron (windows-latest)` | [106011279943](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279943) | Pass |
+| `e2e-electron (macos-latest)` | [106011279900](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279900) | Pass |
+| `merge-reports` | [106015500694](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106015500694) | Pass |
+
+### Current exit proofs
+
+| Named exit tests | Due lane | Remote proof |
+|---|---|---|
+| `deps.single-instance.guard` | `static` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `authz.route-policy.boot.guard` | `static` + `integration` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `config.env.unit` | `unit` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `turbo boundaries` (a step of the `static` job, not a spec file) | `static` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `tokens.format.unit`, `tokens.format.prop`, `tokens.verify.unit`, `authz.matrix.unit`, `contracts.ids.unit`, `contracts.ids.prop`, `contracts.paths.unit`, `contracts.paths.prop` | `unit` [ubuntu, windows] (the pure `.prop` files run in the same project at the `PROP` budget — 200 runs in this CI run) | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `crdt.codec.prop`, `crdt.dominates.prop`, `crdt.prefix-suffix-diff.prop`, `crdt.guards.unit` | `unit` (pure package properties) | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `migrations.integration` | `integration (mysql:8.4.11)` and `integration (mysql:9.7.2-oraclelinux9)`, both required | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `db.dialect-floor.guard` | `static` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `migrations.parity.integration` | `integration (mysql:8.4.11)` and `integration (mysql:9.7.2-oraclelinux9)` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `db.version-floor.integration` | `integration` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `readyz.integration` | `integration` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `desktop.web-preferences.guard` | `static` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `desktop.launch.e2e` | `e2e-electron` [ubuntu, windows, macos] | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `gen.drift.guard` | `static` | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+| `docker-image` (a workflow gate rather than a spec file, so it carries no layer suffix — 10-testing-and-quality.md owns its lane) | `integration` (the job's `docker build -f infra/docker/server.Dockerfile -t iridium-server:ci .` step, which the `container`-mode suites need); release publishing begins at M1 and is not an M0 proof | [35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) |
+
+
+The same run proves build/types/lint on Linux and Windows; static format, Knip, boundaries, dependency
+identity, generated artifacts, licenses, registry audit, environment lists and acceptance inventory;
+and the image build plus non-root/read-only-root runtime smoke on each MySQL line. All 55 cumulative
+migrations include and revalidate M0's original 48. Coverage is measured under the stricter M1 gate
+in `merge-reports`; M0 itself had no enforced coverage or mutation threshold.
+
+The first actual nightly is [35475597877](https://github.com/Mythikos/iridium/actions/runs/35475597877).
+Its observed failures, remaining status and repairs are tracked in [remote-ci.md](remote-ci.md).
+There was no earlier nightly history; this is not a claim of established green nightly health.
+The three-consecutive-failure exit rule has no three-run window yet.
+
+### Decisions and carried work
+
+- Spec rows: none retired at M0. The cumulative headless proofs belong to M1.
+- Spikes: S1/S2/S3/S6/S8/S14 pass; S4/S5/S7/S13 fail with their recorded fallback implemented in
+  `71915f5`. The required three-OS Electron run completes S3's remote Origin/launch proof.
+- ADRs and risks: the original A2/A15/A52 and R-T10/R-T22 dispositions remain in the preserved
+  record below. CI runner and dependency-lifecycle corrections are documented in the remote log.
+- Questions: D01-15 records the owner's Elastic License 2.0 choice, including the OpenAPI SPDX
+  identifier. The earlier unspecified-license warning is resolved. The owner still needs to clarify
+  any literal MySQL 8.0 requirement; the supported engines remain 8.4 and 9.7.
+- Deferred: branch protection and PR workflow await an owner instruction restoring them. Work is
+  committed directly to main. M1's pending changeset is consumed only after this predecessor closes.
+- Outstanding as directed: local macOS Electron (no local macOS environment) and a fresh local
+  `pnpm audit` (egress approval). Remote macOS and remote static audit results are separately proven
+  above and do not relabel either local limitation as completed.
+
+The following dated candidate and local measurements are retained as history. Statements that
+formal exit was pending describe those earlier reviews; the formal closure above supersedes them.
+
+## Preserved candidate record
 
 Prepared on 2026-09-13 as an M0 exit candidate using the fields of 12-milestones.md §13.2 (D12-8), and revised after local review. Formal exit remains pending: a green remote required-check run and `v0.0.0` are not verified. Remote attempts are now recorded in [remote-ci.md](remote-ci.md); the owner has deferred branch protection under the direct-main rule. The dated results below are historical local validation; local macOS Electron remains outstanding. Current local revalidation is recorded in [M1-progress.md](M1-progress.md).
 
 ## Review (2026-09-17)
 
-**M0 is locally revalidated, but formal sign-off remains pending.** The reviewed tree is `492d870` plus the existing M1 work in progress and the corrections below. There is still no Git remote, remote CI run, branch protection, or `v0.0.0` tag. Linux clean-clone and Linux/macOS Electron results cannot be inferred from Windows or Docker results. `CURRENT` remains `M0`; M1 work is authorized and recorded in [M1-progress.md](M1-progress.md).
+**M0 is locally revalidated, but formal sign-off remains pending.** The reviewed tree is `492d870` plus the existing M1 work in progress and the corrections below. At that review there was no Git remote, remote CI run, branch protection, or `v0.0.0` tag. Linux clean-clone and Linux/macOS Electron results cannot be inferred from Windows or Docker results. `CURRENT` remains `M0`; M1 work is authorized and recorded in [M1-progress.md](M1-progress.md).
 
 | Current evidence | Result |
 |---|---|

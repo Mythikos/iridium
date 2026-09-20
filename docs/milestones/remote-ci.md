@@ -271,3 +271,53 @@ unchanged image identity `sha256:2bf62963b1a4556e62359abda3e3eb5e86b2f1f8fd26757
 The first local attempts supplied an image identifier that Testcontainers treated as a registry
 name and failed to pull; the corrected tag-based invocations preserve and compare the image identity
 before and after. Both failed attempts remain in `reports/remote-ci/` with their passing follow-ups.
+
+
+## First complete green main run and M0 closure
+
+[CI 35485518914](https://github.com/Mythikos/iridium/actions/runs/35485518914) completes successfully on 2026-09-20 UTC at
+`efa6de83b0cb5b28bc069cc32544787a89471f74`. These are actual check-run IDs, verified through the checks API.
+
+| Required check | Check-run ID | Result |
+|---|---|---|
+| `static` | [106011045588](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011045588) | Pass |
+| `chaos-core (mysql:9.7.2-oraclelinux9)` | [106011279877](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279877) | Pass |
+| `chaos-core (mysql:8.4.11)` | [106011279878](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279878) | Pass |
+| `integration (mysql:9.7.2-oraclelinux9)` | [106011279895](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279895) | Pass |
+| `integration (mysql:8.4.11)` | [106011279897](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279897) | Pass |
+| `unit (ubuntu-latest)` | [106011279899](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279899) | Pass |
+| `e2e-electron (macos-latest)` | [106011279900](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279900) | Pass |
+| `mutation-scoped` | [106011279907](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279907) | Pass; scope detection only, Stryker not due for this push |
+| `e2e-electron (windows-latest)` | [106011279943](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279943) | Pass |
+| `unit (windows-latest)` | [106011279963](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279963) | Pass |
+| `e2e-electron (ubuntu-latest)` | [106011279966](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106011279966) | Pass |
+| `merge-reports` | [106015500694](https://github.com/Mythikos/iridium/actions/runs/35485518914/job/106015500694) | Pass |
+
+Both integration lanes pass 480 tests in 84 files. Both unit lanes pass 2,314 tests in 152 files.
+Each chaos lane passes 88 cases in 14 files, with 42 later/nightly cases skipped by the declared
+CI scope. The six raw Vitest artifacts have verified origin hashes and zero unhandled errors;
+all 73 grouped M0/M1 named proofs are present. The merged report records 5,764 passes and 84 skips.
+Coverage is 91.03% statements, 92.00% lines, 85.84% branches and 91.52% functions; the unchanged
+global and per-file gates pass. Electron contributes twelve passing cases across the three OSes.
+Static and the final guard check each pass 420 cases with ten future-milestone skips.
+
+Each engine's API artifact independently covers all 131 explicit operation/status pairs
+(136 observations including five default responses). The required authenticated light fuzz
+passes 3,427 generated cases on 8.4 and 3,299 on 9.7, with 1,244/1,071 generated cases skipped
+and three warnings per profile. Both authentication proofs report `authenticationFailed: false`.
+Web E2E is explicitly skipped until M4. The two separate full mutation jobs are still running;
+this push's successful scope detector is not a mutation score.
+
+The previous `35483701742` report merge eventually passes as job `106010742479`, but that
+run remains failed because its 9.7 integration lane failed. A merged report cannot override a
+failed required job. This new complete green run supplies the remote prerequisite for
+[M0's formal closure](M0-exit.md), before consuming the M1 changeset.
+
+The first nightly `35475597877` still has mutation in progress at this checkpoint. Its extended
+chaos job `105984200183` is cancelled at 03:15 UTC with the explicit annotation that it exceeded
+the four-hour maximum. The retained logs show one failed second-process handover iteration
+(index 10 of 20), 150 passing revocation cases including the 200-connection campaign, and other
+completed files; there is no final aggregate and no evidence for the interrupted remainder.
+Artifact `10597510856` is partial. The complete timeout log remains preserved. No scheduled
+run has appeared as of this closure, so established green nightly health is not claimed.
+The next M1 implementation prepares a full-budget shard repair and retains this failed run.
