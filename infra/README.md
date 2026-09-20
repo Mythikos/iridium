@@ -98,7 +98,7 @@ Two notes on what the plan's runtime table asks for and what this Dockerfile doe
 - The three MySQL clients are extracted from Oracle's signed `mysql-community-client-9.7.2-1.el9`
   RPM on each architecture. The package SHA-256 and release-key fingerprint are pinned; a valid
   signature is mandatory before extraction. Only those binaries enter the runtime, using Debian
-  libraries. No RPM scripts, database server, or optional authentication plugins are shipped.
+  libraries. The signed package's RPM database and license/README remain for exact SBOM version and ownership data; the RPM executable stays in the extraction stage. No RPM scripts, database server, or optional authentication plugins are shipped. Runtime assembly applies Debian updates and removes unused npm/Corepack/Yarn tooling.
   The earlier APT source has no ARM64 packages; [OPS-04](../docs/adr/ops-04-mysql-client-packaging.md)
   records the correction. The built-in `caching_sha2_password` client plugin serves both supported
   database lines. Every build executes all three clients to check architecture and loader compatibility.

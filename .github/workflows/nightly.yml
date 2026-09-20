@@ -25,7 +25,9 @@ on:
         options: [none, M1, M2, M3, M4, M5, M6, M7, M8]
 
 concurrency:
-  group: nightly-${{ github.workflow }}-${{ github.ref }}
+  # Scheduled runs remain serialized. A manual rehearsal preserves its captured tree and
+  # can validate a repair while an older nightly's independent long-running jobs finish.
+  group: nightly-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -106,10 +108,15 @@ jobs:
           name: property-long
 
   # 200 kill iterations, every toxic type, CH-15 restart-under-load, CH-14 at 200
-  # connections. Budgeted at ≤ 3 h with `timeout-minutes: 240` (D10-25).
+  # connections. Four complete file shards keep the ≤ 3 h target and 240-minute
+  # deadline after the first serial run exceeded four hours (D10-25).
   chaos-extended:
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
       IRIDIUM_CHAOS_ITERATIONS: '200'
@@ -121,11 +128,13 @@ jobs:
       - name: Build the server image
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Chaos project at the nightly budget
-        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
+        run: >-
+          pnpm exec vitest --run --config vitest.config.ts --project chaos
+          --shard=${{ matrix.shard }}/4
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
-          name: chaos-extended
+          name: chaos-extended-${{ matrix.shard }}
 
   # Full Stryker run over the whole mutate scope with `incremental` seeded from the cache;
   # thresholds enforced (`break` 70 at M1–M2, 75 at M3–M7, 80 at M8 — decision D12-3).
@@ -305,10 +314,31 @@ jobs:
   # `property-long`, `chaos-extended` and `schemathesis-full` re-run against the *other*
   # image from the one each already used, so every long-running suite has been seen on both
   # required engines within 24 hours. There is no advisory single-line MySQL lane, because
-  # both lines are pull-request gates.
+  # both lines are required CI gates. Independent jobs prevent a failed property
+  # campaign from skipping chaos/fuzz, and each chaos shard retains its full budget.
   mysql-matrix-extended:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: property
+            timeout: 300
+          - lane: chaos-1
+            shard: 1
+            timeout: 240
+          - lane: chaos-2
+            shard: 2
+            timeout: 240
+          - lane: chaos-3
+            shard: 3
+            timeout: 240
+          - lane: chaos-4
+            shard: 4
+            timeout: 240
+          - lane: schemathesis
+            timeout: 300
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:9.7.2-oraclelinux9'
       IRIDIUM_PROP_RUNS: '5000'
@@ -325,17 +355,22 @@ jobs:
       - name: Build the server image
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Property projects on the other line
+        if: matrix.lane == 'property'
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project unit --project property
       - name: Chaos project on the other line
-        run: pnpm exec vitest --run --passWithNoTests --config vitest.config.ts --project chaos
+        if: matrix.shard
+        run: >-
+          pnpm exec vitest --run --config vitest.config.ts --project chaos
+          --shard=${{ matrix.shard }}/4
       - name: Schemathesis on the other line
+        if: matrix.lane == 'schemathesis'
         run: pnpm exec node scripts/run-schemathesis.ts
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:
-          name: mysql-matrix-extended
+          name: mysql-matrix-extended-${{ matrix.lane }}
 
   # Non-blocking. The `integration` project against the current innovation line, in the same
   # spirit as `node-26`: it exists to find out that the next LTS will break something while

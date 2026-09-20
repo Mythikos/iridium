@@ -1,6 +1,6 @@
 {
   "name": "@iridium/editor",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "CodeMirror 6 + y-codemirror.next binding, markdown language, iridiumFrontmatter block parser, formatting commands, read-only compartment, theme, disposable-view helpers",
   "type": "module",

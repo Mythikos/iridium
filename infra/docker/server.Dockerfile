@@ -87,20 +87,26 @@ RUN apt-get update; \
     fingerprint="$(gpg --show-keys --with-colons /tmp/mysql-key.asc | awk -F: '/^fpr:/ { print $10; exit }')"; \
     test "$fingerprint" = "$MYSQL_GPG_FINGERPRINT" \
       || { echo "mysql key fingerprint is $fingerprint, expected $MYSQL_GPG_FINGERPRINT"; exit 1; }; \
-    mkdir -p /tmp/mysql-rpm-keys; \
-    rpmkeys --dbpath /tmp/mysql-rpm-keys --import /tmp/mysql-key.asc; \
+    mkdir -p /mysql-client/usr/lib/sysimage/rpm; \
+    rpmkeys --dbpath /mysql-client/usr/lib/sysimage/rpm --import /tmp/mysql-key.asc; \
     curl -fsSL "https://repo.mysql.com/yum/mysql-9.7-community/el/9/$mysql_arch/mysql-community-client-$MYSQL_CLIENT_VERSION.$mysql_arch.rpm" \
       -o /tmp/mysql-client.rpm; \
     echo "$mysql_sha256  /tmp/mysql-client.rpm" | sha256sum --check --strict; \
-    rpmkeys --dbpath /tmp/mysql-rpm-keys --checksig /tmp/mysql-client.rpm > /tmp/mysql-rpm-verification; \
+    rpmkeys --dbpath /mysql-client/usr/lib/sysimage/rpm --checksig /tmp/mysql-client.rpm > /tmp/mysql-rpm-verification; \
     cat /tmp/mysql-rpm-verification; \
     grep -Fx '/tmp/mysql-client.rpm: digests signatures OK' /tmp/mysql-rpm-verification; \
+    rpm --dbpath /mysql-client/usr/lib/sysimage/rpm --install --justdb --nodeps --noscripts --notriggers \
+      /tmp/mysql-client.rpm; \
+    test "$(rpm --dbpath /mysql-client/usr/lib/sysimage/rpm --query mysql-community-client --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" \
+      = "$MYSQL_CLIENT_VERSION.$mysql_arch"; \
     rpm2cpio /tmp/mysql-client.rpm > /tmp/mysql-client.cpio; \
     mkdir -p /tmp/unpacked /mysql-client/usr/bin; \
     cd /tmp/unpacked; \
     cpio -idmu < /tmp/mysql-client.cpio; \
     cp /tmp/unpacked/usr/bin/mysql /tmp/unpacked/usr/bin/mysqldump /tmp/unpacked/usr/bin/mysqlbinlog \
        /mysql-client/usr/bin/; \
+    mkdir -p /mysql-client/usr/share/doc; \
+    cp -R /tmp/unpacked/usr/share/doc/mysql-community-client /mysql-client/usr/share/doc/; \
     rm -rf /tmp/unpacked /tmp/mysql-client.rpm /tmp/mysql-client.cpio /var/lib/apt/lists/*
 
 # --- runtime ----------------------------------------------------------------------------------
@@ -109,8 +115,11 @@ RUN apt-get update; \
 FROM node:24.21.0-bookworm-slim AS runtime
 SHELL ["/bin/sh", "-eu", "-c"]
 RUN apt-get update; \
+    apt-get upgrade -y --no-install-recommends; \
     apt-get install -y --no-install-recommends ca-certificates tini libncurses6 libssl3; \
     rm -rf /var/lib/apt/lists/*; \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v*; \
+    rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg; \
     groupadd -g 10001 iridium; \
     useradd -u 10001 -g iridium -M iridium
 # Docker initializes a fresh named volume from the image directory's ownership. These four
@@ -123,6 +132,11 @@ RUN for tool in cc gcc g++ make; do \
       if command -v "$tool" >/dev/null 2>&1; then echo "runtime image contains $tool"; exit 1; fi; \
     done
 COPY --from=mysql-client /mysql-client/usr/bin/ /usr/bin/
+# Preserve the signed package's exact version, file ownership and license. Binary string
+# heuristics lose MySQL's patch version; the RPM database supplies authoritative SBOM metadata.
+# The RPM executable and its dependencies remain confined to the extraction stage.
+COPY --from=mysql-client /mysql-client/usr/lib/sysimage/rpm/ /usr/lib/sysimage/rpm/
+COPY --from=mysql-client /mysql-client/usr/share/doc/mysql-community-client/ /usr/share/doc/mysql-community-client/
 # Running each binary in the final base also checks architecture and shared-library compatibility.
 RUN for mysql_tool in mysql mysqldump mysqlbinlog; do "$mysql_tool" --version; done
 COPY --from=build --chown=10001:10001 /prod/server/dist /app/dist

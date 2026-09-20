@@ -127,6 +127,8 @@ single limits policy (`A.1`), and `0059`–`0061` are the three ADRs the project
 
 ## Section decision amendments
 
+- [D10-25: nightly chaos runner budget](./d10-25-nightly-chaos-budget.md), amended 2026-09-20 after the first remote four-hour timeout.
+
 - [OPS-04: MySQL client packaging](./ops-04-mysql-client-packaging.md), amended 2026-09-20 for both release architectures.
 
 - [D01-15: Elastic License 2.0](./d01-15-elastic-license.md), accepted 2026-09-19; settles the licence the M0 exit record left open.

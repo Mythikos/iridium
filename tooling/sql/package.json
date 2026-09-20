@@ -1,6 +1,6 @@
 {
   "name": "@iridium/sql-policy",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "SQL dialect policy the server is checked against: the forbidden-constructs denylist and the committed schema fingerprint (03-data-model.md, 12-milestones.md)",
   "files": [

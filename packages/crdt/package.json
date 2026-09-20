@@ -1,6 +1,6 @@
 {
   "name": "@iridium/crdt",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "the only first-party package importing yjs, y-protocols and lib0 (note doc factory, V1/V2 codec, dominates, prefixSuffixDiff, guards)",
   "files": [

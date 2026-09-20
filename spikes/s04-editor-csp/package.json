@@ -1,6 +1,6 @@
 {
   "name": "@iridium/spike-s04-editor-csp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Spike S04 harness: CodeMirror, y-codemirror.next and Base UI under a nonce-only style-src. Throwaway (12-milestones.md D12-5)",
   "type": "module",

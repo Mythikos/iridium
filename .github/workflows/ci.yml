@@ -588,7 +588,9 @@ jobs:
         if: steps.scope.outputs.changed == 'true'
 
       - name: Restore the Stryker incremental file
-        if: steps.scope.outputs.changed == 'true'
+        # The M1 exit requires a fresh full-scope campaign with zero reused mutants.
+        # Ordinary changed-scope pushes can still reuse the validated incremental file.
+        if: steps.scope.outputs.changed == 'true' && inputs.milestone_exit != 'M1'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tooling/mutation/reports/stryker-incremental.json

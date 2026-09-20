@@ -1,6 +1,6 @@
 {
   "name": "@iridium/ui",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "the whole React application plus the IridiumHost seam, the commands registry and i18n/en.ts",
   "type": "module",

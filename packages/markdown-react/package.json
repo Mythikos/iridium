@@ -1,6 +1,6 @@
 {
   "name": "@iridium/markdown-react",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "hast → React 19 via hast-util-to-jsx-runtime with Iridium component overrides; preview worker client (comlink)",
   "type": "module",

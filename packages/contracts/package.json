@@ -1,6 +1,6 @@
 {
   "name": "@iridium/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "the single wire-contract package (zod 4 schemas and inferred types for REST, collab, MCP, IPC, audit, limits, ids, tokens, paths)",
   "files": [

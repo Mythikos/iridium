@@ -1,6 +1,6 @@
 {
   "name": "@iridium/api-client",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "openapi-fetch client over generated types; ApiTransport (FetchTransport, IpcTransport); TicketSource; typed ProblemDetails errors",
   "files": [

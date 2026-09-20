@@ -1,6 +1,6 @@
 {
   "name": "@iridium/testkit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "the single harness entry point: startTestEnv, startServer, NoteClient, restClient, toMatchOpenApi, Toxiproxy helpers, fault constants, fixtures (dev only)",
   "files": [

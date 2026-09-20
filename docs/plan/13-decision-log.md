@@ -2502,3 +2502,37 @@ ADR: [D12-20](../adr/d12-20-schemathesis-milestone-scope.md). Proofs: `schemathe
 A real held-COMMIT regression found that a pure deletion leaves Yjs state-vector clocks unchanged, so the vector-only Saved predicate could accept its old baseline after transport acknowledgement. The v1 `persisted` message now requires `ds`, a fixed lowercase SHA-256 fingerprint of the canonical Yjs delete set, captured beside the vector for the same accepted update. Saved and the close warning require vector dominance plus exact delete-set fingerprint equality. Retried batches retain their captured pair; unloaded baselines replay a complete committed prefix. No SQL column or CRDT metadata is added. This pre-release protocol correction ships the server and clients together. The runtime adapter and hostile/missing witness tests live beside the existing protocol tests, with real held-COMMIT deletion coverage in `collab.deletion-durability.integration`.
 
 The same review moves repair's pre-restore revision into the writer FIFO. It snapshots an independently replayed committed prefix under the owner fence and head check, then refuses the repair before mutation if the live document changed while awaiting that checkpoint. Comparison includes the delete set, so a deletion-only change cannot escape the check.
+
+
+## D10-25 amendment: nightly chaos runner budget (2026-09-20)
+
+The first remote nightly `35475597877` cancels serial chaos job `105984200183` at its four-hour
+deadline. Preserve that failure and every scenario, iteration count and per-case deadline.
+Both supported engines now divide the complete chaos project into four Vitest file shards,
+with a three-hour target and 240-minute deadline per shard. The M1 inventory partitions all
+14 files exactly once into groups of 4, 4, 3 and 3; the long revocation and durability files
+fall on different runners. All shards must pass, and fail-fast remains disabled.
+The other-engine property and Schemathesis campaigns also run independently instead of
+skipping after an earlier failure; their existing 300-minute deadlines and budgets stay intact.
+This supersedes the original two-job suggestion, whose grouping retains both longest files
+together. Selection verification alone does not establish a passing nightly.
+
+ADR mirror: [D10-25](../adr/d10-25-nightly-chaos-budget.md).
+
+Scheduled nightlies remain serialized. Manual rehearsals use independent concurrency groups
+to validate a repaired captured commit while preserving an older run's unfinished evidence.
+
+
+### OPS-04 amendment (2026-09-20): exact SBOM component identity
+
+Retain the signed client RPM's version/file-ownership database and license/README beside
+the three extracted MySQL executables. Metadata-only RPM installation disables package
+scripts and triggers; the RPM tool stays in the extraction stage. The first Grype scan
+identified the bare executable as `mysql 9.7`, losing its actual `9.7.2` patch revision.
+Syft's authoritative OS-package ownership replaces that heuristic with the exact signed
+package metadata. No vulnerability is suppressed or waived. Runtime assembly applies
+available Debian package updates and removes unused npm/Corepack/Yarn from the Node base,
+fixing the scan's high findings in bundled npm dependencies and `libpcre2-8-0`.
+The release's Grype high-severity, fix-available gate remains unchanged.
+
+ADR mirror: [OPS-04](../adr/ops-04-mysql-client-packaging.md).

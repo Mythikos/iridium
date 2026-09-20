@@ -321,3 +321,50 @@ completed files; there is no final aggregate and no evidence for the interrupted
 Artifact `10597510856` is partial. The complete timeout log remains preserved. No scheduled
 run has appeared as of this closure, so established green nightly health is not claimed.
 The next M1 implementation prepares a full-budget shard repair and retains this failed run.
+
+## M0 marker, M1 version preparation and release scan
+
+M0's record commit is `3da2ab24fa42ff14353a10dd6943058a4c697667`; the annotated `v0.0.0`
+marker is pushed at that commit. [Release 35487366236](https://github.com/Mythikos/iridium/actions/runs/35487366236)
+passes its selector (`106016104310`) and skips verify, server-image, bridge, desktop,
+release-feed and drill. It publishes nothing, as required. The M1 changeset is then consumed
+by Changesets 3.0.2: all 20 fixed workspaces and the root become `0.1.0`; the per-workspace
+changelogs are committed directly, with no version-PR job. CURRENT stays M0 until the M1 record.
+M1's manual CI dispatch bypasses incremental-cache restoration for its full mutation job,
+implementing the existing fresh-campaign requirement; ordinary changed-scope pushes retain caching.
+
+The nightly repair follows [D10-25](../adr/d10-25-nightly-chaos-budget.md): four complete chaos
+file shards per engine, unchanged scenarios/iterations/deadlines, and separate property/fuzz
+members on 9.7. The current 14-file inventory partitions exactly once into groups of 4/4/3/3.
+Vitest's installed sequencer verifies that selection; this is not a passing nightly execution.
+All 420 current guards pass with ten future skips. Manual rehearsals retain separate captured
+commits while scheduled runs remain serialized, preserving the first run's ongoing mutation job.
+
+The release preflight uses Grype 0.119.0 with the September 19 database and the unchanged
+`--only-fixed --fail-on high` gate. Its first Windows invocation fails while creating a layer
+cache filename containing a colon. The preserved Linux-container follow-up scans the same local
+image and finds eight high matches: npm's bundled brace-expansion, tar and ip-address; the
+base's libpcre2; and a MySQL binary-string identification truncated to `9.7` instead of `9.7.2`.
+Runtime assembly now applies Debian package updates and removes unused npm/Corepack/Yarn.
+The verified MySQL client RPM's exact version/file ownership and license/README are retained
+without executing RPM scripts or shipping the RPM tool. Syft's package ownership precedence
+uses that authoritative metadata; no CVE exclusion or severity change is introduced.
+
+The corrected AMD64 preflight scan exits zero with no fixable matches. Syft 1.52.0 catalogs
+363 packages, including `mysql-community-client 9.7.2-1.el9` and `libpcre2-8-0 10.42-1+deb12u1`,
+and no npm installation. Both the failed scan and corrected JSON/SBOM are retained under
+`reports/remote-ci/release-amd64-*`. These local synthetic-commit images are preparation;
+the tagged release still needs its own Actions scan, SBOM and provenance.
+
+The first local frozen offline install after versioning fails replacing a Windows dependency
+junction, after removing its package-managed Node copy. The failed attempt is preserved.
+A checksum-verified official Node 24.21.0 archive restores the local bootstrap tool; the next
+install uses the existing offline package store and the unchanged frozen lockfile. This does
+not perform or substitute for the explicitly outstanding local registry audit.
+
+The successful offline retry reuses all 1,145 packages with zero downloads. The versioned tree
+passes all 27 build/type tasks, generated-artifact checks (the local database generation phase
+is explicitly skipped; both remote integration engines own schema parity), formatting, Knip,
+and 420 guards with ten future skips. The corrected ARM64 image also builds and executes all
+three MySQL tools and the `0.1.0` server CLI with the synthetic preflight source identity.
+Both architecture builds and the local scan are preparation for the versioned remote runs.
