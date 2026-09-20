@@ -1103,3 +1103,46 @@ Local exit checks pass all 428 guards with ten future skips, all 468 test-name r
 and repository formatting. The initial guard run caught the generated acceptance map's
 `currentMilestone: M0`; its generator changes only that stamp to `M1`, and the final guard
 run passes. Both logs remain as `m1-exit-guards.log` and `m1-exit-final-guards.log`.
+
+## Exit candidate refusal and SQL timeout-sweep correction
+
+Candidate exit commit `2d62b99d17bca30e8d2d842a1a88c73b15ba0284` is pushed directly to main.
+Its own [CI 35504070807](https://github.com/Mythikos/iridium/actions/runs/35504070807)
+passes the static, unit, Electron and MySQL 8.4 integration checks, but MySQL 9.7 integration
+check `106060922722` fails one of 481 tests. `audit.bounded-failures.integration` receives
+`PROTOCOL_SEQUENCE_TIMEOUT` while expecting server `ER_LOCK_WAIT_TIMEOUT` / 1205 for a held
+audit chain head. The run retains 480 passes in 83 files (870.60 seconds), raw artifact
+`10603367847` and database report artifact `10603562791`. No `v0.1.0` tag is created.
+
+The first exit candidate is therefore provisional. `CURRENT` returns to `M0`, with the
+candidate evidence and failed run preserved, until the correction and replacement exit record
+are verified. M0's completed marker and exit are unaffected; the workspace versions and
+promoted M1 fixture stay at `0.1.0`.
+
+MySQL 8.4.11 and 9.7.2 scan expired InnoDB lock waits once per second. The former two-second
+serving command minimum allowed a one-second lock wait plus its regular sweep to consume the
+entire response budget. The new `db.session-policy.unit` regression fails that former policy
+with zero response margin. OPS-12 now requires a three-second minimum, preserving one second
+after the nominal lock wait and regular sweep. The ten-second default, half-budget lock-wait
+formula, maximum, error mappings, connection destruction and uncertain-COMMIT handling stay
+unchanged. Configuration values from 2000 through 2999 are now explicitly rejected; the ADR,
+data-model contract, operator reference and unreleased server changelog record this change.
+
+No error assertion is broadened. The audit and lock-timeout integration proofs still require
+actual server 1205, complete rollback, physical-connection reuse and exactly one caller-owned
+retry append. All seven cases pass locally on each engine (32.30 / 31.97 seconds), including
+both app/persist pools at the new minimum and unchanged default. All 2,332 unit tests in 153
+files pass. The negative timing-margin proof is retained in `sql-sweep-before.log`; the first
+post-change unit run exposed four fixtures still using the old minimum, corrected before the
+passing `sql-sweep-final-unit.log`. The engine proofs are `sql-sweep-after-{84,97}.log`.
+
+The older `b663d81` nightly mutation job `106018032638` ends cancelled at its six-hour limit
+after the candidate snapshot, with 8,977/10,086 tested mutants at the final progress report.
+It supplies no terminal score. `35488088005-mutation-timeout.log` preserves that outcome;
+the separately verified incremental full-scope score is not inferred from this incomplete run.
+
+The corrected serving bundle builds, types and type-aware lint pass, all 428 guards pass with
+ten future skips, all 468 name references resolve, and formatting passes. The failed candidate's
+job snapshot is retained before the corrective push; standard main-branch concurrency may
+cancel its still-running chaos jobs when the new CI starts. That supersession does not change
+the completed 9.7 failure or substitute for the correction's required remote verification.

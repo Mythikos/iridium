@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fakeDatabase } from '../../test/support/fake-driver.ts';
 import { ManualClock } from '../../test/support/manual-clock.ts';
 import type { OwnerFence } from '../collab/owner-lease.ts';
-import { DB_QUERY_TIMEOUT_MS_MAX } from './pool.ts';
+import { DB_QUERY_TIMEOUT_MS_MAX, DB_QUERY_TIMEOUT_MS_MIN } from './pool.ts';
 import { servingLockWaitSeconds, withServingSession } from './session-policy.ts';
 import { withVaultLock } from './withVaultLock.ts';
 
@@ -62,23 +62,34 @@ function borrow(pool: MysqlPool): Promise<MysqlPoolConnection> {
 }
 
 describe('db.session-policy.unit [area:db]', () => {
+  it('leaves a response second after the minimum lock wait and MySQL timeout sweep', () => {
+    const lockWaitMs = servingLockWaitSeconds(DB_QUERY_TIMEOUT_MS_MIN) * 1_000;
+    // MySQL scans timed-out InnoDB waits once per second, after the nominal wait expires.
+    const sweepMs = 1_000;
+    expect(DB_QUERY_TIMEOUT_MS_MIN - lockWaitMs - sweepMs).toBeGreaterThanOrEqual(1_000);
+  });
+
   it.each([
-    [2_000, 1],
-    [2_500, 1],
+    [3_000, 1],
+    [3_500, 1],
+    [4_000, 2],
     [10_000, 5],
     [60_000, 30],
     [DB_QUERY_TIMEOUT_MS_MAX, 1_073_741],
   ])('gives MySQL a %ims command budget with a bounded %is lock wait', (budget, seconds) => {
     expect(servingLockWaitSeconds(budget)).toBe(seconds);
-    expect(seconds * 1_000).toBeLessThan(budget);
+    expect(budget - seconds * 1_000 - 1_000).toBeGreaterThanOrEqual(1_000);
   });
 
   it.each([
     1,
     1_999,
+    2_000,
+    2_500,
+    2_999,
     0,
     -1,
-    2_000.5,
+    3_000.5,
     Number.NaN,
     Number.POSITIVE_INFINITY,
     DB_QUERY_TIMEOUT_MS_MAX + 1,
@@ -152,7 +163,7 @@ describe('db.session-policy.unit [area:db]', () => {
 
   it('destroys a session whose initialization was refused and rejects the borrower', async () => {
     const state = fixture();
-    const serving = withServingSession(state.pool, 2_000);
+    const serving = withServingSession(state.pool, DB_QUERY_TIMEOUT_MS_MIN);
     const failure = new Error('SET failed');
     const first = borrow(serving);
     state.pending.complete?.(failure, []);
@@ -165,7 +176,9 @@ describe('db.session-policy.unit [area:db]', () => {
     const state = fixture();
     const failure = new Error('closed connection');
     state.behavior.queryError = failure;
-    await expect(borrow(withServingSession(state.pool, 2_000))).rejects.toBe(failure);
+    await expect(borrow(withServingSession(state.pool, DB_QUERY_TIMEOUT_MS_MIN))).rejects.toBe(
+      failure,
+    );
     expect(state.destroyed).toHaveBeenCalledOnce();
     expect(state.statements).toEqual([]);
   });
@@ -174,7 +187,9 @@ describe('db.session-policy.unit [area:db]', () => {
     const state = fixture();
     const failure = new Error('pool closed');
     state.behavior.acquireError = failure;
-    await expect(borrow(withServingSession(state.pool, 2_000))).rejects.toBe(failure);
+    await expect(borrow(withServingSession(state.pool, DB_QUERY_TIMEOUT_MS_MIN))).rejects.toBe(
+      failure,
+    );
     expect(state.destroyed).not.toHaveBeenCalled();
     expect(state.statements).toEqual([]);
   });

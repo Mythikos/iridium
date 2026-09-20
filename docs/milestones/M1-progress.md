@@ -1,6 +1,6 @@
 # M1 verification record
 
-M1 is formally closed in [M1-exit.md](M1-exit.md), after M0's remote proof and marker. [CI 35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783) proves the versioned implementation `abb968a1c506b50743f5cf40d30bcc35b30857af`; `CURRENT` is `M1`, and product tag `v0.1.0` targets the exit-record commit. The dated local review evidence below remains historical, including the separately validated reporting-wrapper failures. It does not substitute for the actual Actions evidence in the exit record.
+M1 is implemented and versioned at `0.1.0`, but formal exit remains pending. Candidate `2d62b99` failed its own MySQL 9.7 integration check in [CI 35504070807](https://github.com/Mythikos/iridium/actions/runs/35504070807); `v0.1.0` remains uncut, and `CURRENT` returns to `M0` for the OPS-12 timeout-sweep correction. The [candidate record](M1-exit.md) preserves the earlier green implementation and nightly evidence with their actual inputs. M0 remains formally closed.
 
 The final58 results below are historical local proofs: build, both database aggregates, authenticated API fuzzing, database properties, required chaos, Windows and native Linux desktop, Compose, the 55-migration fixture and a fresh full-scope 74.25% mutation campaign. The two original reporting-wrapper failures remain preserved. Subsequent committed fixes and actual Actions results are tracked in [remote-ci.md](remote-ci.md); earlier passing inputs do not certify the later tree.
 
@@ -179,10 +179,15 @@ All due spike documents carry closed verdicts. `docs/spikes/S10-hocuspocus-clien
 
 At the historical 53h checkpoint, the database and desktop snapshots preceded final fixture production. That sequence changed only the fixture dump and manifest; the subsequent incremental mutation run included the promoted fixture. Those verification documents were updated after the frozen runs. This ordering describes only the 53h snapshot; the 2026-09-18 review fixes changed runtime and tests, and final58 evidence is recorded separately above.
 
-## Formal exit status
+## Formal exit prerequisites
 
-M0 closed first with its remote evidence and `v0.0.0` marker. The [M1 exit record](M1-exit.md) names [CI 35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783), both required MySQL engines, all required check-run IDs, full mutation and merged coverage, the promoted upgrade fixture, actual nightly history and carried work. The M1 changeset is consumed; all fixed workspaces and the root are `0.1.0`, and `CURRENT` is `M1`. Hand-cut `v0.1.0` targets the exit-record commit under the two-commit landing rule. Release verification and the due server-image jobs execute against that tagged tree.
+M0 is closed with `v0.0.0`. M1's version and upgrade fixture are committed, and both requested
+NoteSession findings are fixed. The failed exit candidate is preserved in [remote-ci.md](remote-ci.md).
+The OPS-12 timeout-sweep correction needs its own complete required CI and full-scope mutation
+evidence before the replacement exit record advances `CURRENT` and receives `v0.1.0`.
+Earlier successful nightly checks remain identified by their original inputs.
 
-Both requested NoteSession findings are fixed and proven: an unanswered CLOSE has a Clock deadline, and grace retries use the growing retry delay even when server grace is zero. The exit record also names the explicit 75-second ownership-loss recovery amendment and the release packaging correction. No version bot opens pull requests; direct commits and pushes to main remain the owner's rule.
-
-Local macOS Electron remains outstanding because there is no local macOS environment. A fresh local `pnpm audit` remains outstanding because automatic approval review rejected registry egress without the required authorization. Passing remote macOS and remote registry-audit jobs are separate evidence and do not relabel either local limitation as completed. Nightly failures and pending runs remain stated in the exit record; their absence or incomplete status is never evidence of green health. The later M5/M6/M8 manual acceptance records and M8 restore drill remain owned by those milestones.
+Local macOS Electron and a fresh local `pnpm audit` remain outstanding as directed, because
+there is no local macOS environment and registry-egress approval remains unavailable. The
+full-API and advisory nightly dispositions remain separate from the required M1 gates.
+Commits and pushes continue directly to main; no branches or version pull requests are created.

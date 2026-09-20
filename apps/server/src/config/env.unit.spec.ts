@@ -499,7 +499,7 @@ describe('config.env.unit [area:ops]', () => {
   });
 
   describe('database query deadlines', () => {
-    it.each(['0', '-1', '1', '1999', '1.5', 'NaN', '2147483648'])(
+    it.each(['0', '-1', '1', '1999', '2000', '2500', '2999', '1.5', 'NaN', '2147483648'])(
       'rejects an unrepresentable deadline %s instead of clamping a timer',
       (value) => {
         const error = expectConfigError({ ...MINIMAL, DB_QUERY_TIMEOUT_MS: value });
@@ -508,7 +508,7 @@ describe('config.env.unit [area:ops]', () => {
       },
     );
 
-    it.each(['2000', '2500', '2147483647'])(
+    it.each(['3000', '3500', '2147483647'])(
       'preserves the configured query deadline %s independently of connect timeout',
       (value) => {
         const loaded = loadConfigDetailed({ ...MINIMAL, DB_QUERY_TIMEOUT_MS: value });

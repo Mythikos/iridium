@@ -3,7 +3,7 @@ import type { MysqlPool, MysqlPoolConnection } from 'kysely';
 
 import { DB_QUERY_TIMEOUT_MS_MIN, DB_QUERY_TIMEOUT_MS_MAX } from './pool.ts';
 
-/** Leave at least half the command budget for MySQL to report a lock refusal before client expiry. */
+/** The minimum also reserves a timeout-sweep second and a response second after this lock wait. */
 export function servingLockWaitSeconds(queryTimeoutMs: number): number {
   if (
     !Number.isInteger(queryTimeoutMs) ||

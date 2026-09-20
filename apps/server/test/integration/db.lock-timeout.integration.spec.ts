@@ -28,8 +28,8 @@ afterAll(async () => {
 
 describe('db.lock-timeout.integration [area:db]', () => {
   it.each([
-    ['app', 2_000, 1],
-    ['persist', 2_000, 1],
+    ['app', 3_000, 1],
+    ['persist', 3_000, 1],
     ['app', 10_000, 5],
     ['persist', 10_000, 5],
   ] as const)(

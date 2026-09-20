@@ -1,11 +1,14 @@
-# M1 exit record
+# M1 exit candidate
 
-M1 closes on 2026-09-20 (UTC) after M0's formal closure and marker `v0.0.0` at `3da2ab24fa42ff14353a10dd6943058a4c697667`.
-The implementation, workspace version `0.1.0` and promoted upgrade fixture are committed at
-`abb968a1c506b50743f5cf40d30bcc35b30857af`. This following record commit advances `CURRENT` to `M1`; hand-cut
-`v0.1.0` targets this record commit. This is the two-commit landing sequence: the record names
-its already-existing implementation parent, and the product tag identifies the record itself.
-The original kernel landed in `29155191d4c116db1897fc083d9939e3ce588f30`.
+**Formal M1 exit is pending.** Candidate record commit `2d62b99d17bca30e8d2d842a1a88c73b15ba0284`
+failed its own MySQL 9.7 integration check in [CI 35504070807](https://github.com/Mythikos/iridium/actions/runs/35504070807).
+No `v0.1.0` tag was created. `CURRENT` returns to `M0` while the OPS-12 timeout-sweep correction
+is verified; M0's formal closure and `v0.0.0` marker remain complete.
+
+The following evidence belongs to implementation `abb968a1c506b50743f5cf40d30bcc35b30857af`
+and its named predecessor campaigns. It is retained with its original inputs and capture time;
+it does not certify the pending correction. A replacement exit record will name the repaired
+implementation before the product tag is cut on that following record commit.
 
 ## Required remote checks
 
@@ -106,7 +109,7 @@ are reported separately below; a required CI pass does not stand in for a nightl
 | Mutation | PASS, the full-scope incremental campaign above exceeds the unchanged 70% M1 gate; the current main scoped no-op supplies no score. |
 | Spikes and decisions | PASS, `docs.spikes.spec` in [35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783); dispositions and ADRs below. |
 | Nightly health | The repaired production campaign [35495934601](https://github.com/Mythikos/iridium/actions/runs/35495934601) passes both extended property jobs and all eight full chaos shards. Its production, testkit, property/chaos, dependency and relevant workflow inputs match the final implementation. The final-source rehearsal [35499345923](https://github.com/Mythikos/iridium/actions/runs/35499345923) passes full-scope mutation, all three 411-test flake repetitions and full Electron on three operating systems. The check IDs, trigger history and separate API/advisory failures appear below. No established green history is claimed from missing or pending runs. |
-| Version and tag | Changesets consumed `m1-headless-kernel`; all 20 fixed workspaces and the root are `0.1.0`. There is no version-PR job. Product `v0.1.0` is hand-cut on this record commit. |
+| Version and tag | Changesets consumed `m1-headless-kernel`; all 20 fixed workspaces and the root are `0.1.0`. There is no version-PR job. Product `v0.1.0` remains uncut; the replacement exit record follows verification of the correction. |
 | Upgrade fixture | [M1 rehearsal 35495933501, MySQL 8.4 producer 106038899741](https://github.com/Mythikos/iridium/actions/runs/35495933501/job/106038899741) generates artifact `10601480949` from `7176d392232aa8f79f9f4cec47c4d9df9635085a` at `2026-09-20T07:16:57.372Z`. Artifact digest is `sha256:881d2da0e01a86f26f717e7fc7d52b9f407582aac3af5ecae92eb8a31e4c3d9f`. The 19,076-byte dump has SHA-256 `ce390d190fd04a8bb0358a200f2b0e4d5248d38bc5d7680faa50ae3568c6aaea`; manifest hash is `cfeb94168fd7541e891f639a34b5a699b39e718dc1d6e2c57e51c4261693ce1e`. Its exact bytes are committed under `apps/server/test/fixtures/upgrade/v0.1.0/`, with all 55 migrations, six users, four members, one note and zero attachments. It uses the backup role and the shipped MySQL 9.7.2 client. The current required integration jobs restore and verify that fixture on both database engines. Production, schema and seeder inputs are unchanged since its producer. |
 
 The required non-admin Schemathesis-light profile passes on both engines with all checks/phases
@@ -249,4 +252,4 @@ identified separately in the nightly evidence.
   desktop UI acceptance, MCP completion, or the M8 operations/security review.
 
 The earlier [M1 progress record](M1-progress.md) retains dated local evidence and failed wrappers;
-the actual remote runs and tagged implementation above determine this formal exit.
+these proofs retain their original inputs and do not close the pending correction.

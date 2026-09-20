@@ -2591,3 +2591,34 @@ scan cannot certify both published images. `guards.release-policy.guard` rejects
 disabled or weakened platform scans and colliding SBOM artifact names.
 
 ADR mirror: [OPS-04](../adr/ops-04-mysql-client-packaging.md).
+
+## OPS-12 amendment: InnoDB timeout-sweep margin (2026-09-20)
+
+The supported minimum for `DB_QUERY_TIMEOUT_MS` is now **3000 ms**. The default remains
+10 000 ms, the maximum remains 2 147 483 647 ms, and serving lock waits remain
+`floor(DB_QUERY_TIMEOUT_MS / 2000)` seconds. This is a pre-release configuration-boundary
+correction; explicit values below 3000 are rejected rather than silently clamped.
+
+MySQL 8.4.11 and 9.7.2 check expired InnoDB lock waits in a once-per-second sweep. A nominal
+one-second lock wait can therefore be reported near two seconds, leaving no response margin
+under the former two-second command minimum. Actual Actions check
+[106060922722](https://github.com/Mythikos/iridium/actions/runs/35504070807/job/106060922722)
+observes `PROTOCOL_SEQUENCE_TIMEOUT` instead of `ER_LOCK_WAIT_TIMEOUT` in the held audit-head
+case. Its failed run and the previously passing runs remain unchanged.
+
+The new minimum reserves one second each for the lock wait, the regular sweep, and delivery
+of the refusal. Scheduler or network stalls and multiple waits may still exhaust the total
+command budget; those remain `503 unavailable`, and an uncertain COMMIT is never described
+as rolled back. No failure mapping, driver destruction, retry policy or test assertion is
+weakened. Maintenance/backup commands and idle owner reservations retain their own policies.
+
+`db.session-policy.unit` checks the sweep and response allowance at the minimum and other
+budget boundaries; its new regression fails with zero remaining margin under the old minimum.
+`config.env.unit` rejects the old range. `audit.bounded-failures.integration` and
+`db.lock-timeout.integration` retain exact server 1205, transaction rollback, connection reuse,
+chain verification and caller-owned exact-once retry assertions on both supported engines.
+
+Primary implementations: [MySQL 8.4.11](https://github.com/mysql/mysql-server/blob/mysql-8.4.11/storage/innobase/lock/lock0wait.cc#L1353)
+and [MySQL 9.7.2](https://github.com/mysql/mysql-server/blob/mysql-9.7.2/storage/innobase/lock/lock0wait.cc#L1353).
+
+ADR mirror: [OPS-12](../adr/ops-12-serving-sql-deadlines.md).

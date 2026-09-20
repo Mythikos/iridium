@@ -19,7 +19,7 @@ let admin: ReturnType<typeof createMaintDb>;
 let keys: AuditKeys;
 
 beforeAll(async () => {
-  context = await startAuthServer({ extraEnv: { DB_QUERY_TIMEOUT_MS: '2000' } });
+  context = await startAuthServer({ extraEnv: { DB_QUERY_TIMEOUT_MS: '3000' } });
   const connectionUrl = new URL(inject('iridiumMysql').rootUri);
   connectionUrl.pathname = new URL(context.app.iridiumConfig.db.appUrl).pathname;
   admin = createMaintDb(connectionUrl.toString());

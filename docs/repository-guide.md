@@ -252,11 +252,10 @@ The server reads its environment once, in `apps/server/src/config/env.ts` (`EnvS
 
 ## Milestone Status
 
-- `docs/milestones/CURRENT` and the matching exit record are authoritative. CURRENT names the last exited milestone.
-- **Last exited milestone: M1, the headless kernel.** [M1-exit.md](milestones/M1-exit.md) names implementation `abb968a1c506b50743f5cf40d30bcc35b30857af`, [CI 35499314783](https://github.com/Mythikos/iridium/actions/runs/35499314783), the full mutation proof, coverage and upgrade-fixture provenance. All 20 fixed workspaces and the root are `0.1.0`; hand-cut `v0.1.0` targets the exit-record commit, which advances CURRENT to M1.
-- **M0 closed first.** [M0-exit.md](milestones/M0-exit.md) records its complete remote matrix and marker `v0.0.0`, which publishes nothing.
-- **Outstanding local checks:** macOS Electron (no local macOS environment) and a fresh local registry audit (egress approval). Remote macOS and remote audit results are recorded separately. Actual nightly history and carried findings are in the M1 exit record and [remote-ci.md](milestones/remote-ci.md); no established green nightly history is inferred.
-- The owner requires commits and pushes directly to main, with no branches or pull requests. Branch protection awaits an instruction restoring that workflow. The M1 changeset is consumed, and no version-PR job exists.
-- M2 structure and search is next in the plan, followed by M3 MCP and OAuth, M4 the shared UI and web host, M5 the supported desktop client, M6 import/export and attachments, M7 the admin console, and M8 operations hardening and the 1.0 release.
+- `CURRENT` names the last formally exited milestone and is **M0**. [M0-exit.md](milestones/M0-exit.md) records its complete remote matrix and `v0.0.0` marker.
+- M1 is implemented and versioned at `0.1.0`. The [exit candidate](milestones/M1-exit.md) remains provisional: commit `2d62b99` failed its own MySQL 9.7 audit contention proof. The OPS-12 timeout-sweep correction is being verified before a replacement exit record and `v0.1.0` tag.
+- Both requested NoteSession findings are fixed. Local macOS Electron and a fresh local registry audit remain outstanding as directed. [remote-ci.md](milestones/remote-ci.md) preserves actual scheduled/manual history and failed runs.
+- Commit and push directly to main; no branches or pull requests. The M1 changeset is consumed, and no version-PR job exists.
+- M2 remains the next milestone after M1's formal exit; no M2 work is started here.
 
 Refer to `docs/plan/README.md` for the reading guide and `docs/plan/13-decision-log.md` for every settled decision.

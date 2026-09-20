@@ -412,12 +412,12 @@ describe('db.query-deadline.unit [area:db]', () => {
       { host: 'fixture', port: 3306, user: 'fixture', password: 'fixture', database: 'fixture' },
       2,
       500,
-      2_500,
+      3_500,
       clock,
     );
     try {
       await inspectTransportValue(handle.db);
-      expect(lastCall().options.timeout).toBe(2_500);
+      expect(lastCall().options.timeout).toBe(3_500);
       expect(handle.queriesExecuted()).toBe(1);
       expect(handle.inUse()).toBe(0);
       expect(clock.pendingTimers).toBe(0);
