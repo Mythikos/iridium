@@ -502,3 +502,19 @@ account payment/spending setting; no financial setting, repository visibility or
 changed to bypass it. Until new runners can start, the repaired tree cannot obtain its required
 remote matrix, fixture-production artifact or final exit evidence. `CURRENT` remains M0 and
 `v0.1.0` is not cut.
+
+The verified readiness repair is committed and pushed as
+`2a643a26aecfffa2cf4af0847cb979580897dde8`. Its
+[CI 35490708111](https://github.com/Mythikos/iridium/actions/runs/35490708111) is refused in
+the same way: static `106025020502` and merge `106025024018` fail before a runner starts,
+with the same billing annotation; all dependent jobs skip. Its run/check metadata and
+`35490708111-static-annotations.json` are preserved. This following documentation commit
+records that existing implementation identity without claiming a successful remote repair.
+
+At the billing checkpoint, M0 is formally closed and the version-PR job is removed; the
+changeset has been consumed. Remaining M1 work is: regain a complete green run for the repaired
+tree, finish and reconcile its full mutation evidence, produce/promote the successful versioned
+Actions fixture and verify both restores, then land the implementation/exit-record sequence
+and tag `v0.1.0` on the record commit. The tagged release still needs its own matrix, published
+image identity, architecture scans, SBOM and provenance. Already-started remote campaigns
+remain running and retain their own commits; they are neither cancelled nor counted as green.
