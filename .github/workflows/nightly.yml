@@ -619,9 +619,9 @@ jobs:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # `engines` pins Node to `>=24.12.0 <25` and `engineStrict` is on, so the install has
-      # to be told this lane is deliberate; everything after it runs on Node 26 so a native
-      # or runtime incompatibility surfaces here rather than at the LTS switch.
+      # Install and build the pinned dependency tree. pnpm's devEngines.runtime also puts
+      # Node 24 in node_modules/.bin, so pnpm exec would silently run the tests on Node 24.
+      # The final step invokes Vitest with the runner's verified Node 26 executable instead.
       - uses: ./.github/actions/setup-workspace
         with:
           node-version: '26'
@@ -631,9 +631,25 @@ jobs:
       - name: Build the server image
         run: docker build -f infra/docker/server.Dockerfile -t iridium-server:nightly .
       - name: Unit and integration projects on Node 26
-        run: >-
-          pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
-          --project unit --project integration
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { spawnSync } from 'node:child_process';
+          if (Number(process.versions.node.split('.')[0]) !== 26) {
+            throw new Error(`The compatibility lane requires Node 26, got ${process.version}`);
+          }
+          const identity = { version: process.version, executable: process.execPath };
+          mkdirSync('reports', { recursive: true });
+          writeFileSync('reports/node-26-runtime.json', JSON.stringify(identity, null, 2) + '\n');
+          console.log(`Compatibility test runtime: ${JSON.stringify(identity)}`);
+          const result = spawnSync(process.execPath, [
+            'node_modules/vitest/vitest.mjs', '--run', '--passWithNoTests',
+            '--config', 'vitest.config.ts', '--project', 'unit', '--project', 'integration',
+          ], { stdio: 'inherit' });
+          if (result.error) throw result.error;
+          if (result.status === null) throw new Error(`Vitest terminated with ${result.signal}`);
+          process.exit(result.status);
+          NODE
       - uses: ./.github/actions/upload-nightly-reports
         if: always()
         with:

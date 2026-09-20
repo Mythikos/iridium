@@ -741,3 +741,110 @@ unavailable-container failure remain in `durable-ack-final-generation.log`.
 The following repaired-tree Actions rehearsal must regenerate its own fixture and mutation
 evidence before the final fixture promotion and implementation/exit-record landing. The earlier
 `bb8a964` fixture and green run remain identified above and are not relabeled as this later tree.
+
+## Repaired-tree remote evidence, 2026-09-20
+
+Commit `7176d392232aa8f79f9f4cec47c4d9df9635085a` starts
+[main CI 35495933424](https://github.com/Mythikos/iridium/actions/runs/35495933424),
+[M1 rehearsal 35495933501](https://github.com/Mythikos/iridium/actions/runs/35495933501),
+and [nightly 35495934601](https://github.com/Mythikos/iridium/actions/runs/35495934601).
+The main static check `106038739513` passes all 428 guards, with ten later-milestone skips,
+and all 468 acceptance-map references. Its remote registry audit passes the high-severity
+gate with three moderate findings; this is not a claim of zero vulnerabilities or a local audit.
+Main's scoped mutation job `106038921941` reports no changed mutation-source path and does no
+mutation work. The independent full-scope nightly below supplies the actual score.
+
+Nightly mutation check `106038745003` passes at **74.71223021582733%**, above M1's unchanged
+70% gate: 4,154 detected of 5,560 valid mutants, comprising 3,849 kills, 305 timeouts,
+1,242 survivors and 164 uncovered. The full report has 10,607 mutants, 4,525 compile errors,
+521 ignored, one runtime error and zero pending. Invalid mutants are excluded, not counted as
+kills. All 85 reported source contents match `7176d39`. Stryker instruments 87 files, passes a
+fresh 2,086-test baseline and reuses 10,060 results from the successful `f8390f1` incremental
+cache. This is the full-scope incremental lane specified in the milestone plan, not a fresh
+mutation campaign. The separate M1 rehearsal's fresh campaign remains separately identified.
+Artifact `10601185309` has digest
+`sha256:e24bb3e2169b70f97e68d550757dd42f00f8197f14c2d401248293296db25718`;
+the JSON report SHA-256 is `c857a08f5f35be13652e4e0055f37412266446ae01b03a06979da0938abf223e`.
+
+The fourth nightly's third chaos shards pass all twelve cases on both engines
+(`106038745108` / `106038745090`, 180.92 / 172.14 seconds). Node 26 check `106038745063`
+passes 2,735 tests in 227 files. All three full Electron jobs pass. Advisory innovation check
+`106038745034` still fails, with 93 failures, 27 passes and 291 skipped cases; its artifact is
+`10600955124`. None of these results stands in for the still-running extended property and
+other chaos shards. The 07:14 UTC history capture lists four manual nightly rehearsals and
+no scheduled runs; established green nightly history is not claimed.
+
+The third nightly's pre-D10-6 fourth shards fail on both engines: MySQL 8.4 check
+`106029939138` has 399 failures and 296 passes in 5,427.69 seconds; MySQL 9.7 check
+`106029939105` has 396 failures and 299 passes in 5,230.75 seconds. Both logs remain under
+`35492580406-chaos-4-{84,97}.log`. These are results of the older `f8390f1` tree, not the
+repaired `7176d39` campaign.
+
+Main CI's integration checks `106038921897` / `106038921960` pass 481 tests in 84 files on
+each engine, in 736.03 / 620.22 seconds. Unit checks `106038921878` / `106038921887` pass
+2,324 tests in 153 files on Linux and Windows. The complete main result still depends on its
+required chaos and report-merging checks at this checkpoint.
+
+The fourth nightly's flake check `106038761059` passes all three consecutive 411-test,
+74-file integration runs (375.80 / 369.50 / 361.53 seconds). Artifact `10600990914` retains
+its accumulated reports.
+Its first chaos shards also pass all 67 cases in four files on both engines
+(`106038745020` / `106038745151`, 1,691.38 / 1,544.48 seconds), reproducing the ARCH-02
+readiness repair on the D10-6 tree.
+
+The repaired-tree M1 fixture comes from rehearsal `35495933501`, passing MySQL 8.4 producer
+`106038899741` (481 tests, 84 files). Artifact `10601480949` has digest
+`sha256:881d2da0e01a86f26f717e7fc7d52b9f407582aac3af5ecae92eb8a31e4c3d9f`.
+Its generation time is `2026-09-20T07:16:57.372Z`, its dump is 19,076 bytes with SHA-256
+`ce390d190fd04a8bb0358a200f2b0e4d5248d38bc5d7680faa50ae3568c6aaea`, and the manifest hash is
+`cfeb94168fd7541e891f639a34b5a699b39e718dc1d6e2c57e51c4261693ce1e`.
+All 55 migrations, seed keys, counts, shipped MySQL 9.7.2 dump client, backup-role identity
+and zero-attachment contract are validated before copying the exact artifact bytes.
+
+## Node 26 runtime selection
+
+The advisory Node 26 jobs above have green job conclusions, but their test runtime claim
+does not hold. Their setup selects Node 26.9.0, then the frozen pnpm install adds the declared
+Node 24.21.0 runtime; `pnpm exec vitest` uses that local executable. pnpm documents this
+selection in [devEngines.runtime](https://pnpm.io/package_json#devenginesruntime).
+The green historical jobs remain intact and are not counted as Node 26 compatibility proof.
+
+An isolated check of pnpm 12.4.1's documented
+[runtimeOnFail override](https://pnpm.io/settings/cli#runtimeonfail) shows that ignoring the
+runtime declaration changes the dependency specification and fails the frozen lockfile check.
+The correction retains the normal frozen install, build and Node 24 production image. The
+nightly test step verifies the runner's Node 26 process and launches Vitest with that exact
+`process.execPath`, bypassing pnpm's local Node shim. Its version and executable path become
+an uploaded JSON artifact. The lane remains explicitly advisory; its next Actions execution
+must establish the corrected result.
+
+## Green repaired implementation and fixture landing
+
+[Main CI 35495933424](https://github.com/Mythikos/iridium/actions/runs/35495933424) completes
+successfully on `7176d39`. All twelve required check-run IDs are verified through GitHub's
+check-runs API. Required chaos checks `106038921926` / `106038922059` each pass 88 tests,
+with 42 later/nightly cases skipped, in 1,817.32 / 1,770.09 seconds. Merge check
+`106043018950` passes with 5,786 tests and 84 skips across the six raw lanes, then all 428
+guards with ten future skips. Coverage is 90.99% statements, 91.98% lines, 85.85% branches
+and 91.49% functions; global and per-file thresholds are unchanged and pass.
+Merged artifact `10601157428` has digest
+`sha256:391986a74f84c169e161640bdde29ab43a4c8f00377224ead08c06ff9d76b117`.
+
+All six raw blob hashes match their origin records and report zero unhandled errors. All 73
+grouped named M0/M1 exit proofs appear as passed; guards and Electron remain separate checks.
+Both operating-system blobs contain all six passing regressions for the two requested
+NoteSession findings. Each database artifact independently covers all 131 explicit documented
+operation/status pairs, with 136 total observations including five defaults, across 38 files.
+
+The following fixture landing changes only documentation, the promoted fixture, CI comments
+and the independent advisory Node 26 launcher. It leaves product sources, unit inputs,
+mutation configuration, dependency pins and the other nightly jobs unchanged. Its own main
+run must still pass before the following exit-record commit can cite it. The full-scope
+incremental nightly is valid M1 mutation evidence under §3; the explicit rehearsal's fresh
+campaign remains an additional, separately reported execution and is never described as
+completed while it is running.
+
+Local validation of this landing passes formatting, all 468 name references and all 428
+guards (ten future skips). The Node 26 launcher parses and its Node 24 negative control fails
+before launching tests, as intended. The exact promoted fixture is next exercised by both
+remote restoration lanes; earlier fixture results are not relabeled as its verification.

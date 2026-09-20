@@ -533,7 +533,7 @@ jobs:
   mutation-scoped:
     needs: static
     runs-on: ubuntu-latest
-    # Cache misses and milestone exits run the full mutation scope, as the nightly lane does.
+    # Cache misses and explicit milestone rehearsals run the full mutation scope.
     # Allow setup, build and slower runners to finish a full fresh mutation run.
     timeout-minutes: 360
     steps:
@@ -588,7 +588,7 @@ jobs:
         if: steps.scope.outputs.changed == 'true'
 
       - name: Restore the Stryker incremental file
-        # The M1 exit requires a fresh full-scope campaign with zero reused mutants.
+        # Explicit M1 rehearsals use a fresh full-scope campaign with zero reused mutants.
         # Ordinary changed-scope pushes can still reuse the validated incremental file.
         if: steps.scope.outputs.changed == 'true' && inputs.milestone_exit != 'M1'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

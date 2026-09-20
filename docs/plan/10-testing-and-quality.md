@@ -2272,7 +2272,7 @@ on: { schedule: [{ cron: '0 3 * * *' }], workflow_dispatch: {} }
 | `compose-boot` | `infra/compose.prod.yaml` brought up on a clean VM following `docs/ops/deployment.md` verbatim, then a three-editor smoke and a `claude mcp add` against it |
 | `conformance-all` | `@modelcontextprotocol/conformance --suite all`, with new failures reported but only the `active` suite blocking |
 | `flake-hunt` | `playwright test --repeat-each=3` over the whole web suite and three consecutive `vitest --project integration` runs on `main`; any test that both passes and fails within the job is reported with its trace |
-| `node-26` | the `unit` + `integration` projects on Node 26 (a forward-compatibility lane, non-blocking until Node 26 becomes the default per skeleton A4) |
+| `node-26` | the `unit` + `integration` projects launched with the runner's verified Node 26 executable, with its identity uploaded; the frozen dependency install, build and production Docker fixture retain Node 24. pnpm's local runtime pin must not select the test executable. This forward-compatibility lane remains non-blocking until Node 26 becomes the default per skeleton A4. |
 
 A nightly failure opens (or updates) one issue per job with the artifacts attached; it does not block merges, but a nightly job that is red for three consecutive nights blocks the next milestone exit (see 12-milestones.md).
 
