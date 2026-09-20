@@ -127,6 +127,8 @@ single limits policy (`A.1`), and `0059`–`0061` are the three ADRs the project
 
 ## Section decision amendments
 
+- [OPS-04: MySQL client packaging](./ops-04-mysql-client-packaging.md), amended 2026-09-20 for both release architectures.
+
 - [D01-15: Elastic License 2.0](./d01-15-elastic-license.md), accepted 2026-09-19; settles the licence the M0 exit record left open.
 
 - [D10-33: collaboration owner lease scope](./d10-33-collaboration-owner-lease.md), amended 2026-09-20 for ownership-loss recovery observation. Section decision IDs keep their original names rather than consuming an A-series number.

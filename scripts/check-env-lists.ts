@@ -30,8 +30,8 @@
  *
  * **2. `env` or `passThroughEnv`?** Whether the task is cached. `env` is a **cache-key**
  * declaration — changing one of its values must invalidate the task's output — and `passThroughEnv`
- * is a visibility declaration that does not enter the hash. No cacheable `@iridium/server` task reads
- * `process.env`, so no schema key can change a cached artefact; putting one in `env` would be a false
+ * is a visibility declaration that does not enter the hash. The cacheable server build reads only
+ * `SOURCE_COMMIT`, not runtime configuration, so putting a schema key in `env` would be a false
  * claim about what the cache depends on, and it would put a database password into a task hash for
  * nothing. The check therefore derives the field from the resolved task rather than hard-coding it:
  * `cache: false` → `passThroughEnv`, `cache: true` → `env`. Flip `dev` to cacheable and this check

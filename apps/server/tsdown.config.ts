@@ -23,6 +23,13 @@
 // invocation, which is what both the Dockerfile and the plan's "20-line script" describe.
 import { defineConfig, type UserConfig } from 'tsdown';
 
+// Release builds receive the checked-out tag's commit through Docker and Turbo's cache key.
+// A development build may omit it; runtime environment variables cannot rewrite this identity.
+const sourceCommit = process.env['SOURCE_COMMIT'] ?? 'unknown';
+if (sourceCommit !== 'unknown' && !/^[a-f0-9]{40}$/.test(sourceCommit)) {
+  throw new Error('SOURCE_COMMIT must be a full lowercase Git commit or unknown');
+}
+
 /** Everything the two outputs agree on. Neither may differ in target, format or externals. */
 const shared = {
   format: 'esm',
@@ -50,6 +57,7 @@ export default defineConfig([
     ...shared,
     name: 'main',
     entry: { main: 'src/main.ts' },
+    define: { IRIDIUM_BUILD_COMMIT: JSON.stringify(sourceCommit) },
     // The breached-password list is data, not code, and `auth/credentials/blocklist.ts` resolves it
     // as `new URL('blocklist.txt', import.meta.url)` — which is `dist/blocklist.txt` once bundled. A
     // bundler copies no data files on its own, so without this the built binary throws `ENOENT` in

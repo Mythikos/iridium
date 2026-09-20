@@ -189,7 +189,9 @@ describe('tickets.batch-and-limits.integration [area:auth]', () => {
       },
     );
     const ticket = response.body.tickets[0] ?? '';
-    await context.clock.advance(LIMITS.TICKET_TTL_S * 1000 + 1);
+    // Age the ticket for consume's own expiry check. Replaying a minute of background timers
+    // would also expire real mysql2 acquisitions before their socket callbacks can run.
+    context.clock.jump(context.clock.now() + LIMITS.TICKET_TTL_S * 1000 + 1);
     expect(context.app.auth.tickets.consume(ticket)).toBeNull();
   });
 

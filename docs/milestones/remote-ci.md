@@ -209,3 +209,65 @@ replacement browser now uses the existing auth fixture's independent peer addres
 and the property clock stay unchanged. A twelve-rotation regression fails with the original 429,
 then passes on both engines; the complete logout file passes five cases per engine. Full types,
 targeted lint and Knip pass. This repair still needs its remote follow-up; the first nightly is red.
+
+## Owner license commits and ticket-clock isolation
+
+Commit `c2207979033d5ac7654ccb68ff8565ce304d8ef8` starts
+[CI 35482654693](https://github.com/Mythikos/iridium/actions/runs/35482654693). It passes static,
+both unit jobs and all three Electron jobs, but the owner's license-decision commit `694c2b4`
+supersedes it. Both integration and both chaos jobs are cancelled, not passing evidence.
+[CI 35483346224](https://github.com/Mythikos/iridium/actions/runs/35483346224) has the same completed
+passes and is superseded by `4b34cd2`, which adds the exact Elastic License 2.0 text. Its four
+database jobs are cancelled, and the incomplete report merge fails. D01-15 settles the license
+question independently of those cancelled runs.
+
+The resulting [CI 35483701742](https://github.com/Mythikos/iridium/actions/runs/35483701742) passes
+static (`106006189954`), both units and all three Electron runners. Static records 418 guards
+passing and ten future skips; the registry audit has three moderate advisories and passes its
+unchanged high-severity threshold. The 8.4 integration job `106006563850` passes. The 9.7 job
+`106006563851` has 477 passes and three failures in the ticket suite, using sequence seed
+`1789871205685`. Both chaos jobs (`106006563846` on 8.4 and `106006563888` on 9.7) pass;
+report merge is still pending at this checkpoint.
+
+The ticket TTL test calls `ManualClock.advance`, replaying a minute of readiness and session
+delivery timers while mysql2 still uses real sockets. Its virtual acquisition deadlines fire
+before socket callbacks run, poisoning the shared fixture's readiness for later shuffled tests.
+The local replay reproduces those spurious acquisition errors, although its six tests pass in
+that execution order. The test now uses the clock's existing `jump` operation to age the ticket
+and prove `consume` rejects it at expiry without requiring a sweep. Real deadlines and product
+readiness policy are unchanged. The original remote failure and local replay remain preserved.
+Both corrected engine runs pass all six ticket cases at that seed, with coverage on 9.7 and no
+acquisition-timeout or session-delivery error logs. Full types, targeted lint and 55 release guards pass.
+
+The first nightly's 8.4 property job `105984200011` also finishes red: six failures and 2,308 passes.
+Its failures repeat the fixed session-rotation fixture bucket problem (including seed
+`-1762743971`, original path `4500`); later shrinking masks the original 429 as 401. The extended
+chaos and full mutation jobs are still running. There is still no earlier scheduled history.
+
+## Release identity and architecture preflight
+
+The release preflight finds that `build-info` has a commit placeholder but the bundler never
+defines it. Docker now passes the tagged SHA through `SOURCE_COMMIT`, the server build includes
+that value in its Turbo cache key, and tsdown embeds it. Release image hygiene checks the actual
+CLI JSON against `GITHUB_SHA`; the OCI revision label carries the same value. Two host builds
+with distinct synthetic commits prove that the build cache invalidates, and a runtime environment
+override cannot rewrite an already-built identity. Full types and the release guards pass.
+
+The first local ARM64 attempt fails before package execution because the default Docker builder
+has no ARM emulator. A separate builder with BuildKit's bundled emulator resolves that local
+runner gap. Inspection also proves a real image-recipe defect: Oracle's Debian repository declares
+only `i386 amd64`, so its ARM64 package index is absent. The dated [OPS-04 amendment](../adr/ops-04-mysql-client-packaging.md)
+replaces that source with Oracle's signed `mysql-community-client-9.7.2-1.el9` RPM on both
+architectures. Each exact package is pinned by SHA-256, its signing key fingerprint is checked,
+and a signature is mandatory. A diagnostic confirms that plain `rpmkeys --checksig` accepts an
+unsigned digest-only package; the recipe additionally requires the signed result and pinned bytes.
+Only `mysql`, `mysqldump` and `mysqlbinlog` enter the Debian runtime with its compatible libraries.
+
+Both AMD64 and ARM64 images build and execute all three client binaries plus the deployed server's
+version command in the final runtime base. Each reports MySQL 9.7.2 and the embedded synthetic
+commit `1111111111111111111111111111111111111111`; these are preflight builds, not release artifacts.
+The shipped-client dump/restore file passes both cases on each supported database engine using
+unchanged image identity `sha256:2bf62963b1a4556e62359abda3e3eb5e86b2f1f8fd26757268fef56a3cdb3cc4`.
+The first local attempts supplied an image identifier that Testcontainers treated as a registry
+name and failed to pull; the corrected tag-based invocations preserve and compare the image identity
+before and after. Both failed attempts remain in `reports/remote-ci/` with their passing follow-ups.

@@ -6,6 +6,9 @@
     "implicitDependencies": ["k6"]
   },
   "tasks": {
+    "build": {
+      "env": ["SOURCE_COMMIT"]
+    },
     // `dev` is the only task in this workspace whose command starts a process that calls
     // `loadConfig()` (`node --watch src/main.ts serve`). `build`, `lint`, `check-types` and `clean`
     // run tools over source; `test` runs the `unit` project, which never reads `process.env`
@@ -15,8 +18,8 @@
     // a task that never reads it is exactly the drift the check below exists to catch.
     //
     // The field is `passThroughEnv` because `dev` is `cache: false`. `env` is a *cache-key*
-    // declaration — its values enter the task hash — and no cacheable task here reads `process.env`,
-    // so nothing in this list can change a cached artefact, and no database password has to enter a
+    // declaration — its values enter the task hash. The build reads only SOURCE_COMMIT, never runtime
+    // configuration, so nothing in this list can change a cached artefact, and no password enters a
     // hash for nothing. Make `dev` cacheable and the check says to move the list to `env`.
     //
     // The list is a rendering of `apps/server/src/config/env.ts`, in that module's order, and

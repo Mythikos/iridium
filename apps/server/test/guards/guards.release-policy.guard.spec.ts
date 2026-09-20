@@ -168,6 +168,8 @@ function workflowIssues(source: string): string[] {
     issues.push('Image scans must use the same canonical repository as the published tags');
   for (const setting of [
     'platforms: linux/amd64,linux/arm64',
+    'SOURCE_COMMIT=${{ github.sha }}',
+    'identity.commit !== process.env.GITHUB_SHA',
     'push: true',
     'sbom: true',
     'provenance: mode=max',
@@ -548,6 +550,12 @@ describe('guards.release-policy.guard [area:release]', () => {
       "mysql: ['mysql:8.4.11']",
     ],
     ['missing SBOM', 'sbom: true', 'sbom: false'],
+    ['missing source identity', 'SOURCE_COMMIT=${{ github.sha }}', 'SOURCE_COMMIT=unknown'],
+    [
+      'missing image identity check',
+      'identity.commit !== process.env.GITHUB_SHA',
+      'identity.commit === undefined',
+    ],
   ])('detects workflow regression: %s', (_name, before, after) => {
     expect(WORKFLOW).toContain(before);
     expect(workflowIssues(WORKFLOW.replace(before, after))).not.toEqual([]);

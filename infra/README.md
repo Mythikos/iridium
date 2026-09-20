@@ -78,13 +78,13 @@ The build context is the repository root — stage `prune` needs the whole works
 ignore file is `docker/server.Dockerfile.dockerignore`, which BuildKit reads in preference to a
 context-level `.dockerignore`.
 
-| Stage          | What it does                                                                                                     |
-| -------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `base`         | `node:24.21.0-bookworm-slim`, corepack disabled, pnpm 12.4.1 installed at the pinned version                     |
-| `prune`        | `turbo prune @iridium/server @iridium/web --docker`                                                              |
-| `build`        | `pnpm install --frozen-lockfile` from the **pruned** lockfile, `turbo run build`, `pnpm deploy --prod`           |
-| `mysql-client` | `mysql`, `mysqldump` and `mysqlbinlog` 9.7.2 from the official MySQL APT repository, key verified by fingerprint |
-| `runtime`      | `ca-certificates`, `tini` as PID 1, uid/gid 10001, the deployment, the web bundle, the `iridium` CLI shim        |
+| Stage          | What it does                                                                                                                        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `base`         | `node:24.21.0-bookworm-slim`, corepack disabled, pnpm 12.4.1 installed at the pinned version                                        |
+| `prune`        | `turbo prune @iridium/server @iridium/web --docker`                                                                                 |
+| `build`        | `pnpm install --frozen-lockfile` from the **pruned** lockfile, `turbo run build`, `pnpm deploy --prod`                              |
+| `mysql-client` | `mysql`, `mysqldump` and `mysqlbinlog` 9.7.2 from signed Oracle client RPMs on AMD64 and ARM64, with pinned hashes and verified key |
+| `runtime`      | `ca-certificates`, `tini` as PID 1, uid/gid 10001, the deployment, the web bundle, the `iridium` CLI shim                           |
 
 The image runs as `10001:10001` with a read-only root filesystem, writes only to the four mounted
 volumes and `/tmp`, and answers `docker stop` through `tini` so SIGTERM reaches Node exactly once.
@@ -95,15 +95,13 @@ the running server can never see a different schema, validation or set of secret
 
 Two notes on what the plan's runtime table asks for and what this Dockerfile does:
 
-- The three MySQL client binaries are **extracted** from the signed `.deb` files rather than
-  installed with `apt-get install`. `mysql-community-client-core` 9.7.2-1debian12 depends, through
-  `mysql-community-client-plugins`, on `mysql-community-server-core` — 220 MB carrying `mysqld`
-  itself, which has no business inside the application image. apt still authenticates everything:
-  the `InRelease` signature by the pinned key, and each `.deb` by the checksum in that signed
-  index. `mysqlbinlog` lives in `mysql-community-server-core`, so that package is downloaded and
-  the one binary is taken out of it; the auth-plugin pack (Kerberos, LDAP, OCI, WebAuthn, OpenID)
-  is not shipped, because the built-in `caching_sha2_password` client plugin is what both supported
-  server lines use.
+- The three MySQL clients are extracted from Oracle's signed `mysql-community-client-9.7.2-1.el9`
+  RPM on each architecture. The package SHA-256 and release-key fingerprint are pinned; a valid
+  signature is mandatory before extraction. Only those binaries enter the runtime, using Debian
+  libraries. No RPM scripts, database server, or optional authentication plugins are shipped.
+  The earlier APT source has no ARM64 packages; [OPS-04](../docs/adr/ops-04-mysql-client-packaging.md)
+  records the correction. The built-in `caching_sha2_password` client plugin serves both supported
+  database lines. Every build executes all three clients to check architecture and loader compatibility.
 - The `iridium` shim is written by the runtime stage rather than copied from `infra/docker/iridium`.
   It is the same three lines either way.
 
