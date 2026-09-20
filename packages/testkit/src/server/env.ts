@@ -121,5 +121,14 @@ export function buildServerEnv(o: ServerEnvOptions): Record<string, string> {
   if (o.collab?.ticketTtlS !== undefined) {
     env['COLLAB_TICKET_TTL_S'] = String(o.collab.ticketTtlS);
   }
+  // Which engine the whole run targets, not a per-instance product setting — the companion of
+  // `IRIDIUM_MYSQL_IMAGE`. The advisory innovation lane points every server at an uncertified MySQL
+  // line, and boot step 2 refuses that line outright unless this says otherwise
+  // (11-operations-and-deployment.md). Without propagating it the lane reaches no assertion at all,
+  // so it can neither pass nor report a real incompatibility. `extraEnv` still overrides it.
+  const allowUntestedMysql = process.env['IRIDIUM_ALLOW_UNTESTED_MYSQL'];
+  if (allowUntestedMysql !== undefined) {
+    env['IRIDIUM_ALLOW_UNTESTED_MYSQL'] = allowUntestedMysql;
+  }
   return { ...env, ...o.extraEnv };
 }

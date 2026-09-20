@@ -228,6 +228,26 @@ function isLifecycleMessage(value: unknown): value is LifecycleMessage {
 }
 
 /** Every probe has its own process: a regression cannot leave sockets or signal handlers here. */
+/**
+ * The child's own stderr, with the runtime's warnings removed.
+ *
+ * These assertions mean "the server wrote nothing to stderr", not "this Node emitted no warnings".
+ * Node 26 prints an `ExperimentalWarning` for Web Storage on every boot, which is the runtime
+ * talking about itself and says nothing about the product; leaving it in would make the advisory
+ * Node 26 lane (A4/D10-19) fail for a warning no assertion is about. Anything the server writes is
+ * kept, so a real stderr regression still fails.
+ */
+function withoutRuntimeWarnings(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter(
+      (line) =>
+        !/^\(node:\d+\)\s+\w*Warning:/.test(line) &&
+        !line.startsWith('(Use `node --trace-warnings'),
+    )
+    .join('\n');
+}
+
 async function runLifecycle(scenario: LifecycleScenario, port = 0): Promise<LifecycleResult> {
   const mysql = inject('iridiumMysql');
   const exitPath = join(scratch, `${scenario}-exit.json`);
@@ -279,7 +299,7 @@ async function runLifecycle(scenario: LifecycleScenario, port = 0): Promise<Life
       child.once('close', (code, signal) => resolve({ code, signal }));
     },
   );
-  return { ...outcome, messages, stdout, stderr, exitPath };
+  return { ...outcome, messages, stdout, stderr: withoutRuntimeWarnings(stderr), exitPath };
 }
 
 describe('app.boot-modes.integration [area:ops]', () => {
