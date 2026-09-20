@@ -1,0 +1,44 @@
+name: Check the published release image
+description: Executes both platforms at one immutable digest and checks their product and client identity.
+
+inputs:
+  image:
+    description: Canonical image repository followed by its immutable sha256 index digest.
+    required: true
+  version:
+    description: Expected version from the tagged server package.
+    required: true
+  commit:
+    description: Expected source commit resolved from the immutable product tag.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Image hygiene
+      shell: bash
+      env:
+        RELEASE_IMAGE: ${{ inputs.image }}
+        EXPECTED_VERSION: ${{ inputs.version }}
+        EXPECTED_COMMIT: ${{ inputs.commit }}
+      run: |
+        set -euo pipefail
+        for architecture in amd64 arm64; do
+          docker run --platform "linux/$architecture" --rm "$RELEASE_IMAGE" version --json > "image-version-$architecture.json"
+          docker run --platform "linux/$architecture" --rm --entrypoint mysqldump "$RELEASE_IMAGE" --version | grep -E '\b9\.7\.'
+        done
+        node --input-type=module <<'NODE'
+        import { readFileSync } from 'node:fs';
+        const expectedVersion = process.env.EXPECTED_VERSION;
+        const expectedCommit = process.env.EXPECTED_COMMIT;
+        if (!expectedVersion || !/^[0-9a-f]{40}$/.test(expectedCommit ?? '')) {
+          throw new Error('Image verification requires the tagged version and full source commit');
+        }
+        for (const architecture of ['amd64', 'arm64']) {
+          const identity = JSON.parse(readFileSync(`image-version-${architecture}.json`, 'utf8'));
+          if (identity.version !== expectedVersion || identity.commit !== expectedCommit) {
+            throw new Error(`${architecture} image identity differs from the tagged package and commit`);
+          }
+          console.log(`${architecture}: ${JSON.stringify(identity)}`);
+        }
+        NODE

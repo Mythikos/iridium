@@ -282,3 +282,20 @@ chain verification and caller-owned exact-once retry assertions on both supporte
 
 Primary implementations: [MySQL 8.4.11](https://github.com/mysql/mysql-server/blob/mysql-8.4.11/storage/innobase/lock/lock0wait.cc#L1353)
 and [MySQL 9.7.2](https://github.com/mysql/mysql-server/blob/mysql-9.7.2/storage/innobase/lock/lock0wait.cc#L1353).
+
+## Post-tag release evidence (2026-09-20)
+
+The product tag remains on this record's original commit, `f31a51fd2c3af6b3631a28fc45918245dfac34a1`.
+That commit's twelve required checks pass in [35514878482](https://github.com/Mythikos/iridium/actions/runs/35514878482).
+Tagged release [35516882462](https://github.com/Mythikos/iridium/actions/runs/35516882462) passes
+both MySQL verification lanes, the two-platform build and both architecture-specific SBOM/scan
+pairs, but its runtime hygiene job fails when the hosted runner's classic Docker image store
+cannot load ARM64 after AMD64 at one immutable index digest. The original release remains a
+failure; an empty ARM64 identity file supplies no execution evidence.
+
+The post-tag OPS-04 workflow repair configures a containerd image store and reuses the exact
+version/source/client checks in a read-only artifact-verification workflow. It preserves the
+product tag and already-published image digest. [remote-ci.md](remote-ci.md) records the failed
+job, successful prerequisite IDs, immutable artifact digest and repair. Supplementary runtime
+verification must be recorded separately; it cannot replace the original SBOMs/scans or erase
+the failed run. The local macOS Electron and fresh local audit items above remain outstanding.

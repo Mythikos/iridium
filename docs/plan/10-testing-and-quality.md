@@ -2284,12 +2284,18 @@ The workflow triggers on a manually cut `v<major>.<minor>.<patch>` product tag, 
 |---|---|
 | `release-plan` | validate the tagged server version and exited milestone, check the exact current server changelog section, and emit the due-job selection; no release artifacts |
 | `verify` | **M1 onward** — re-run `static`, `unit`, `integration` and the license scan against the tagged tree (a tag is never trusted to match a green PR) |
-| `server-image` | **M1 onward** — `docker/setup-buildx-action` → `docker/build-push-action@v7.3.0` with SBOM and provenance attestation → `syft` SBOM + `grype` scan → push by digest |
+| `server-image` | **M1 onward** — explicit containerd image store (Docker 29.8.1), QEMU and Buildx → `docker/build-push-action@v7.3.0` with SBOM and provenance attestation → `syft` SBOM + `grype` scan → push by digest |
 | `desktop` | **M5 onward** — electron-builder matrix (macos/windows/ubuntu) with **no signing or notarisation secrets** — none exist at 1.0; builds the **E2E fuse variant** first (production fuses except `enableNodeCliInspectArguments`), runs `playwright test --project=electron --grep @packaged` against it via `findLatestBuild()`/`parseElectronApp()`, then builds the final artefacts, writes `bundles.json` and `SHA256SUMS` with `tooling/release/write-bundle-manifest.ts`, and runs `release.bundle-integrity` plus a launch-and-exit sanity check on them |
 | `release-feed` (renamed from `update-feed`) | **M5 onward** — publish the six bundles through `iridium desktop-updates publish <dir>`, which re-verifies both digests server-side; then fetch `<PUBLIC_ORIGIN>/desktop/updates/<channel>/SHA256SUMS` and `<PUBLIC_ORIGIN>/api/v1/desktop/update-policy` and assert the published digests equal the built ones. There is no end-to-end updater test at 1.0 — there is no updater; `desktop.update-from-previous` returns with the post-1.0 signing epic |
 | `bridge` | **M3 onward** — build `iridium-mcp` for the desktop `extraResources` and for `/desktop/tools/`; run `bridge.parity.contract` against the release image |
 | `drill` | **M8 onward** — the backup/restore drill against the release image, so "restorable" is a property of the artifact and not of `main` |
 | Version preparation (local) | `pnpm changeset version`, committed and pushed directly to `main`; no version-PR job |
+
+The read-only `release-image-check.yml` manual workflow reuses the same image-hygiene action
+for an existing product tag and immutable image index after a workflow repair (OPS-04).
+It records the tag's source commit and the workflow commit separately. It neither rebuilds nor
+publishes and does not replace the original tagged-tree verification, SBOMs, scans or failed-run
+history. Its detached tagged-tree inspection refuses M0 and mismatched release metadata.
 
 ### What blocks a merge
 

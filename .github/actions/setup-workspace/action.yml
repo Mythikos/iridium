@@ -48,8 +48,8 @@ runs:
         node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
         cache: pnpm
 
-    # CURRENT is the last exited milestone. M1 is in progress; future CURRENT values must
-    # advance the default, and a dispatch may advance it further but never suppress due gates.
+    # CURRENT is the last exited milestone. M1 is the minimum kernel target; later CURRENT
+    # values advance the default, and a dispatch may advance it further but never suppress gates.
     - name: Resolve the test milestone
       shell: bash
       env:

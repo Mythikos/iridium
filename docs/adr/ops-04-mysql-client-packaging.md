@@ -49,3 +49,24 @@ Sources: [Oracle's Debian repository metadata](https://repo.mysql.com/apt/debian
 [Syft's platform setting](https://oss.anchore.com/docs/reference/syft/configuration/),
 [Grype's platform setting](https://oss.anchore.com/docs/reference/grype/configuration/),
 and the OPS-04 amendment in [the decision log](../plan/13-decision-log.md).
+
+### OPS-04 amendment (2026-09-20): the release runner owns a multi-platform image store
+
+Status: accepted. The first tagged release builds and scans both platforms, but the hosted
+runner's Docker 28.0.4 classic overlay2 store cannot load ARM64 after AMD64 under the same
+manifest-index digest: Docker refuses to overwrite that digest before ARM64 executes.
+The release runner now uses the official, commit-pinned Docker setup action with Docker
+29.8.1 and the containerd snapshotter explicitly enabled, followed by QEMU and Buildx.
+The shared image-hygiene action still executes both server identities and shipped 9.7 clients
+at the original immutable index digest; its version and full source-commit comparisons remain
+mandatory. No platform or assertion is removed.
+
+The read-only `release-image-check.yml` workflow can execute that same hygiene action against
+an existing product tag and image digest after a workflow repair. It checks a detached copy
+of the tagged tree through the existing release-policy inspector, and records the source
+commit separately from the workflow commit. It cannot build, publish or move tags. Its result
+supplements the original tagged-tree verification, SBOMs and scans; it does not relabel an
+earlier failed release as green or supply those other proofs. Both run IDs belong in the
+release evidence. The original tag and image digest remain unchanged.
+
+Primary source: [Docker's GitHub Actions multi-platform image-store guidance](https://docs.docker.com/build/ci/github-actions/multi-platform/).

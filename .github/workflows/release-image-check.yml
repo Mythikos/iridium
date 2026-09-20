@@ -1,0 +1,85 @@
+# Read-only verification of an already-published artifact after a runner/workflow repair.
+# The original release supplies the build, scan and tagged-tree verification evidence.
+# This workflow does not rebuild, publish, move a tag, or replace an earlier failed run.
+name: release-image-check
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing product tag whose image identity will be checked.
+        type: string
+        required: true
+      digest:
+        description: Immutable sha256 index digest from the original release job.
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  image-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          install: 'false'
+
+      - name: Inspect the immutable tagged source
+        id: source
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_DIGEST: ${{ inputs.digest }}
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/iridium-server
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { inspectRelease } from './scripts/check-release.ts';
+          import { productVersion, releaseImageRepository } from './scripts/lib/release-policy.ts';
+          const tag = process.env.RELEASE_TAG;
+          const digest = process.env.RELEASE_DIGEST;
+          if (!tag || productVersion(tag) === null || !/^sha256:[0-9a-f]{64}$/.test(digest ?? '')) {
+            throw new Error('An existing product tag and full sha256 image index digest are required');
+          }
+          const source = join(process.env.RUNNER_TEMP, 'release-image-source');
+          execFileSync('git', ['worktree', 'add', '--detach', source, `refs/tags/${tag}`], { stdio: 'inherit' });
+          const inspected = inspectRelease(source, tag);
+          if (!inspected.plan.jobs.server_image || inspected.issues.length) {
+            throw new Error(`Tagged server release policy refused: ${inspected.issues.join('; ')}`);
+          }
+          const image = `${releaseImageRepository(process.env.IMAGE_NAME)}@${digest}`;
+          const inputs = { tag, image, version: inspected.plan.version, commit: inspected.commit, workflowCommit: process.env.GITHUB_SHA };
+          writeFileSync('image-verification-inputs.json', `${JSON.stringify(inputs, null, 2)}\n`);
+          for (const [key, value] of Object.entries(inputs)) appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          console.log(JSON.stringify(inputs));
+          NODE
+
+      - uses: ./.github/actions/setup-release-docker
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/check-release-image
+        with:
+          image: ${{ steps.source.outputs.image }}
+          version: ${{ steps.source.outputs.version }}
+          commit: ${{ steps.source.outputs.commit }}
+      - name: Upload image identity evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-image-identity
+          path: |
+            image-verification-inputs.json
+            image-version-*.json
+          if-no-files-found: error
+          retention-days: 90

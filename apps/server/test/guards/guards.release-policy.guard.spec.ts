@@ -9,6 +9,14 @@ import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const WORKFLOW = readFileSync(join(REPO_ROOT, '.github/workflows/release.yml'), 'utf8');
+const DOCKER_SETUP = readFileSync(
+  join(REPO_ROOT, '.github/actions/setup-release-docker/action.yml'),
+  'utf8',
+);
+const IMAGE_CHECK = readFileSync(
+  join(REPO_ROOT, '.github/actions/check-release-image/action.yml'),
+  'utf8',
+);
 
 /** Execute the actual Node script module without adding a cross-workspace TypeScript dependency. */
 function evaluate(script: string, input: unknown): unknown {
@@ -90,7 +98,11 @@ function jobScalar(block: string, key: string): string | null {
   return matches[0]?.[1] ?? null;
 }
 
-function workflowIssues(source: string): string[] {
+function workflowIssues(
+  source: string,
+  dockerSetup = DOCKER_SETUP,
+  imageCheck = IMAGE_CHECK,
+): string[] {
   const jobs = jobBlocks(source);
   const issues: string[] = [];
   const required: Readonly<Record<string, { output: string; needs: string }>> = {
@@ -169,7 +181,6 @@ function workflowIssues(source: string): string[] {
   for (const setting of [
     'platforms: linux/amd64,linux/arm64',
     'SOURCE_COMMIT=${{ github.sha }}',
-    'identity.commit !== process.env.GITHUB_SHA',
     'push: true',
     'sbom: true',
     'provenance: mode=max',
@@ -181,6 +192,19 @@ function workflowIssues(source: string): string[] {
     if (!server.includes(setting)) issues.push(`Missing M1 publication requirement ${setting}`);
   }
   const serverSteps = server.split(/^      - /m);
+  const setup = serverSteps.findIndex((step) =>
+    step.includes('uses: ./.github/actions/setup-release-docker'),
+  );
+  const build = serverSteps.findIndex((step) => step.includes('uses: docker/build-push-action@'));
+  if (
+    setup === -1 ||
+    setup >= build ||
+    !dockerSetup.includes('uses: docker/setup-docker-action@') ||
+    !/"containerd-snapshotter"\s*:\s*true/.test(dockerSetup) ||
+    !dockerSetup.includes('uses: docker/setup-qemu-action@')
+  ) {
+    issues.push('The release runner must execute both platforms in a containerd image store');
+  }
   for (const architecture of ['amd64', 'arm64']) {
     for (const [action, variable, requirements] of [
       [
@@ -222,9 +246,21 @@ function workflowIssues(source: string): string[] {
       }
     }
   }
+  const hygiene = serverSteps.find((step) =>
+    step.includes('uses: ./.github/actions/check-release-image'),
+  );
   if (
-    !server.includes('for architecture in amd64 arm64; do') ||
-    !server.includes('--platform "linux/$architecture"')
+    hygiene === undefined ||
+    /^        if:/m.test(hygiene) ||
+    !hygiene.includes('image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}') ||
+    !hygiene.includes('version: ${{ needs.release-plan.outputs.version }}') ||
+    !hygiene.includes('commit: ${{ github.sha }}') ||
+    !imageCheck.includes('for architecture in amd64 arm64; do') ||
+    !imageCheck.includes('--platform "linux/$architecture"') ||
+    !imageCheck.includes('identity.version !== expectedVersion') ||
+    !imageCheck.includes('identity.commit !== expectedCommit') ||
+    !imageCheck.includes('EXPECTED_VERSION: ${{ inputs.version }}') ||
+    !imageCheck.includes('EXPECTED_COMMIT: ${{ inputs.commit }}')
   ) {
     issues.push('Image hygiene must execute both released architectures');
   }
@@ -617,20 +653,39 @@ describe('guards.release-policy.guard [area:release]', () => {
       '- name: ARM64 vulnerability scan (grype)',
       '- name: ARM64 vulnerability scan (grype)\n        if: false',
     ],
-    [
-      'host-only image execution',
-      'for architecture in amd64 arm64; do',
-      'for architecture in amd64; do',
-    ],
     ['missing source identity', 'SOURCE_COMMIT=${{ github.sha }}', 'SOURCE_COMMIT=unknown'],
-    [
-      'missing image identity check',
-      'identity.commit !== process.env.GITHUB_SHA',
-      'identity.commit === undefined',
-    ],
+    ['unchecked image identity', 'commit: ${{ github.sha }}', 'commit: unknown'],
   ])('detects workflow regression: %s', (_name, before, after) => {
     expect(WORKFLOW).toContain(before);
     expect(workflowIssues(WORKFLOW.replace(before, after))).not.toEqual([]);
+  });
+
+  it.each([
+    ['classic image store', '"containerd-snapshotter":true', '"containerd-snapshotter":false'],
+    ['unconfigured daemon', 'uses: docker/setup-docker-action@', 'uses: example/other-action@'],
+    ['missing emulation', 'uses: docker/setup-qemu-action@', 'uses: example/other-action@'],
+  ])('detects release runner regression: %s', (_name, before, after) => {
+    expect(DOCKER_SETUP).toContain(before);
+    expect(workflowIssues(WORKFLOW, DOCKER_SETUP.replace(before, after))).not.toEqual([]);
+  });
+
+  it.each([
+    ['host-only execution', 'for architecture in amd64 arm64; do', 'for architecture in amd64; do'],
+    [
+      'wrong source accepted',
+      'identity.commit !== expectedCommit',
+      'identity.commit === undefined',
+    ],
+    [
+      'wrong version accepted',
+      'identity.version !== expectedVersion',
+      'identity.version === undefined',
+    ],
+  ])('detects shared image verification regression: %s', (_name, before, after) => {
+    expect(IMAGE_CHECK).toContain(before);
+    expect(workflowIssues(WORKFLOW, DOCKER_SETUP, IMAGE_CHECK.replace(before, after))).not.toEqual(
+      [],
+    );
   });
 
   it('rejects unrecognized job declarations instead of dropping them from the inventory', () => {

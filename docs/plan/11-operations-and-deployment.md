@@ -2210,3 +2210,17 @@ These are choices the decision skeleton does not settle. Each is used consistent
 ### Child-process harness invocation (2026-09-17)
 
 `iridium serve --child` selects the ARCH-01 stdout handshake and SIGTERM lifecycle through the same boot path. It honors `PORT`, allowing the harness to reserve an ephemeral port once and retain the same origin after a kill and restart. Plain `iridium serve` retains the container lifecycle. This flag changes process lifecycle only; authentication, persistence, readiness, and the route set are identical.
+
+### Published-image verification after a runner repair (2026-09-20)
+
+OPS-04 requires an explicitly configured containerd image store for the release runner.
+The classic hosted-runner store cannot retain AMD64 and ARM64 under one manifest-index digest.
+`.github/actions/setup-release-docker` pins Docker 29.8.1 and prepares QEMU and Buildx;
+`.github/actions/check-release-image` executes both server identities and shipped 9.7 clients.
+
+If a published artifact's runtime check failed because of the runner, dispatch
+`release-image-check.yml` on the repaired main workflow with the existing product `tag`
+and full `sha256:...` image-index `digest`. This is read-only and does not rebuild or retag.
+The workflow inspects the actual tagged source, records its commit separately from the workflow
+commit, and uploads both runtime identities. Retain the failed release run and its original
+tagged-tree, SBOM and scan evidence alongside this supplementary runtime result.

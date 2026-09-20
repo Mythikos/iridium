@@ -1263,3 +1263,38 @@ full Electron passes four tests on each operating system. The final crash shards
 and advisory findings above remain open; it is not described as green nightly health. The
 exit record retains all nine actual nightly runs, including the first scheduled execution,
 with their sources, triggers, check IDs and conclusions.
+
+## Tagged M1 release: classic Docker store failure (2026-09-20)
+
+The immutable product tag `v0.1.0` identifies exit record
+`f31a51fd2c3af6b3631a28fc45918245dfac34a1`. Its required CI
+[35514878482](https://github.com/Mythikos/iridium/actions/runs/35514878482) passes all twelve
+checks. Tagged release [35516882462](https://github.com/Mythikos/iridium/actions/runs/35516882462)
+remains failed: selector `106094222212` and both tagged verification checks
+`106094280257` (8.4) / `106094280233` (9.7) pass. Each engine records 428 guards with
+10 future skips, 2,338 unit tests, and 469 integration/contract tests in 81 files. The separate
+main integration jobs include the database property project and pass 481 tests in 84 files.
+
+Image check [106096275055](https://github.com/Mythikos/iridium/actions/runs/35516882462/job/106096275055)
+successfully builds and pushes
+`ghcr.io/mythikos/iridium-server@sha256:e2fab1f49fc92594032a04025dee3d94afede5ed102f4f6429275d42a92f9e7e`.
+Its AMD64 and ARM64 Syft and Grype steps all pass. Direct registry inspection confirms both
+platform manifests and their attached SBOM and provenance records at that index digest.
+AMD64 then executes and reports version `0.1.0`, commit `f31a51f` and MySQL client 9.7.2.
+ARM64 fails before execution: the runner's Docker 28.0.4 overlay2 store returns
+`cannot overwrite digest` (exit 125) when the same index resolves to its second platform.
+The empty ARM64 identity file is not evidence of a pass.
+
+Artifact `10607117926` preserves the two CycloneDX SBOMs, two SARIF reports and partial
+runtime identities, with digest
+`sha256:30be707108fad6055817281ab025ee9ae0b231b4785662862e153e0529d0fe0a`.
+The complete failed job log and downloaded evidence remain under
+`reports/remote-ci/35516882462-*`. The OCI index and product tag are preserved.
+
+The OPS-04 repair explicitly enables the containerd image store through the pinned official
+Docker setup action and shares the unchanged two-platform hygiene checks with the read-only
+`release-image-check.yml` workflow. The guard rejects a classic store, missing emulation,
+host-only execution and weakened version/source comparisons. Local checks pass 433 guards
+(10 future skips) and root formatting. A separate local runtime probe verifies AMD64 but
+returns `exec format error` on ARM64; it supplies no ARM64 proof. The repaired Actions
+workflow includes explicit QEMU setup and must supply its own terminal result.
