@@ -217,15 +217,13 @@ root API and shared grammar intact. Its
 require the full root oracle, adapter differential, emitted-browser corpus and
 complete payload budget after each upgrade.
 
-The milestone commit has not yet been created in this working session. Its exact
-commit or pull-request reference must be inserted here when it exists; this note
-does not yet satisfy that formal spike-gate requirement. No fabricated reference
-or future implementation promise substitutes for it.
+The fallback was executed in commit `fba2ca7`, which builds the M2 content model
+and lands the parser swap, its pinned packaging patch and the pipeline-version 2
+reindex of M1 projections together.
 
 ## Follow-ups
 
-- Record the actual implementation commit above before formal M2 exit. The
-  measured decision is mirrored in A42 and ADR 0042.
+- The measured decision is mirrored in A42 and ADR 0042.
 - Retain the actual-pilot limitation for M4. If a pilot corpus becomes available,
   rerun its real p50/p95/p99 sizes without relabeling synthetic evidence.
 - Keep the named source-map, flavor, hostile/sanitizer, byte-preservation,
