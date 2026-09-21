@@ -4010,6 +4010,17 @@
         "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
       ]
     },
+    "crdt.positions.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "packages/crdt/src/positions.unit.spec.ts",
+      "tag": "[area:crdt]",
+      "asserts": "M2 — [area:crdt] a cursor anchor is CRDT identity, not an offset: it follows its character across an insertion before it, and an anchor from a document this process never held resolves to nothing rather than to a plausible offset (D05-21)",
+      "inventories": [
+        "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
+      ]
+    },
     "crdt.prefix-suffix-diff.prop": {
       "layer": "L4",
       "sinceMilestone": "M0",

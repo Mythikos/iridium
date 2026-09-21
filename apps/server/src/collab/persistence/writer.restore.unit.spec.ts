@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AuditEventInput } from '../../audit/chain.ts';
 import { CollabOwnershipLost } from '../owner-lease.ts';
-import { RevisionContentRefused } from './errors.ts';
+import { RestoreTimeout, RevisionContentRefused } from './errors.ts';
 import { connectionOrigin, localOrigin } from './testing/fake-document.ts';
 import {
   createHarness,
@@ -220,6 +220,31 @@ describe('collab.writer.restore.unit [area:collab] [hp:HP-2]', () => {
       CollabOwnershipLost,
     );
     expect(harness.store.note(note.noteId)?.headSeq).toBe(1);
+    note.document.destroy();
+  });
+  it('gives up on a restore the writer never commits, and names the note it abandoned', async () => {
+    const harness = createHarness();
+    const note = await harness.openNote({ markdown: 'safe' });
+    // The restore is accepted into the FIFO and then never reaches its atomic write, which is the
+    // only way the bounded await expires: the caller must learn that rather than hang (writer.ts).
+    const gate = harness.store.holdWrites();
+    // The outcome is captured before the clock moves, so the rejection the deadline raises always
+    // has a handler and never surfaces as an unhandled one.
+    const outcome = note.writer.enqueueRestore(request(note, 'changed')).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await harness.clock.advance(1_000);
+    const refused = await outcome;
+    expect(refused).toBeInstanceOf(RestoreTimeout);
+    expect(refused).toMatchObject({ code: 'persist.restore_timeout' });
+    // The deadline bounds the caller's await, not the edit: a restore reaches the document through
+    // the direct connection as soon as it is accepted, and only its durable write is behind the
+    // gate. So the text is already restored, and releasing the gate lets the job settle rather
+    // than stranding the writer on an abandoned await.
+    expect(projectMarkdown(note.document)).toBe('changed');
+    gate.release();
+    await settle();
     note.document.destroy();
   });
 });
