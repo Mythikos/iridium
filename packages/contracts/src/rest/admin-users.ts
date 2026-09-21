@@ -42,7 +42,10 @@ export const ListAdminUsersQuery: z.ZodType<ListAdminUsersQuery> = z
       })
       .optional(),
     isServerAdmin: QueryBoolean.optional(),
-    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
+    // No `iridium-cursor` format here: this route shipped at v0.1.0 and a new validation keyword
+    // on a released parameter is a tightening under A54. The light fuzz profile excludes /admin,
+    // and the admin profile admits the documented 422 instead (D10-11).
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(50),
   })
   .meta({ id: 'ListAdminUsersQuery' });

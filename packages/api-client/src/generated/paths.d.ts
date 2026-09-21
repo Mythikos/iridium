@@ -1023,13 +1023,8 @@ export interface components {
             readonly count: number;
         };
         readonly CreateNodeBodyInput: {
-            /** @constant */
-            readonly kind: "category";
-            readonly name: components["schemas"]["NodeNameInput"];
-            readonly parentId: string;
-        } | {
-            /** @constant */
-            readonly kind: "note";
+            /** @enum {string} */
+            readonly kind: "category" | "note";
             /** @description At most 2,097,152 UTF-16 code units. */
             readonly markdown?: string;
             readonly name: components["schemas"]["NodeNameInput"];

@@ -204,6 +204,22 @@ expected-statuses = [400, 401, 403, 404, 405, 406, 409, 415, 422, 428, 429, "5xx
 [checks.missing_required_header]
 expected-statuses = [400, 401, 403, 404, 406, 415, 422, 428, 429]
 
+# Two cross-field rules stay in their refinements because publishing them would tighten a parameter
+# released at v0.1.0, which A54 prices at an apiVersion bump for a change no client can observe:
+# only a note may carry markdown, and attachmentFolder must be a safe vault-relative path. Both
+# answer the documented 422, so these operations admit it rather than the schema describing it.
+[[operations]]
+include-name = "POST /api/v1/vaults/{vaultId}/nodes"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 429, "5xx"]
+
+[[operations]]
+include-name = "POST /api/v1/vaults"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 429, "5xx"]
+
+[[operations]]
+include-name = "PATCH /api/v1/vaults/{vaultId}"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 428, 429, "5xx"]
+
 # Attachment admission is decided by sniffing the bytes, which no JSON Schema can describe: a
 # schema-valid multipart part may still carry a type outside the allow-list, and 12-milestones.md
 # section 6.4 documents that answer as 415 unsupported_media.

@@ -89,8 +89,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "x-iridium-stricter": "none",
-            "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\](?:/(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\])*$"
+            "x-iridium-stricter": "none"
           },
           "loadExternalImages": {
             "type": "string",
@@ -305,57 +304,34 @@
         "additionalProperties": false
       },
       "CreateNodeBodyInput": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "const": "category"
-              },
-              "parentId": {
-                "type": "string",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-              },
-              "name": {
-                "$ref": "#/components/schemas/NodeNameInput"
-              }
-            },
-            "required": [
-              "kind",
-              "parentId",
-              "name"
-            ],
-            "additionalProperties": false
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "category",
+              "note"
+            ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "const": "note"
-              },
-              "parentId": {
-                "type": "string",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-              },
-              "name": {
-                "$ref": "#/components/schemas/NodeNameInput"
-              },
-              "markdown": {
-                "type": "string",
-                "maxLength": 2097152,
-                "description": "At most 2,097,152 UTF-16 code units."
-              }
-            },
-            "required": [
-              "kind",
-              "parentId",
-              "name"
-            ],
-            "additionalProperties": false
+          "parentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "name": {
+            "$ref": "#/components/schemas/NodeNameInput"
+          },
+          "markdown": {
+            "type": "string",
+            "maxLength": 2097152,
+            "description": "At most 2,097,152 UTF-16 code units."
           }
-        ]
+        },
+        "required": [
+          "kind",
+          "parentId",
+          "name"
+        ],
+        "additionalProperties": false
       },
       "AttachmentUploadBodyInput": {
         "type": "object",
@@ -550,8 +526,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "x-iridium-stricter": "none",
-            "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\](?:/(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\])*$"
+            "x-iridium-stricter": "none"
           },
           "loadExternalImages": {
             "type": "string",
@@ -1081,8 +1056,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "x-iridium-stricter": "none",
-            "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\](?:/(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\])*$"
+            "x-iridium-stricter": "none"
           },
           "loadExternalImages": {
             "type": "string",
@@ -5005,8 +4979,7 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096,
-              "format": "iridium-cursor"
+              "maxLength": 4096
             },
             "in": "query",
             "name": "cursor",

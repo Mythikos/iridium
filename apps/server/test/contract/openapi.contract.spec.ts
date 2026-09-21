@@ -324,9 +324,7 @@ describe('openapi.contract [area:contracts]', () => {
         reason: 'Unresolved link runtime expression',
       },
       {
-        // The request body is a union, so dropping one branch's property still resolves
-        // through the other; removing the union itself is what leaves the field unreachable.
-        pointer: ['components', 'schemas', 'CreateNodeBodyInput', 'oneOf'],
+        pointer: ['components', 'schemas', 'CreateNodeBodyInput', 'properties', 'parentId'],
         reason: 'Missing linked body field',
       },
     ];
@@ -346,27 +344,15 @@ describe('openapi.contract [area:contracts]', () => {
   it('advertises note creation without narrowing the shared node response kind', () => {
     const create = DOCUMENTED.find((entry) => entry.operationId === 'nodes.create');
     expect(create).toBeDefined();
-    const body = resolvedSchema(document, jsonBodySchema(create?.operation['requestBody']));
+    const body = jsonBodySchema(create?.operation['requestBody']);
     // M1 shipped this route as note-only, so its request pinned `const: 'note'`. M2 creates
-    // categories through the same route (12-milestones.md §6.2). The two kinds are published as a
-    // discriminated union rather than one object, because only the note branch may carry
-    // `markdown`: a cross-field refusal that lives only in the refinement never reaches the
-    // document, and a fuzzer would then call a request valid that the server answers 422 to.
-    const branches = body?.['oneOf'];
-    if (!Array.isArray(branches)) throw new Error('nodes.create request is not a union');
-    const byKind = new Map(
-      branches.map((branch: unknown) => {
-        const resolved = resolvedSchema(document, branch);
-        const kind = schemaAtPointer(document, branch, ['kind'])?.['const'];
-        return [typeof kind === 'string' ? kind : '?', resolved];
-      }),
-    );
-    expect([...byKind.keys()].toSorted()).toStrictEqual(['category', 'note']);
-    for (const [kind, branch] of byKind) {
-      expect(branch?.['required'], kind).toContain('kind');
-      const properties = isRecord(branch?.['properties']) ? branch['properties'] : {};
-      expect(Object.keys(properties).includes('markdown'), kind).toBe(kind === 'note');
-    }
+    // categories through the same route (12-milestones.md §6.2), and widening an accepted input is
+    // additive, which is why `compat.n-minus-1` admits it. The cross-field rule that only a note
+    // may carry `markdown` stays in the refinement: publishing it would tighten a released
+    // parameter, which A54 prices at an `apiVersion` bump, so the fuzz profile admits the
+    // documented 422 instead. The response assertion below is the half that must stay unnarrowed.
+    expect(schemaAtPointer(document, body, ['kind'])?.['enum']).toStrictEqual(['category', 'note']);
+    expect(resolvedSchema(document, body)?.['required']).toContain('kind');
     const responses = create?.operation['responses'];
     const created = isRecord(responses) ? responses['201'] : undefined;
     expect(schemaAtPointer(document, jsonBodySchema(created), ['kind'])?.['enum']).toStrictEqual([
