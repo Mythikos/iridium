@@ -104,6 +104,16 @@ export async function applySecurityPlugin(
   // boot step that owns the errors it maps.
   app.decorate('problems', new ProblemRegistry());
 
+  // ---- the request id, before anything that can refuse ----------------------------------------
+  // `under-pressure` and `rate-limit` both answer from their own `onRequest` hooks, and Fastify runs
+  // those in registration order. Assigning the id in the later hook below left `request.requestId`
+  // undefined for exactly the refusals that skip routing, so a shed 503 and a limited 429 went out
+  // without the `requestId` every ProblemDetails carries and without the echoed header (ARCH-12,
+  // ARCH-15). It is assigned first instead, so no refusal can precede it.
+  app.addHook('onRequest', async (request, reply) => {
+    attachRequestId(request, reply, trustProxyRanges);
+  });
+
   // ---- helmet: every hardening header except the CSP, plus the per-response nonce ---------------
   await app.register(helmet, {
     enableCSPNonces: true,
@@ -185,7 +195,6 @@ export async function applySecurityPlugin(
     );
 
   app.addHook('onRequest', async (request, reply) => {
-    attachRequestId(request, reply, trustProxyRanges);
     attachClientHeaders(request);
     reply.header('content-security-policy', csp(reply.cspNonce.style));
     for (const [name, value] of Object.entries(HARDENING_HEADERS)) {

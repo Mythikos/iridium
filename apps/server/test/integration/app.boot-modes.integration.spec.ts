@@ -94,7 +94,7 @@ interface BootRecord {
   readonly listening: boolean;
   /** Signal handlers `buildApp` added, by signal. Always zero for the same reason. */
   readonly signalHandlersAdded: Readonly<Record<string, number>>;
-  /** The explicit M1 maintenance surface; the due-job scheduler arrives at M2. */
+  /** The explicit maintenance surface; M2 added the due-job scheduler beside M1's one operation. */
   readonly maintenanceOperations: readonly string[];
 }
 
@@ -538,8 +538,11 @@ describe('app.boot-modes.integration [area:ops]', () => {
   );
 
   it('exposes the same explicit maintenance operation in every mode', () => {
+    // The surface itself is mode-independent: every mode decorates the same `app.jobs`, and only
+    // whether the scheduler ticks differs (ARCH-01). M2 added the due-job scheduler and its
+    // lifecycle beside M1's single explicit operation.
     expect(MODES.map((mode) => recordOf(mode).maintenanceOperations)).toEqual(
-      MODES.map(() => ['run']),
+      MODES.map(() => ['run', 'scheduler', 'stop', 'tick']),
     );
   });
 });

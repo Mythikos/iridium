@@ -317,17 +317,27 @@ describe('authz.route-policy.integration [area:authz]', () => {
     expect(read.status).toBe(200);
     // The closed set's write lifts the freeze for the role the matrix grants it, and only that
     // role: a viewer is refused by the matrix, as a plain 403, not by the freeze.
-    const lifted = await desktopClient(context, token).post<{ vaultId: string; status: string }>(
+    // `vaults.unarchive` takes `ConfirmVaultBody` under a mandatory `If-Match` and answers with the
+    // whole `Vault` (tree-routes.ts), so the lift is driven the way the published route documents it.
+    const manager = desktopClient(context, token);
+    const current = await manager.get<{ version: number }>(`/vaults/${vault}`);
+    expect(current.status).toBe(200);
+    const lifted = await manager.post<{ id: string; status: string }>(
       `/vaults/${vault}/unarchive`,
-      { json: {} },
+      { json: { confirm: true }, headers: { 'if-match': `"${String(current.body.version)}"` } },
     );
     expect(lifted.status).toBe(200);
-    expect(lifted.body).toStrictEqual({ vaultId: vault, status: 'archived' });
+    expect(lifted.body).toMatchObject({ id: vault, status: 'active' });
+    // The viewer's request must be well formed, because validation runs before the matrix: an empty
+    // body would be refused 422 and would prove nothing about the role this case is about.
     const viewer = await memberOf('archived-viewer@example.test', 'viewer', 'archived');
-    const refused = await desktopClient(context, viewer.token).post(
-      `/vaults/${viewer.vault}/unarchive`,
-      { json: {} },
-    );
+    const viewerClient = desktopClient(context, viewer.token);
+    const readable = await viewerClient.get<{ version: number }>(`/vaults/${viewer.vault}`);
+    expect(readable.status).toBe(200);
+    const refused = await viewerClient.post(`/vaults/${viewer.vault}/unarchive`, {
+      json: { confirm: true },
+      headers: { 'if-match': `"${String(readable.body.version)}"` },
+    });
     expect(refused.status).toBe(403);
     expect(refused.body).toMatchObject({ code: 'forbidden' });
   });

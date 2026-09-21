@@ -18,7 +18,10 @@ import { apiRelativePath } from '../../src/authz/route-policy.ts';
 import { desktopClient, startAuthServer, type AuthTestServer } from '../support/auth-app.ts';
 import {
   auditRows,
+  insertJob,
+  insertMembership,
   insertToken,
+  insertVault,
   seedUser,
   signInDesktop,
   SEED_PASSWORD,
@@ -39,6 +42,63 @@ beforeAll(async () => {
 afterAll(async () => {
   await context.stop();
 });
+
+/**
+ * A vault the acting user manages, so the guarded call is refused by the window rather than by the
+ * matrix. Each driver seeds its own, because a driver runs twice — once outside the window and once
+ * inside it — and the second run must be able to succeed.
+ */
+/** Every driver runs twice — once outside the window, once inside it — so its fixtures must differ. */
+let fixtureSequence = 0;
+
+async function managedVault(
+  user: SeededUser,
+  status: 'active' | 'archived' = 'active',
+): Promise<string> {
+  fixtureSequence += 1;
+  const vault = await insertVault(
+    context.db,
+    {
+      name: `stepup ${status} ${String(fixtureSequence)} ${user.email}`,
+      createdBy: user.id,
+      status,
+    },
+    context.clock.now(),
+  );
+  await insertMembership(
+    context.db,
+    { vaultId: vault, userId: user.id, role: 'manager', grantedBy: user.id },
+    context.clock.now(),
+  );
+  return vault;
+}
+
+/** The vault as the published read route reports it: the strong `If-Match` and the tree root. */
+async function readVault(
+  client: RestClient,
+  vaultId: string,
+): Promise<{ version: number; rootNodeId: string }> {
+  const current = await client.get<{ version: number; rootNodeId: string }>(`/vaults/${vaultId}`);
+  if (current.status !== 200) throw new Error(`vault read failed: ${String(current.status)}`);
+  return { version: current.body.version, rootNodeId: current.body.rootNodeId };
+}
+
+/** A note created through the product write path, so it has the rows a revision needs. */
+async function seedNote(
+  client: RestClient,
+  vaultId: string,
+): Promise<{ id: string; version: number }> {
+  const { rootNodeId } = await readVault(client, vaultId);
+  const created = await client.post<{ id: string; version: number }>(`/vaults/${vaultId}/nodes`, {
+    json: {
+      kind: 'note',
+      name: `Step-up ${String((fixtureSequence += 1))}.md`,
+      parentId: rootNodeId,
+    },
+  });
+  if (created.status !== 201) throw new Error(`note create failed: ${String(created.status)}`);
+  return { id: created.body.id, version: created.body.version };
+}
 
 /**
  * One well-formed request per step-up route, keyed `METHOD /path` relative to `/api/v1`. The body
@@ -65,6 +125,58 @@ const STEP_UP_DRIVERS: Readonly<
     client.post('/me/password', {
       json: { currentPassword: user.password, newPassword: NEW_PASSWORD },
     }),
+  'POST /admin/jobs/:type/run': (client) =>
+    client.post('/admin/jobs/session_ticket_sweep/run', { json: { payload: {} } }),
+  // Only a `queued` job can be cancelled through REST, and a job queued through the run route is
+  // racing the scheduler that the run route wakes. The seeded row is queued and carries a type the
+  // scheduler has no handler for, so it stays claimable for exactly as long as this drive needs.
+  'POST /admin/jobs/:jobId/cancel': async (client, user) => {
+    const jobId = await insertJob(
+      context.db,
+      { vaultId: null, requestedBy: user.id },
+      context.clock.now(),
+    );
+    return client.post(`/admin/jobs/${jobId}/cancel`);
+  },
+  'POST /vaults/:vaultId/archive': async (client, user) => {
+    const vaultId = await managedVault(user);
+    return client.post(`/vaults/${vaultId}/archive`, {
+      json: { confirm: true },
+      ifMatch: (await readVault(client, vaultId)).version,
+    });
+  },
+  'POST /vaults/:vaultId/unarchive': async (client, user) => {
+    const vaultId = await managedVault(user, 'archived');
+    return client.post(`/vaults/${vaultId}/unarchive`, {
+      json: { confirm: true },
+      ifMatch: (await readVault(client, vaultId)).version,
+    });
+  },
+  'DELETE /nodes/:nodeId': async (client, user) => {
+    const vaultId = await managedVault(user);
+    const note = await seedNote(client, vaultId);
+    const trashed = await client.post<{ trashEntry: { version: number } }>(
+      `/nodes/${note.id}/trash`,
+      { json: {}, ifMatch: note.version },
+    );
+    if (trashed.status !== 200) throw new Error(`trash failed: ${String(trashed.status)}`);
+    // `PurgeNodeQuery` takes the literal string, and the validator is the trash entry's version.
+    return client.del(`/nodes/${note.id}`, {
+      query: { purge: 'true' },
+      ifMatch: trashed.body.trashEntry.version,
+    });
+  },
+  'POST /notes/:noteId/revisions/:revisionId/restore': async (client, user) => {
+    const vaultId = await managedVault(user);
+    const note = await seedNote(client, vaultId);
+    const named = await client.post<{ id: number }>(`/notes/${note.id}/revisions`, {
+      json: { label: 'Step-up checkpoint' },
+    });
+    if (named.status !== 201) throw new Error(`revision create failed: ${String(named.status)}`);
+    return client.post(`/notes/${note.id}/revisions/${String(named.body.id)}/restore`, {
+      json: { confirm: true },
+    });
+  },
 };
 
 function stepUpRoutes(): readonly string[] {

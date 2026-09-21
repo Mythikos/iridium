@@ -1,14 +1,35 @@
 /** Archived vaults freeze every currently mounted mutation, including administrator writes. */
-import { API_ROUTES } from '@iridium/contracts';
+import { ALLOW_ARCHIVED_ROUTES, API_ROUTES } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { idBytes } from '../../src/auth/ids.ts';
 import { startCollab } from '../support/collab-harness.ts';
 
-const WRITE_OPERATIONS = ['members.delete', 'members.put', 'nodes.create'];
+/**
+ * Every vault-scoped mutation the freeze must cover, sorted. The list is committed rather than
+ * derived so that mounting a new vault write is a deliberate decision here: either it freezes on an
+ * archived vault, or it joins `ALLOW_ARCHIVED_ROUTES` and is proven to lift instead (D04-12).
+ */
+const FROZEN_OPERATIONS = [
+  'attachments.delete',
+  'attachments.upload',
+  'members.delete',
+  'members.put',
+  'nodes.create',
+  'nodes.purge',
+  'nodes.restore',
+  'nodes.trash',
+  'nodes.update',
+  'revisions.create',
+  'revisions.restore',
+  'vaults.update',
+];
+
+/** The writes 04 section 5.6 exempts, so an archived vault can still be returned to active use. */
+const LIFTED_OPERATIONS = ['vaults.archive', 'vaults.unarchive'];
 
 describe('authz.archived-vault.integration [area:authz]', () => {
-  it('refuses every M1 vault write without side effects while preserving committed member reads', async () => {
+  it('refuses every frozen vault write without side effects while preserving committed member reads', async () => {
     const harness = await startCollab();
     try {
       const cast = await harness.server.seed.kernel();
@@ -23,10 +44,15 @@ describe('authz.archived-vault.integration [area:authz]', () => {
           typeof route.auth === 'object' &&
           'vaultFrom' in route.auth &&
           !['GET', 'HEAD', 'OPTIONS'].includes(route.method),
-      )
-        .map((route) => route.operationId)
-        .toSorted();
-      expect(mountedWrites).toEqual(WRITE_OPERATIONS);
+      );
+      const lifts = new Set<string>(ALLOW_ARCHIVED_ROUTES);
+      const partition = (lifted: boolean): readonly string[] =>
+        mountedWrites
+          .filter((route) => lifts.has(`${route.method} ${route.path}`) === lifted)
+          .map((route) => route.operationId)
+          .toSorted();
+      expect(partition(false)).toEqual(FROZEN_OPERATIONS);
+      expect(partition(true)).toEqual(LIFTED_OPERATIONS);
       const vault = await db
         .selectFrom('vaults')
         .select('root_node_id')

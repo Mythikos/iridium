@@ -34,7 +34,11 @@ function headsQuery(db: Kysely<Database>) {
       'd.snapshot_through_seq',
       'd.projected_seq',
       'p.revision as projection_revision',
-      sql<number>`GREATEST(d.snapshot_through_seq,COALESCE((SELECT MAX(u.seq) FROM note_updates u WHERE u.note_id=d.note_id),0))`.as(
+      // GREATEST over COALESCE(MAX(...)) widens to DECIMAL, which mysql2 hands back as a string on
+      // both required lines. Without the cast `sql<number>` is a lie: `head_seq !== expected`
+      // compares a number with a string, is true for every consistent note, and the head repair
+      // reports and audits work it never needed to do. The cast keeps the declared type honest.
+      sql<number>`CAST(GREATEST(d.snapshot_through_seq,COALESCE((SELECT MAX(u.seq) FROM note_updates u WHERE u.note_id=d.note_id),0)) AS SIGNED)`.as(
         'expected',
       ),
     ]);

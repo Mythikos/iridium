@@ -37,9 +37,21 @@ describe('content.etag.integration [area:content]', () => {
         expect(response.headers.get(RESPONSE_HEADERS.lineCount)).toBe('4');
       }
       expect(sliced.headers.get(RESPONSE_HEADERS.returnedLines)).toBe('2-3');
-      const clamped = await rest.get<string>(`/notes/${note.id}/markdown?lines=50-60`);
+      // Both halves of the line-range rule. The shared read core clamps a selection that starts
+      // inside the note (12-milestones.md §6.4, `content.lines-and-heading.unit`), while the REST
+      // query keeps its published refusal when the first requested line does not exist at all
+      // (09-api-reference.md §2.8: 422 validation_failed, lines out of range).
+      const clamped = await rest.get<string>(`/notes/${note.id}/markdown?lines=3-99`);
       expect(clamped.status).toBe(200);
-      expect(clamped.headers.get(RESPONSE_HEADERS.returnedLines)).toBe('4-4');
+      expect(clamped.headers.get(RESPONSE_HEADERS.returnedLines)).toBe('3-4');
+      const beyond = await rest.get(`/notes/${note.id}/markdown?lines=50-60`);
+      expect(beyond.status).toBe(422);
+      expect(beyond.body).toEqual(
+        expect.objectContaining({
+          code: 'validation_failed',
+          errors: [expect.objectContaining({ code: 'lines_out_of_range' })],
+        }),
+      );
       const retained = await rest.get<string>(`/notes/${note.id}/markdown?revision=1`);
       expect(retained.body).toBe(whole.body);
       expect(retained.headers.get('etag')).toBe(whole.headers.get('etag'));
