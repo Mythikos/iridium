@@ -401,6 +401,11 @@ const ENFORCEMENT = {
     'apps/server/src/attachments',
     'bound retained-reference scan batches',
   ),
+  REQUEST_HEADERS_MAX_BYTES: at(
+    2,
+    SERVER + 'app.ts',
+    'size the request head the parser reads, so a documented query can always be sent',
+  ),
   CURSOR_MAX_CHARS: at(
     2,
     'packages/contracts/src/rest',

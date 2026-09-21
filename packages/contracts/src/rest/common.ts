@@ -27,7 +27,7 @@ import { z } from 'zod';
 import { Permission, Role, VaultStatus } from '../authz.ts';
 import { NodeId, NoteId, SessionId, TokenId, UserId, VaultId } from '../ids.ts';
 import { LIMITS } from '../limits.ts';
-import { isSafeNodeName, RESERVED_DEVICE_NAMES } from '../paths.ts';
+import { isSafeNodeName, SAFE_NAME_PATTERN } from '../paths.ts';
 import type { EnumOf } from '../schema.ts';
 import { VAULT_SETTING_FIELDS } from '../settings.ts';
 import { Timestamp } from '../time.ts';
@@ -146,20 +146,6 @@ export const DisplayName: z.ZodType<string> = z.string().min(1).max(120).meta({
  * `errors[].code = 'breached'` rather than a pattern in this schema.
  */
 export const Password: z.ZodType<string> = z.string().min(15).max(128).meta({ id: 'Password' });
-
-/**
- * The representable character rules of A12, shared by node and vault names. NFC, the UTF-8 byte
- * bound, lone-surrogate refusal and recursive percent-decoding remain the custom format's rules;
- * runtime validation always delegates to paths.ts. Device names come from that same vocabulary.
- */
-const SAFE_NAME_PATTERN =
-  '^(?![.\\s])(?!(?:' +
-  RESERVED_DEVICE_NAMES.map((name) =>
-    Array.from(name, (character) =>
-      /[A-Z]/.test(character) ? '[' + character + character.toLowerCase() + ']' : character,
-    ).join(''),
-  ).join('|') +
-  ')(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$';
 
 /**
  * A node name: the A12 rules, the reserved Windows device names and the 255-byte cap, all through

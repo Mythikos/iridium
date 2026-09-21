@@ -211,6 +211,28 @@ export function checkNodeName(name: string): NameCheck {
   return shallow;
 }
 
+/**
+ * The representable character rules of A12, shared by node and vault names. NFC, the UTF-8 byte
+ * bound, lone-surrogate refusal and recursive percent-decoding remain the custom format's rules;
+ * runtime validation always delegates to paths.ts. Device names come from that same vocabulary.
+ */
+export const SAFE_NAME_PATTERN: string =
+  '^(?![.\\s])(?!(?:' +
+  RESERVED_DEVICE_NAMES.map((name) =>
+    Array.from(name, (character) =>
+      /[A-Z]/.test(character) ? '[' + character + character.toLowerCase() + ']' : character,
+    ).join(''),
+  ).join('|') +
+  ')(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$';
+
+/**
+ * A vault-relative folder: one or more safe name segments joined by `/`. `settings.ts` enforces
+ * that with `attachmentFolderIsSafe`; this restates it for the published document, so a request
+ * the specification calls valid is not one the write answers 422 to.
+ */
+export const SAFE_RELATIVE_PATH_PATTERN: string =
+  '^' + SAFE_NAME_PATTERN.slice(1, -1) + '(?:/' + SAFE_NAME_PATTERN.slice(1, -1) + ')*$';
+
 /** Whether a node name can be stored and exported. */
 export function isSafeNodeName(name: string): boolean {
   return checkNodeName(name).ok;

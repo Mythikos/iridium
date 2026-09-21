@@ -184,6 +184,10 @@ export const GLOBAL_ERROR_CODES: readonly ErrorCode[] = [
   'client_outdated',
   'not_ready',
   'payload_too_large',
+  // The request-line twin of `payload_too_large`: the parser refuses an oversized header block
+  // (`HPE_HEADER_OVERFLOW`) before routing, so any row with a long query value can answer it and
+  // no row can enumerate it for itself.
+  'request_headers_too_large',
   'server_error',
 ];
 

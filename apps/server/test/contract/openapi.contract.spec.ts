@@ -121,12 +121,23 @@ function describesABody(declared: unknown): boolean {
  * assert a real response against nothing at all. The `empty` rows are the exception — for them, no
  * content *is* the description.
  */
+/** Raw bytes are described by their media types; OpenAPI 3.1 has no schema keyword for them. */
+function describesBinaryMedia(declared: unknown): boolean {
+  const content = isRecord(declared) ? declared['content'] : undefined;
+  return isRecord(content) && Object.keys(content).length > 0;
+}
+
 function isFullyDocumented(row: RouteSpec, entry: DocumentedOperation): boolean {
   const responses = isRecord(entry.operation['responses']) ? entry.operation['responses'] : {};
   return row.responses.every((response) => {
     const declared = responses[String(response.status)];
     if (!isRecord(declared)) return false;
-    return response.body.kind === 'empty' ? true : describesABody(declared);
+    if (response.body.kind === 'empty') return true;
+    // `format: binary` carries no encoding semantics in OpenAPI 3.1 (§4.8.14.3), so the exporter
+    // emits an opaque media type rather than inventing a JSON string schema. For those rows the
+    // media types are the description, and the thing worth asserting is that they are published.
+    if (response.body.kind === 'binary') return describesBinaryMedia(declared);
+    return describesABody(declared);
   });
 }
 
@@ -148,6 +159,30 @@ function resolvedSchema(root: unknown, value: unknown): Record<string, unknown> 
   return isRecord(current) ? current : undefined;
 }
 
+/** The branches of a published union, so a pointer can resolve through `oneOf` and `anyOf`. */
+function unionBranches(schema: Record<string, unknown>): readonly unknown[] {
+  const branches = [schema['oneOf'], schema['anyOf']].filter((value) => Array.isArray(value));
+  return branches.flatMap((value) => value as unknown[]);
+}
+
+/**
+ * One step of a pointer: the named property, the indexed item, or the same step taken through
+ * a union branch. A discriminated request body publishes as `oneOf`, and a field that only one
+ * branch carries — `markdown` on `nodes.create` — still belongs to the operation.
+ */
+function propertyAtStep(root: unknown, schema: Record<string, unknown>, token: string): unknown {
+  if (schema['type'] === 'array' && /^(?:0|[1-9][0-9]*)$/.test(token)) return schema['items'];
+  if (isRecord(schema['properties']) && token in schema['properties'])
+    return schema['properties'][token];
+  for (const branch of unionBranches(schema)) {
+    const resolved = resolvedSchema(root, branch);
+    if (resolved === undefined) continue;
+    const child = propertyAtStep(root, resolved, token);
+    if (child !== undefined) return child;
+  }
+  return undefined;
+}
+
 function schemaAtPointer(
   root: unknown,
   value: unknown,
@@ -156,13 +191,7 @@ function schemaAtPointer(
   let schema = resolvedSchema(root, value);
   for (const token of tokens) {
     if (schema === undefined) return undefined;
-    const child =
-      schema['type'] === 'array' && /^(?:0|[1-9][0-9]*)$/.test(token)
-        ? schema['items']
-        : isRecord(schema['properties'])
-          ? schema['properties'][token]
-          : undefined;
-    schema = resolvedSchema(root, child);
+    schema = resolvedSchema(root, propertyAtStep(root, schema, token));
   }
   return schema;
 }
@@ -173,8 +202,28 @@ function jsonBodySchema(value: unknown): unknown {
   return isRecord(media) ? media['schema'] : undefined;
 }
 
-function assertLinkExpression(root: unknown, sourceSchema: unknown, value: unknown): void {
+function assertLinkExpression(
+  root: unknown,
+  sourceSchema: unknown,
+  sourceOperation: unknown,
+  value: unknown,
+): void {
   if (typeof value === 'string' && value.startsWith('$')) {
+    // A response that is not JSON has no body to source from — `notes.getMarkdown` answers
+    // text/markdown — so the only expression that can carry its id forward is the request path.
+    // It is checked rather than waved through: the named path parameter must exist on the source.
+    if (value.startsWith('$request.path.')) {
+      const name = value.slice('$request.path.'.length);
+      const parameters = isRecord(sourceOperation) ? sourceOperation['parameters'] : undefined;
+      if (
+        !Array.isArray(parameters) ||
+        !parameters.some(
+          (entry: unknown) => isRecord(entry) && entry['name'] === name && entry['in'] === 'path',
+        )
+      )
+        throw new Error('Unresolved link runtime expression: ' + value);
+      return;
+    }
     if (!value.startsWith('$response.body#/'))
       throw new Error('Unsupported link runtime expression: ' + value);
     const tokens = decodeURIComponent(value.slice('$response.body#/'.length))
@@ -183,7 +232,8 @@ function assertLinkExpression(root: unknown, sourceSchema: unknown, value: unkno
     if (schemaAtPointer(root, sourceSchema, tokens) === undefined)
       throw new Error('Unresolved link runtime expression: ' + value);
   } else if (isRecord(value) || Array.isArray(value)) {
-    for (const child of Object.values(value)) assertLinkExpression(root, sourceSchema, child);
+    for (const child of Object.values(value))
+      assertLinkExpression(root, sourceSchema, sourceOperation, child);
   }
 }
 
@@ -223,8 +273,8 @@ function assertPublishedLinks(root: unknown): void {
           )
             throw new Error('Missing linked body field: ' + link.operationId + '.' + field);
         }
-        assertLinkExpression(root, jsonBodySchema(declared), link.parameters);
-        assertLinkExpression(root, jsonBodySchema(declared), link.requestBody);
+        assertLinkExpression(root, jsonBodySchema(declared), source?.operation, link.parameters);
+        assertLinkExpression(root, jsonBodySchema(declared), source?.operation, link.requestBody);
       }
     }
   }
@@ -274,7 +324,9 @@ describe('openapi.contract [area:contracts]', () => {
         reason: 'Unresolved link runtime expression',
       },
       {
-        pointer: ['components', 'schemas', 'CreateNodeBodyInput', 'properties', 'parentId'],
+        // The request body is a union, so dropping one branch's property still resolves
+        // through the other; removing the union itself is what leaves the field unreachable.
+        pointer: ['components', 'schemas', 'CreateNodeBodyInput', 'oneOf'],
         reason: 'Missing linked body field',
       },
     ];
@@ -294,12 +346,27 @@ describe('openapi.contract [area:contracts]', () => {
   it('advertises note creation without narrowing the shared node response kind', () => {
     const create = DOCUMENTED.find((entry) => entry.operationId === 'nodes.create');
     expect(create).toBeDefined();
-    const body = jsonBodySchema(create?.operation['requestBody']);
-    expect(schemaAtPointer(document, body, ['kind'])).toMatchObject({
-      type: 'string',
-      const: 'note',
-    });
-    expect(resolvedSchema(document, body)?.['required']).toContain('kind');
+    const body = resolvedSchema(document, jsonBodySchema(create?.operation['requestBody']));
+    // M1 shipped this route as note-only, so its request pinned `const: 'note'`. M2 creates
+    // categories through the same route (12-milestones.md §6.2). The two kinds are published as a
+    // discriminated union rather than one object, because only the note branch may carry
+    // `markdown`: a cross-field refusal that lives only in the refinement never reaches the
+    // document, and a fuzzer would then call a request valid that the server answers 422 to.
+    const branches = body?.['oneOf'];
+    if (!Array.isArray(branches)) throw new Error('nodes.create request is not a union');
+    const byKind = new Map(
+      branches.map((branch: unknown) => {
+        const resolved = resolvedSchema(document, branch);
+        const kind = schemaAtPointer(document, branch, ['kind'])?.['const'];
+        return [typeof kind === 'string' ? kind : '?', resolved];
+      }),
+    );
+    expect([...byKind.keys()].toSorted()).toStrictEqual(['category', 'note']);
+    for (const [kind, branch] of byKind) {
+      expect(branch?.['required'], kind).toContain('kind');
+      const properties = isRecord(branch?.['properties']) ? branch['properties'] : {};
+      expect(Object.keys(properties).includes('markdown'), kind).toBe(kind === 'note');
+    }
     const responses = create?.operation['responses'];
     const created = isRecord(responses) ? responses['201'] : undefined;
     expect(schemaAtPointer(document, jsonBodySchema(created), ['kind'])?.['enum']).toStrictEqual([

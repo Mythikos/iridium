@@ -2,7 +2,7 @@
 import { z } from 'zod';
 
 import { LIMITS } from './limits.ts';
-import { isSafeNodeName } from './paths.ts';
+import { isSafeNodeName, SAFE_RELATIVE_PATH_PATTERN } from './paths.ts';
 
 /** Values stored in the typed vault-settings columns. */
 export interface VaultSettingValues {
@@ -66,7 +66,7 @@ export const VAULT_SETTING_FIELDS: {
     .refine(attachmentFolderIsSafe, {
       error: 'Use a vault-relative path without empty or unsafe segments.',
     })
-    .meta(settingMetadata('attachmentFolder')),
+    .meta({ ...settingMetadata('attachmentFolder'), pattern: SAFE_RELATIVE_PATH_PATTERN }),
   loadExternalImages: z
     .enum(['never', 'click', 'always'])
     .meta(settingMetadata('loadExternalImages')),

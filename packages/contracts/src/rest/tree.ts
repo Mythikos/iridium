@@ -148,7 +148,7 @@ export interface ListNodesQuery {
 /** Flat path listing filters. */
 export const ListNodesQuery: z.ZodType<ListNodesQuery> = z
   .strictObject({
-    pathPrefix: z.string().max(4096).optional(),
+    pathPrefix: z.string().max(LIMITS.NODE_PATH_MAX_CHARS).optional(),
     kinds: z
       .codec(
         z.union([z.enum(NODE_KINDS), z.array(z.enum(NODE_KINDS))]),
@@ -200,7 +200,11 @@ export const PatchNodeBody: z.ZodType<PatchNodeBody> = z
     error: 'At least one change is required.',
     params: { code: 'no_changes' },
   })
-  .meta({ id: 'PatchNodeBody' });
+  .meta({
+    id: 'PatchNodeBody',
+    // `dryRun` alone is not a change, so the published rule names the two fields that are.
+    anyOf: [{ required: ['name'] }, { required: ['parentId'] }],
+  });
 
 /** The accepted or previewed node plus the same pre-change impact summary. */
 export interface NodePatchResult {
@@ -232,7 +236,10 @@ export const RenameImpactQuery: z.ZodType<RenameImpactQuery> = z
     error: 'At least one change is required.',
     params: { code: 'no_changes' },
   })
-  .meta({ id: 'RenameImpactQuery' });
+  .meta({
+    id: 'RenameImpactQuery',
+    anyOf: [{ required: ['name'] }, { required: ['parentId'] }],
+  });
 
 /** The proposed path and collision flag accompany the same target-side link summary. */
 export interface RenameImpactResult {

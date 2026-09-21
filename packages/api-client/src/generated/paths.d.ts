@@ -1023,8 +1023,13 @@ export interface components {
             readonly count: number;
         };
         readonly CreateNodeBodyInput: {
-            /** @enum {string} */
-            readonly kind: "category" | "note";
+            /** @constant */
+            readonly kind: "category";
+            readonly name: components["schemas"]["NodeNameInput"];
+            readonly parentId: string;
+        } | {
+            /** @constant */
+            readonly kind: "note";
             /** @description At most 2,097,152 UTF-16 code units. */
             readonly markdown?: string;
             readonly name: components["schemas"]["NodeNameInput"];
@@ -1360,7 +1365,7 @@ export interface components {
             readonly dryRun: boolean;
             readonly name?: components["schemas"]["NodeNameInput"];
             readonly parentId?: string;
-        };
+        } | unknown | unknown;
         readonly PatchVaultBodyInput: {
             readonly aiGuidance?: string | null;
             readonly attachmentFolder?: string;
@@ -1798,7 +1803,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -1860,7 +1865,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -1918,7 +1923,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -1985,7 +1990,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2056,7 +2061,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2118,7 +2123,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2187,7 +2192,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2258,7 +2263,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2325,7 +2330,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2392,7 +2397,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2461,7 +2466,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2499,7 +2504,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2559,7 +2564,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2628,7 +2633,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2673,7 +2678,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2740,7 +2745,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2787,7 +2792,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2899,7 +2904,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -2966,7 +2971,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3013,7 +3018,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3069,7 +3074,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3098,7 +3103,7 @@ export interface operations {
                     readonly "application/json": components["schemas"]["Meta"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3185,7 +3190,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3273,7 +3278,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3367,7 +3372,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3429,7 +3434,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3521,7 +3526,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3613,7 +3618,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3664,7 +3669,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3726,7 +3731,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3784,7 +3789,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3893,7 +3898,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -3942,7 +3947,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4012,7 +4017,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4083,7 +4088,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4181,7 +4186,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4261,7 +4266,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4351,7 +4356,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4398,7 +4403,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4490,7 +4495,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4539,7 +4544,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4617,7 +4622,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4668,7 +4673,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4762,7 +4767,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4856,7 +4861,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -4920,7 +4925,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5027,7 +5032,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5194,7 +5199,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5283,7 +5288,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5335,7 +5340,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5384,7 +5389,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5486,7 +5491,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5573,7 +5578,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5647,7 +5652,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5727,7 +5732,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5801,7 +5806,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5871,7 +5876,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -5933,7 +5938,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;
@@ -6027,7 +6032,7 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `request_headers_too_large` (431) — Those request headers are too large; `server_error` (500) — Something went wrong */
             readonly default: {
                 headers: {
                     readonly [name: string]: unknown;

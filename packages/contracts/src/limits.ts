@@ -275,6 +275,15 @@ const OTHER_LIMITS = {
   NODE_NAME_MAX_BYTES: 255,
   /** A maximum-depth note path, including separators and its .md suffix. */
   NODE_PATH_MAX_CHARS: 16_387,
+  /**
+   * The request head the parser will read, past which it answers 431 without reaching a route.
+   *
+   * Node's default is 16 KiB, which is smaller than `NODE_PATH_MAX_CHARS` alone: a maximal
+   * `pathPrefix` could never be sent, so the published bound described a request the transport
+   * refused. The budget carries the documented query maxima with their percent-encoding
+   * expansion and the ordinary cookie and authorization headers beside them.
+   */
+  REQUEST_HEADERS_MAX_BYTES: 65_536,
   /** Maximum change records in one vault notification. */
   TREE_CHANGES_MAX: 500,
   /** `vaults.name` length in characters. */

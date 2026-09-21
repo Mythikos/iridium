@@ -91,7 +91,11 @@ export const PatchVaultBody: z.ZodType<PatchVaultBody> = z
     error: 'At least one field is required.',
     params: { code: 'no_changes' },
   })
-  .meta({ id: 'PatchVaultBody' });
+  .meta({
+    id: 'PatchVaultBody',
+    // Any one settable field counts, so the published rule is the count rather than a list.
+    minProperties: 1,
+  });
 
 /** Archival is an explicit action, protected by If-Match and recent authentication. */
 export const ConfirmVaultBody: z.ZodType<{ readonly confirm: true }> = z

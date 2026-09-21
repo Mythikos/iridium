@@ -170,6 +170,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     trustProxy: config.server.trustProxy === false ? false : [...config.server.trustProxy],
     genReqId: () => newId(),
     bodyLimit: LIMITS.BODY_MAX_BYTES_JSON,
+    // Forwarded to Node's `http.createServer`. The default head budget is smaller than the
+    // longest query this API documents, so it is raised to the declared limit rather than
+    // left to refuse requests the specification calls valid.
+    http: { maxHeaderSize: LIMITS.REQUEST_HEADERS_MAX_BYTES },
     routerOptions: { ignoreTrailingSlash: true },
     // The route-policy assertion walks method+path pairs, so an auto-generated HEAD route must carry
     // the same `config` as its GET. Fastify does that already; keeping the option explicit records

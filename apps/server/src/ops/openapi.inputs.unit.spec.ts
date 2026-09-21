@@ -81,7 +81,18 @@ describe('ops.openapi-inputs.unit [area:ops]', () => {
       'application/json',
     );
     const body = resolveSchema(media['schema']);
-    return resolveSchema(child(body, 'properties')[name]);
+    // A discriminated body publishes as `oneOf`, and a property only one branch carries still
+    // belongs to the operation: `markdown` exists on `nodes.create`'s note branch alone.
+    const direct = record(body['properties'] ?? {})[name];
+    if (direct !== undefined) return resolveSchema(direct);
+    const branches = z
+      .array(z.record(z.string(), z.unknown()))
+      .parse(body['oneOf'] ?? body['anyOf']);
+    for (const branch of branches) {
+      const found = record(resolveSchema(branch)['properties'] ?? {})[name];
+      if (found !== undefined) return resolveSchema(found);
+    }
+    throw new Error(`No body property ${name} on ${method} ${path}`);
   }
 
   it('exports the M1 link values while leaving names and Markdown available for generation', () => {

@@ -204,6 +204,13 @@ expected-statuses = [400, 401, 403, 404, 405, 406, 409, 415, 422, 428, 429, "5xx
 [checks.missing_required_header]
 expected-statuses = [400, 401, 403, 404, 406, 415, 422, 428, 429]
 
+# Attachment admission is decided by sniffing the bytes, which no JSON Schema can describe: a
+# schema-valid multipart part may still carry a type outside the allow-list, and 12-milestones.md
+# section 6.4 documents that answer as 415 unsupported_media.
+[[operations]]
+include-name = "POST /api/v1/vaults/{vaultId}/attachments"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 415, 429, "5xx"]
+
 # A correctly encoded but never issued password-setup token is gone, not malformed.
 [[operations]]
 include-name = "POST /api/v1/auth/set-password"

@@ -2,7 +2,14 @@
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { connect } from 'node:net';
 
-import { ERROR_CODES, ERROR_CODE_STATUS, NoteId, newId, ProblemDetails } from '@iridium/contracts';
+import {
+  ERROR_CODES,
+  ERROR_CODE_STATUS,
+  LIMITS,
+  NoteId,
+  newId,
+  ProblemDetails,
+} from '@iridium/contracts';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -481,8 +488,9 @@ describe('security.problem.unit [area:security]', () => {
     );
 
     it('answers a refused request head with a problem document rather than plain JSON', async () => {
-      // Past Node's 16 KB default maxHeaderSize, so the parser refuses the head outright.
-      const oversized = 'x'.repeat(24_000);
+      // Past the configured head budget, so the parser refuses the head outright. Derived from
+      // the limit rather than pinned, so raising the budget keeps proving the same seam.
+      const oversized = 'x'.repeat(LIMITS.REQUEST_HEADERS_MAX_BYTES + 8_000);
       const answer = await rawRequest(
         origin,
         `GET /api/v1/__probe__/forbidden HTTP/1.1\r\nHost: ${NO_DATABASE_HOST}\r\nX-Pad: ${oversized}\r\n\r\n`,
