@@ -85,7 +85,7 @@ both.
 | ADR | Title | Status |
 |---|---|---|
 | [A39](./0039-search.md) | Search: InnoDB FULLTEXT over a narrow projection, behind a `SearchIndex` interface | Accepted |
-| [A42](./0042-markdown-pipeline.md) | Markdown preview and sanitisation pipeline: unified/remark with a custom GFM wiring, `rehype-sanitize` last, hast → React, workers | Accepted |
+| [A42](./0042-markdown-pipeline.md) | Markdown preview and sanitisation pipeline: shared token-to-mdast parser, sanitize-last hast, workers | Accepted; amended after S11 |
 | [A43](./0043-obsidian-syntax.md) | Obsidian syntax in the MVP: detect, report, and index; render as literal text; keep the seam ready | Accepted |
 | [A44](./0044-attachments.md) | Attachments: content-addressed storage behind a driver interface, served by id, explicit deletion only | Accepted |
 | [A45](./0045-import-export.md) | Import and export: a two-phase import job, a streaming export job with a manifest and EOL/BOM restoration | Accepted |

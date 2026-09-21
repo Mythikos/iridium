@@ -1,9 +1,9 @@
 import { getContent, projectMarkdown } from '@iridium/crdt';
 import { describe, expect, it } from 'vitest';
 
-import { pruneUpdateLog } from '../../src/collab/persistence/prune.ts';
 import { connectionOrigin } from '../../src/collab/persistence/testing/fake-document.ts';
 import { startDatabaseModel } from '../support/persistence-model.ts';
+import { pruneUpdateLog } from '../support/prune-updates.ts';
 
 describe('jobs.update-log-prune.integration [area:jobs]', () => {
   it('consumes the configured retention, excludes concurrent invocations, and keeps a bounded recoverable tail', async () => {

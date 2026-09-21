@@ -12,7 +12,12 @@ afterEach(async () => {
 });
 
 function fixture(
-  options: { grantOption?: boolean; grantError?: Error; metadataError?: Error } = {},
+  options: {
+    grantOption?: boolean;
+    grantError?: Error;
+    metadataError?: Error;
+    installedTables?: readonly string[];
+  } = {},
 ): {
   database: FakeDatabase;
   records: Map<string, string>;
@@ -20,6 +25,13 @@ function fixture(
   const records = new Map<string, string>();
   const database = fakeDatabase({
     script: (query) => {
+      if (query.sql.includes('information_schema.TABLES')) {
+        return {
+          rows: (options.installedTables ?? GRANT_MATRIX.map((row) => row.table)).map(
+            (table_name) => ({ table_name }),
+          ),
+        };
+      }
       if (query.sql.startsWith('SHOW GRANTS'))
         return {
           rows: [
@@ -55,6 +67,16 @@ function fixture(
 }
 
 describe('db.grants-provenance.unit [area:db]', () => {
+  it('does not grant or certify future tables while replaying a historical migration', async () => {
+    const { database, records } = fixture({ installedTables: ['users', 'schema_meta'] });
+    expect(
+      await applyGrants(database.db, ['users', 'schema_meta', 'note_projection_terms']),
+    ).toEqual({ applied: true, statements: 2 });
+    expect([...records.keys()].toSorted()).toEqual(['acl.schema_meta', 'acl.users']);
+    const grants = database.executed.filter((query) => query.sql.startsWith('GRANT'));
+    expect(grants.map((query) => query.sql).join('\n')).not.toContain('note_projection_terms');
+    expect((await readGrantProvenance(database.db)).unverified).toContain('note_projection_terms');
+  });
   it('records the actual complete matrix only after all GRANT statements succeed', async () => {
     const { database, records } = fixture();
     expect(

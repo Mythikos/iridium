@@ -47,3 +47,7 @@ right pair is host-dependent (`docs/spikes/S13-argon2-calibration.md`, "Follow-u
 The M1 serving pools bound both connection acquisition and each SQL command to 10 000 ms by default. Set `DB_QUERY_TIMEOUT_MS` to a positive integer no greater than `2147483647`; `iridium config check` reports the effective value. `DB_CONNECT_TIMEOUT_MS` controls the separate initial TCP/MySQL connection timeout.
 
 A timed-out SQL command destroys its connection before propagating the failure, freeing the pool slot and preventing another request from inheriting an unfinished command. This does not expire idle collaboration-owner reservations or impose a deadline on migration and backup operations. A COMMIT timeout has an unknown outcome: the failed attempt emits no Saved acknowledgement, and durable replay resolves the committed state on recovery.
+
+## Projection rebuild admission (`REINDEX_RATE_PER_SECOND`)
+
+M2 maintenance jobs and `iridium reindex` share a limit of 20 note admissions per second by default. Set `REINDEX_RATE_PER_SECOND` to a positive integer to change that rate; `iridium config check` reports the effective value. This throttles rebuild work entering the bounded projection worker pool. It does not change the worker timeout or the durability of live note updates. Rebuild jobs retain their cursor and continue after restart; see [projection-backlog.md](../runbooks/projection-backlog.md).

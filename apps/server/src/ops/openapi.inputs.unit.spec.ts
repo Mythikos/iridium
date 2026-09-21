@@ -3,7 +3,8 @@
  * (09-api-reference.md sections 1.1, 1.2 and 6). This builds the normal app without a database and
  * reads app.swagger(); the separate openapi.contract suite checks the committed artifact.
  */
-import { M1_ROUTES, mintToken } from '@iridium/contracts';
+import { API_ROUTES, mintToken } from '@iridium/contracts';
+import { createOpenApiOracle } from '@iridium/testkit';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -34,6 +35,30 @@ describe('ops.openapi-inputs.unit [area:ops]', () => {
   function operation(path: string, method: string): Record<string, unknown> {
     return child(child(child(document, 'paths'), path), method);
   }
+
+  it('documents raw attachment media as OpenAPI 3.1 bytes and validates the real wire shape', async () => {
+    const response = child(
+      child(operation('/vaults/{vaultId}/attachments/{attachmentId}', 'get'), 'responses'),
+      '200',
+    );
+    expect(child(response, 'content')['image/png']).toEqual({ schema: {} });
+    const oracle = createOpenApiOracle({ source: document });
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0xff]);
+    expect(
+      await oracle.check(
+        { status: 200, contentType: 'image/png', body: bytes },
+        'attachments.download',
+        200,
+      ),
+    ).toMatchObject({ pass: true });
+    expect(
+      await oracle.check(
+        { status: 200, contentType: 'application/x-iridium-undocumented', body: bytes },
+        'attachments.download',
+        200,
+      ),
+    ).toMatchObject({ pass: false });
+  });
 
   function resolveSchema(value: unknown): Record<string, unknown> {
     const schema = record(value);
@@ -126,7 +151,7 @@ describe('ops.openapi-inputs.unit [area:ops]', () => {
   });
 
   it('derives every If-Match parameter from its strong version contract', () => {
-    const rows = M1_ROUTES.filter((row) => row.ifMatch !== undefined);
+    const rows = API_ROUTES.filter((row) => row.ifMatch !== undefined);
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       const path = row.path.replaceAll(/:([^/]+)/g, '{$1}');

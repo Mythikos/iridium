@@ -2,6 +2,8 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { createTicketGetter, systemCollabClock, type TicketSource } from '@iridium/collab-client';
 import {
+  COLLAB_CLOSE_CODES,
+  CollabCloseReason,
   decodeServerVaultMessage,
   VaultId,
   vaultDocName,
@@ -23,6 +25,7 @@ export interface VaultClient {
   readonly messages: readonly ServerVaultMessage[];
   readonly closes: readonly { readonly code: number; readonly reason: string }[];
   waitConnected(options?: WaitOptions): Promise<void>;
+  waitClosed(options?: WaitOptions): Promise<{ readonly code: number; readonly reason: string }>;
   close(): void;
 }
 
@@ -45,6 +48,13 @@ export function createVaultClient(options: VaultClientOptions): VaultClient {
     onClose: ({ event }) => {
       closes.push({ code: event.code, reason: event.reason });
     },
+    onAuthenticationFailed: ({ reason }) => {
+      const parsed = CollabCloseReason.safeParse(reason);
+      closes.push({
+        code: parsed.success ? COLLAB_CLOSE_CODES[parsed.data] : COLLAB_CLOSE_CODES.unauthorized,
+        reason,
+      });
+    },
   });
   provider.attach();
   return {
@@ -56,6 +66,17 @@ export function createVaultClient(options: VaultClientOptions): VaultClient {
         description: 'the real vault attachment to authenticate and synchronize',
         ...waitOptions,
       });
+    },
+    async waitClosed(
+      waitOptions = {},
+    ): Promise<{ readonly code: number; readonly reason: string }> {
+      await waitFor(() => closes.length > 0, {
+        description: 'the real vault attachment to be refused or closed',
+        ...waitOptions,
+      });
+      const closed = closes.at(-1);
+      if (closed === undefined) throw new Error('The vault attachment has no recorded close.');
+      return closed;
     },
     close(): void {
       provider.destroy();

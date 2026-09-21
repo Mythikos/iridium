@@ -1,6 +1,6 @@
 {
   "name": "@iridium/collab-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "NoteSession, NoteSessionRegistry, SaveStateMachine, VaultChannel client, stateless message codec, WebSocket injection",
   "files": [

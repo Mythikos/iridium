@@ -5,7 +5,7 @@
  * path or policy the document does not describe, and a drift between the module and the manifest is a
  * boot-time failure rather than a silent divergence.
  */
-import { M1_ROUTES, routeByOperationId } from '@iridium/contracts';
+import { API_ROUTES, routeByOperationId } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { RouteSpecMissingError } from '../rest/handler-context.ts';
@@ -26,7 +26,7 @@ describe('auth.routes.manifest.unit [area:auth]', () => {
   });
 
   it('is the whole of the manifest auth/me operations, so none is forgotten', () => {
-    const manifestOwned = M1_ROUTES.filter(
+    const manifestOwned = API_ROUTES.filter(
       (route) =>
         OWNED_PREFIXES.some((prefix) => route.operationId.startsWith(prefix)) &&
         !NON_AUTH_META.has(route.operationId),

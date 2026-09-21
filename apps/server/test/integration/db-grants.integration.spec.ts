@@ -97,6 +97,7 @@ function writeUpgradeFixture(input: {
   clientVersion: string;
 }): void {
   if (process.env['IRIDIUM_FIXTURE_WRITE_UPGRADE'] !== '1') return;
+  if (process.env['IRIDIUM_TEST_TARGET_MILESTONE'] !== 'M1') return;
   if (!input.mysqlVersion.startsWith('8.4.')) {
     throw new Error(
       'the v0.1.0 fixture must originate on 8.4 so both required LTS lines can restore it',

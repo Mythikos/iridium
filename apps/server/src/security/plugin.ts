@@ -232,7 +232,7 @@ export async function applySecurityPlugin(
     // is what lets `db/failure.ts` answer `409 name_conflict` for an `ER_DUP_ENTRY` on `uq_sibling`
     // without every area's classes reaching into one growing `instanceof` chain.
     const mapped = app.problems.map(error);
-    const { code, extensions } =
+    const { code, extensions, variant } =
       mapped === null ? classifyError(error) : { code: mapped.code, extensions: mapped.extensions };
     const level = logLevelForStatus(mapped?.status ?? statusOf(error));
     request.log[level]({ err: error, code, route: request.routeOptions.url }, 'request failed');
@@ -242,6 +242,6 @@ export async function applySecurityPlugin(
       await reply.code(statusOf(error)).send({ error: 'server_error' });
       return;
     }
-    await sendProblem(request, reply, code, extensions);
+    await sendProblem(request, reply, code, extensions, variant);
   });
 }

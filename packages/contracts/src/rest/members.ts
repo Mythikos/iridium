@@ -2,7 +2,7 @@
  * `/vaults/:vaultId/members` (09-api-reference.md section 2.6): everyone who can read a vault can see
  * who else can, and a manager can change who can.
  *
- * `If-Match` is required on `PUT` only when a row already exists, which is why `M1_ROUTES` marks that
+ * `If-Match` is required on `PUT` only when a row already exists, which is why `API_ROUTES` marks that
  * route `conditional` rather than `required`: a first add has no version to compare, and demanding one
  * would make adding a member a two-request operation.
  */

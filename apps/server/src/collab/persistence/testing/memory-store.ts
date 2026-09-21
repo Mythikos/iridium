@@ -20,7 +20,12 @@ import { PIPELINE_VERSION } from '@iridium/markdown';
 import type { AuditEventInput } from '../../../audit/chain.ts';
 import type { NoteEol, ProjectionStatus, RevisionKind, UpdateOrigin } from '../../../db/schema.ts';
 import { initialRows, YJS_MAJOR } from '../initial-state.ts';
-import type { CompactionTransaction, PersistenceStore, WriteTransaction } from '../store.ts';
+import type {
+  CheckpointTransaction,
+  CompactionTransaction,
+  PersistenceStore,
+  WriteTransaction,
+} from '../store.ts';
 import {
   asV1Update,
   type LoadedDocRow,
@@ -123,6 +128,8 @@ function missingWriteTransaction(): WriteTransaction {
     matchesUpdates: async () => noRow(),
     insertUpdates: async () => noRow(),
     casHead: async () => noRow(),
+    insertRevision: async () => noRow(),
+    recordAudit: async () => noRow(),
   };
 }
 
@@ -427,8 +434,14 @@ export class MemoryPersistenceStore implements PersistenceStore {
         draft.headSeq = to;
         return true;
       },
+      insertRevision: async (row) => this.#insertRevision(draft, row),
+      recordAudit: async (event) => {
+        audits.push(event);
+      },
     };
+    const audits: AuditEventInput[] = [];
     const result = await this.#commit(noteId, draft, work(tx));
+    this.#audits.push(...audits);
     const lostReply = this.#takeFault('write-ack');
     if (lostReply !== null) throw lostReply;
     return result;
@@ -436,9 +449,25 @@ export class MemoryPersistenceStore implements PersistenceStore {
 
   async runCompaction<T>(
     noteId: NoteId,
+    _vaultId: VaultId,
     work: (tx: CompactionTransaction) => Promise<T>,
   ): Promise<T> {
     return this.#withRowLock(noteId, () => this.#runCompaction(noteId, work));
+  }
+
+  async runCheckpoint<T>(
+    noteId: NoteId,
+    work: (tx: CheckpointTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.#withRowLock(noteId, () =>
+      this.#runCompaction(noteId, (tx) =>
+        work({
+          lockHead: () => tx.lockHead(),
+          insertRevision: (row) => tx.insertRevision(row),
+          recordAudit: (event) => tx.recordAudit(event),
+        }),
+      ),
+    );
   }
 
   async #runCompaction<T>(

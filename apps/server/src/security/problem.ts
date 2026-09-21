@@ -13,12 +13,13 @@
  * visible edit rather than a special case inside a handler.
  */
 import {
-  ERROR_CODE_STATUS,
   ERROR_CODE_TITLE,
   problemType,
+  problemStatus,
   RETRY_AFTER_CODES,
   type ErrorCode,
   type ProblemDetails,
+  type ProblemVariant,
 } from '@iridium/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -56,12 +57,14 @@ export class ProblemError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
   readonly extensions: ProblemExtensions;
+  readonly variant: ProblemVariant | undefined;
 
-  constructor(code: ErrorCode, extensions: ProblemExtensions = {}) {
+  constructor(code: ErrorCode, extensions: ProblemExtensions = {}, variant?: ProblemVariant) {
     super(extensions.detail ?? ERROR_CODE_TITLE[code]);
     this.name = 'ProblemError';
     this.code = code;
-    this.status = ERROR_CODE_STATUS[code];
+    this.status = problemStatus(code, variant);
+    this.variant = variant;
     this.extensions = extensions;
   }
 }
@@ -87,6 +90,7 @@ export function toProblemDetails(
   code: ErrorCode,
   requestId: string,
   extensions: ProblemExtensions = {},
+  variant?: ProblemVariant,
 ): ProblemDetails {
   const retryAfterMs =
     extensions.retryAfterMs ??
@@ -97,7 +101,7 @@ export function toProblemDetails(
   return {
     type: problemType(code),
     title: ERROR_CODE_TITLE[code],
-    status: ERROR_CODE_STATUS[code],
+    status: problemStatus(code, variant),
     code,
     requestId,
     ...(extensions.detail === undefined ? {} : { detail: extensions.detail }),
@@ -119,8 +123,9 @@ export function sendProblem(
   reply: FastifyReply,
   code: ErrorCode,
   extensions: ProblemExtensions = {},
+  variant?: ProblemVariant,
 ): FastifyReply {
-  const body = toProblemDetails(code, request.requestId, extensions);
+  const body = toProblemDetails(code, request.requestId, extensions, variant);
   for (const [name, value] of Object.entries(extensions.headers ?? {})) {
     reply.header(name, value);
   }
@@ -152,9 +157,17 @@ const HTTP_TOO_MANY_REQUESTS = 429;
  * schema validation, then Fastify's built-ins, then the rate limiter, then everything else as
  * `server_error` — whose body carries only the request id while the log line carries the stack.
  */
-export function classifyError(error: unknown): { code: ErrorCode; extensions: ProblemExtensions } {
+export function classifyError(error: unknown): {
+  code: ErrorCode;
+  extensions: ProblemExtensions;
+  variant?: ProblemVariant;
+} {
   if (error instanceof ProblemError) {
-    return { code: error.code, extensions: error.extensions };
+    return {
+      code: error.code,
+      extensions: error.extensions,
+      ...(error.variant === undefined ? {} : { variant: error.variant }),
+    };
   }
   // Fastify 5 types the error handler's first parameter as `unknown`, which is honest: a route can
   // throw anything. Narrowing here rather than at the call site keeps one classifier.

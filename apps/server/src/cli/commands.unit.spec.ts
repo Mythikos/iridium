@@ -93,9 +93,15 @@ describe('cli.commands.unit [area:ops]', () => {
       ).toBeGreaterThan(0);
     });
 
-    it('names the five mutations M1 carries', () => {
+    it('names every mutation carried through M2', () => {
       const actions = SUBCOMMANDS.flatMap(({ subcommand }) => subcommand.mutations).toSorted();
       expect(actions).toEqual([
+        'admin.audit.exported',
+        'admin.job.cancelled',
+        'admin.job.triggered',
+        'admin.job.triggered',
+        'admin.job.triggered',
+        'admin.job.triggered',
         'admin.user.created',
         'note.content.repaired',
         'session.revoked_all',
@@ -107,12 +113,12 @@ describe('cli.commands.unit [area:ops]', () => {
   });
 
   describe('the usage text', () => {
-    it('keeps M0’s six entries byte for byte', () => {
+    it('preserves the original commands and documents explicit long-running migration admission', () => {
       for (const line of [
         '  serve                     Run the server (the container CMD and the systemd ExecStart).',
-        '  migrate status            Print applied, pending and unknown-newer migrations.',
-        "  migrate up                Apply every pending migration under GET_LOCK('iridium_migrate', 60).",
-        '  migrate to <name>         Migrate to a named migration; a target behind the current head is',
+        '  migrate status [--json]   Print applied, pending and unknown-newer migrations.',
+        "  migrate up [--allow-long-running]\n                            Apply every pending migration under GET_LOCK('iridium_migrate', 60).",
+        '  migrate to <name> [--allow-long-running]\n                            Migrate to a named migration; a target behind the current head is',
         '                            refused with exit 3 when NODE_ENV=production.',
         '  config check [--json]     Parse EnvSchema exactly as serve would and print the redacted summary.',
         '  version [--json]          Print the product version, commit, Node version and migration head.',
@@ -138,24 +144,30 @@ describe('cli.commands.unit [area:ops]', () => {
     });
   });
 
-  describe('the reserved command table shrank by what M1 implements', () => {
+  describe('the reserved command table shrank by what M2 implements', () => {
     it('no longer reserves doctor, admin, audit, tokens or sessions', () => {
-      for (const implemented of ['doctor', 'admin', 'audit', 'tokens', 'sessions']) {
+      for (const implemented of [
+        'doctor',
+        'admin',
+        'audit',
+        'tokens',
+        'sessions',
+        'jobs',
+        'trash',
+        'reindex',
+      ]) {
         expect(RESERVED_COMMANDS).not.toContain(implemented);
         expect(commandByName(implemented)).toBeDefined();
       }
     });
 
-    it('still reserves the eight commands no milestone before this one implements', () => {
+    it('still reserves the five commands no milestone before this one implements', () => {
       expect([...RESERVED_COMMANDS].toSorted()).toEqual([
         'backup',
         'desktop-updates',
-        'jobs',
         'keys',
         'mirror',
-        'reindex',
         'restore',
-        'trash',
       ]);
     });
   });

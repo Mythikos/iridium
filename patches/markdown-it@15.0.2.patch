@@ -1,0 +1,687 @@
+diff --git a/dist/markdown-it.mjs b/dist/markdown-it.mjs
+--- a/dist/markdown-it.mjs	
++++ b/dist/markdown-it.mjs	
+@@ -1,9 +1,6 @@
+ /*! markdown-it 15.0.2 https://github.com/markdown-it/markdown-it @license MIT */
+-import * as mdurl from "mdurl";
+ import * as ucmicro from "uc.micro";
+ import { decodeHTMLStrict } from "entities";
+-import { LinkifyIt } from "linkify-it";
+-import punycode from "punycode.js";
+ //#region \0rolldown/runtime.js
+ var __defProp = Object.defineProperty;
+ var __exportAll = (all, no_symbols) => {
+@@ -22,24 +19,7 @@
+ *
+ * @module md.utils
+ */
+-var utils_exports = /* @__PURE__ */ __exportAll({
+-	arrayReplaceAt: () => arrayReplaceAt,
+-	asciiTrim: () => asciiTrim,
+-	callable: () => callable,
+-	escapeHtml: () => escapeHtml,
+-	escapeRE: () => escapeRE,
+-	fromCodePoint: () => fromCodePoint,
+-	isMdAsciiPunct: () => isMdAsciiPunct,
+-	isPunctChar: () => isPunctChar,
+-	isPunctCharCode: () => isPunctCharCode,
+-	isSpace: () => isSpace,
+-	isValidEntityCode: () => isValidEntityCode,
+-	isWhiteSpace: () => isWhiteSpace,
+-	lib: () => lib,
+-	normalizeReference: () => normalizeReference,
+-	unescapeAll: () => unescapeAll,
+-	unescapeMd: () => unescapeMd
+-});
++
+ function callable(cls) {
+ 	const wrapper = function(...args) {
+ 		return Reflect.construct(cls, args, new.target && new.target !== wrapper ? new.target : cls);
+@@ -245,10 +225,7 @@
+ * Libraries commonly used by markdown-it and its plugins, re-exported to
+ * reduce duplicate dependencies in browser bundles.
+ */
+-var lib = {
+-	mdurl,
+-	ucmicro
+-};
++
+ //#endregion
+ //#region src/helpers/parse_link_label.ts
+ /** Finds the end of a link or image label (`[label]`). */
+@@ -1366,6 +1343,10 @@
+ * Top-level rules executor. Glues block/inline parsers and does intermediate
+ * transformations.
+ */
++function processCore(state) {
++		const rules = this.ruler.getRules("");
++		for (let i = 0, l = rules.length; i < l; i++) rules[i](state);
++	}
+ var ParserCore = class {
+ 	constructor() {
+ 		_defineProperty(
+@@ -1382,10 +1363,7 @@
+ 	/**
+ 	* Executes core chain rules.
+ 	*/
+-	process(state) {
+-		const rules = this.ruler.getRules("");
+-		for (let i = 0, l = rules.length; i < l; i++) rules[i](state);
+-	}
++	process(state) { return processCore.call(this, state); }
+ };
+ //#endregion
+ //#region src/rules_block/state_block.ts
+@@ -3540,151 +3518,9 @@
+ *
+ * @category Main
+ */
+-var MarkdownIt = class {
++class MarkdownEngine {
++
+ 	/**
+-	* Link validation function. CommonMark allows too much in links. By default
+-	* we disable `javascript:`, `vbscript:`, `file:` schemas, and almost all `data:...` schemas
+-	* except some embedded image types.
+-	*
+-	* You can change this behaviour:
+-	*
+-	* @example
+-	* ```javascript
+-	* import MarkdownIt from 'markdown-it'
+-	* const md = new MarkdownIt()
+-	*
+-	* // enable everything
+-	* md.validateLink = function () { return true; }
+-	* ```
+-	*/
+-	validateLink(url) {
+-		const str = url.trim().toLowerCase();
+-		return BAD_PROTO_RE.test(str) ? GOOD_DATA_RE.test(str) : true;
+-	}
+-	/**
+-	* Function used to encode link url to a machine-readable format,
+-	* which includes url-encoding, punycode, etc.
+-	*/
+-	normalizeLink(url) {
+-		const parsed = mdurl.parse(url, true);
+-		if (parsed.hostname) {
+-			if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) try {
+-				parsed.hostname = punycode.toASCII(parsed.hostname);
+-			} catch (er) {}
+-		}
+-		if (parsed.auth) parsed.auth = mdurl.encode(parsed.auth);
+-		if (parsed.hostname) parsed.hostname = mdurl.encode(parsed.hostname);
+-		if (parsed.pathname) parsed.pathname = mdurl.encode(parsed.pathname);
+-		if (parsed.search) parsed.search = mdurl.encode(parsed.search);
+-		if (parsed.hash) parsed.hash = mdurl.encode(parsed.hash);
+-		return mdurl.format(parsed);
+-	}
+-	/**
+-	* Function used to decode link url to a human-readable format`
+-	*/
+-	normalizeLinkText(url) {
+-		const parsed = mdurl.parse(url, true);
+-		if (parsed.hostname) {
+-			if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) try {
+-				parsed.hostname = punycode.toUnicode(parsed.hostname);
+-			} catch (er) {}
+-		}
+-		return mdurl.decode(mdurl.format(parsed), mdurl.decode.defaultChars + "%");
+-	}
+-	constructor(...args) {
+-		_defineProperty(
+-			this,
+-			/**
+-			* Instance of {@link ParserInline}. You may need it to add new rules when
+-			* writing plugins. For simple rules control use {@link MarkdownIt.disable}
+-			* and {@link MarkdownIt.enable}.
+-			*/
+-			"inline",
+-			new ParserInline()
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* Instance of {@link ParserBlock}. You may need it to add new rules when
+-			* writing plugins. For simple rules control use {@link MarkdownIt.disable}
+-			* and {@link MarkdownIt.enable}.
+-			*/
+-			"block",
+-			new ParserBlock()
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* Instance of {@link ParserCore} chain executor. You may need it to add new
+-			* rules when writing plugins. For simple rules control use
+-			* {@link MarkdownIt.disable} and {@link MarkdownIt.enable}.
+-			*/
+-			"core",
+-			new ParserCore()
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* Instance of {@link Renderer}. Use it to modify output look. Or to add rendering
+-			* rules for new token types, generated by plugins.
+-			*
+-			* See {@link Renderer} docs and
+-			* [source code](https://github.com/markdown-it/markdown-it/blob/master/src/renderer.ts).
+-			*
+-			* @example
+-			* ```javascript
+-			* import MarkdownIt from 'markdown-it'
+-			* const md = new MarkdownIt()
+-			*
+-			* function myToken(tokens, idx, options, env, self) {
+-			*   //...
+-			*   return result;
+-			* };
+-			*
+-			* md.renderer.rules['my_token'] = myToken
+-			* ```
+-			*/
+-			"renderer",
+-			new Renderer()
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* [linkify-it](https://github.com/markdown-it/linkify-it) instance.
+-			* Used by [linkify](https://github.com/markdown-it/markdown-it/blob/master/src/rules_core/linkify.ts)
+-			* rule.
+-			*/
+-			"linkify",
+-			new LinkifyIt()
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* Assorted utility functions, useful to write plugins. See details
+-			* [here](https://github.com/markdown-it/markdown-it/blob/master/src/common/utils.ts).
+-			*/
+-			"utils",
+-			utils_exports
+-		);
+-		_defineProperty(
+-			this,
+-			/**
+-			* Link components parser functions, useful to write plugins. See details
+-			* [here](https://github.com/markdown-it/markdown-it/blob/master/src/helpers).
+-			*/
+-			"helpers",
+-			Object.assign({}, helpers_exports)
+-		);
+-		const [presetNameOrOptions, options] = args;
+-		if (typeof presetNameOrOptions === "string") {
+-			this.configure(presetNameOrOptions);
+-			if (options) this.set(options);
+-		} else {
+-			this.configure("default");
+-			this.set(presetNameOrOptions || {});
+-		}
+-	}
+-	/**
+ 	* Set parser options (in the same format as in constructor). Probably, you
+ 	* will never need it, but you can change options after constructor call.
+ 	*
+@@ -3706,6 +3542,7 @@
+ 		Object.assign(this.options, options);
+ 		return this;
+ 	}
++
+ 	/**
+ 	* Batch load of all options and compenent settings. This is internal method,
+ 	* and you probably will not need it. But if you will - see available presets
+@@ -3740,6 +3577,7 @@
+ 		}
+ 		return this;
+ 	}
++
+ 	/**
+ 	* Enable list or rules. It will automatically find appropriate components,
+ 	* containing rules with given names. If rule not found, and `ignoreInvalid`
+@@ -3769,6 +3607,7 @@
+ 		if (missed.length && !ignoreInvalid) throw new Error(`MarkdownIt. Failed to enable unknown rule(s): ${missed}`);
+ 		return this;
+ 	}
++
+ 	/**
+ 	* The same as {@link MarkdownIt.enable}, but turn specified rules off.
+ 	*/
+@@ -3787,6 +3626,7 @@
+ 		if (missed.length && !ignoreInvalid) throw new Error(`MarkdownIt. Failed to disable unknown rule(s): ${missed}`);
+ 		return this;
+ 	}
++
+ 	/**
+ 	* Load specified plugin with given params into current parser instance.
+ 	* It's just a sugar to call `plugin(md, params)` with curring.
+@@ -3806,6 +3646,7 @@
+ 		plugin.apply(plugin, [this, ...params]);
+ 		return this;
+ 	}
++
+ 	/**
+ 	* Parse input string and return list of block tokens (special token type
+ 	* "inline" will contain list of inline tokens). You should not call this
+@@ -3823,17 +3664,8 @@
+ 		this.core.process(state);
+ 		return state.tokens;
+ 	}
++
+ 	/**
+-	* Render markdown string into html. It does all magic for you :).
+-	*
+-	* `env` can be used to inject additional metadata (`{}` by default).
+-	* But you will not need it with high probability. See also comment
+-	* in {@link MarkdownIt.parse}.
+-	*/
+-	render(src, env = {}) {
+-		return this.renderer.render(this.parse(src, env), this.options, env);
+-	}
+-	/**
+ 	* The same as {@link MarkdownIt.parse} but skip all block rules. It returns
+ 	* the block tokens list with the single `inline` element, containing parsed
+ 	* inline tokens in `children` property. Also updates `env` object.
+@@ -3844,37 +3676,40 @@
+ 		this.core.process(state);
+ 		return state.tokens;
+ 	}
+-	/**
+-	* Similar to {@link MarkdownIt.render} but for single paragraph content.
+-	* Result will NOT be wrapped into `<p>` tags.
+-	*/
+-	renderInline(src, env = {}) {
+-		return this.renderer.render(this.parseInline(src, env), this.options, env);
+-	}
+-};
+-_defineProperty(MarkdownIt, "Token", Token);
+-_defineProperty(MarkdownIt, "Ruler", Ruler);
+-_defineProperty(MarkdownIt, "Renderer", Renderer);
+-_defineProperty(MarkdownIt, "ParserCore", ParserCore);
+-_defineProperty(MarkdownIt, "StateCore", StateCore);
+-_defineProperty(MarkdownIt, "ParserBlock", ParserBlock);
+-_defineProperty(MarkdownIt, "StateBlock", StateBlock);
+-_defineProperty(MarkdownIt, "ParserInline", ParserInline);
+-_defineProperty(MarkdownIt, "StateInline", StateInline);
+-//#endregion
+-//#region src/index.ts
+-/**
+-* Default package export.
+-*
+-* For backward compatibility, the {@link MarkdownIt} class is wrapped so
+-* legacy code can call it without `new`. New code should instantiate it as a
+-* regular class with `new`. The compatibility wrapper may be removed in a
+-* future release.
+-*
+-* @category Main
+-*/
+-var MarkdownItCallable = callable(MarkdownIt);
+-//#endregion
+-export { MarkdownItCallable as default };
++}
+ 
+-//# sourceMappingURL=markdown-it.mjs.map
+\ No newline at end of file
++/** Executes the original rules through the same upstream core executor. */
++class TokenCore {
++  constructor() {
++    this.ruler = new Ruler();
++    this.State = StateCore;
++    for (const [name, rule] of [
++      ['normalize', normalize], ['block', block], ['strip_references', strip_references],
++      ['inline', inline], ['text_join', text_join]
++    ]) this.ruler.push(name, rule);
++  }
++  process(state) { return processCore.call(this, state); }
++}
++/** Shares all upstream parsing rules; presentation and URL rewriting belong to the caller. */
++class TokenEngine extends MarkdownEngine {
++  constructor(options = {}) {
++    super();
++    this.inline = new ParserInline();
++    this.block = new ParserBlock();
++    this.core = new TokenCore();
++    this.utils = { unescapeAll };
++    this.helpers = Object.assign({}, helpers_exports);
++    this.configure('commonmark');
++    this.set(options);
++  }
++  set(options) {
++    if (options.linkify || options.typographer || options.highlight)
++      throw new Error('TokenEngine does not provide rendering, linkification or typography.');
++    return super.set(options);
++  }
++  validateLink() { return true; }
++  normalizeLink(url) { return url; }
++  normalizeLinkText(url) { return url; }
++}
++
++export { TokenEngine, MarkdownEngine, _defineProperty, __exportAll, Token, Ruler, Renderer, ParserCore, StateCore, ParserBlock, StateBlock, ParserInline, StateInline, helpers_exports, BAD_PROTO_RE, GOOD_DATA_RE, RECODE_HOSTNAME_FOR, arrayReplaceAt, asciiTrim, callable, escapeHtml, escapeRE, fromCodePoint, isMdAsciiPunct, isPunctChar, isPunctCharCode, isSpace, isValidEntityCode, isWhiteSpace, normalizeReference, unescapeAll, unescapeMd };
+diff --git a/dist/root.mjs b/dist/root.mjs
+new file mode 100644
+--- /dev/null	
++++ b/dist/root.mjs	
+@@ -0,0 +1,203 @@
++/*! markdown-it 15.0.2 https://github.com/markdown-it/markdown-it @license MIT */
++import * as mdurl from "mdurl";
++import * as ucmicro from "uc.micro";
++import { LinkifyIt } from "linkify-it";
++import punycode from "punycode.js";
++import { MarkdownEngine, _defineProperty, __exportAll, Token, Ruler, Renderer, ParserCore, StateCore, ParserBlock, StateBlock, ParserInline, StateInline, helpers_exports, BAD_PROTO_RE, GOOD_DATA_RE, RECODE_HOSTNAME_FOR, arrayReplaceAt, asciiTrim, callable, escapeHtml, escapeRE, fromCodePoint, isMdAsciiPunct, isPunctChar, isPunctCharCode, isSpace, isValidEntityCode, isWhiteSpace, normalizeReference, unescapeAll, unescapeMd } from './markdown-it.mjs';
++var lib = {
++	mdurl,
++	ucmicro
++};
++var utils_exports = /* @__PURE__ */ __exportAll({
++	arrayReplaceAt: () => arrayReplaceAt,
++	asciiTrim: () => asciiTrim,
++	callable: () => callable,
++	escapeHtml: () => escapeHtml,
++	escapeRE: () => escapeRE,
++	fromCodePoint: () => fromCodePoint,
++	isMdAsciiPunct: () => isMdAsciiPunct,
++	isPunctChar: () => isPunctChar,
++	isPunctCharCode: () => isPunctCharCode,
++	isSpace: () => isSpace,
++	isValidEntityCode: () => isValidEntityCode,
++	isWhiteSpace: () => isWhiteSpace,
++	lib: () => lib,
++	normalizeReference: () => normalizeReference,
++	unescapeAll: () => unescapeAll,
++	unescapeMd: () => unescapeMd
++});
++var MarkdownIt = class extends MarkdownEngine {
++	/**
++	* Link validation function. CommonMark allows too much in links. By default
++	* we disable `javascript:`, `vbscript:`, `file:` schemas, and almost all `data:...` schemas
++	* except some embedded image types.
++	*
++	* You can change this behaviour:
++	*
++	* @example
++	* ```javascript
++	* import MarkdownIt from 'markdown-it'
++	* const md = new MarkdownIt()
++	*
++	* // enable everything
++	* md.validateLink = function () { return true; }
++	* ```
++	*/
++	validateLink(url) {
++		const str = url.trim().toLowerCase();
++		return BAD_PROTO_RE.test(str) ? GOOD_DATA_RE.test(str) : true;
++	}
++	/**
++	* Function used to encode link url to a machine-readable format,
++	* which includes url-encoding, punycode, etc.
++	*/
++	normalizeLink(url) {
++		const parsed = mdurl.parse(url, true);
++		if (parsed.hostname) {
++			if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) try {
++				parsed.hostname = punycode.toASCII(parsed.hostname);
++			} catch (er) {}
++		}
++		if (parsed.auth) parsed.auth = mdurl.encode(parsed.auth);
++		if (parsed.hostname) parsed.hostname = mdurl.encode(parsed.hostname);
++		if (parsed.pathname) parsed.pathname = mdurl.encode(parsed.pathname);
++		if (parsed.search) parsed.search = mdurl.encode(parsed.search);
++		if (parsed.hash) parsed.hash = mdurl.encode(parsed.hash);
++		return mdurl.format(parsed);
++	}
++	/**
++	* Function used to decode link url to a human-readable format`
++	*/
++	normalizeLinkText(url) {
++		const parsed = mdurl.parse(url, true);
++		if (parsed.hostname) {
++			if (!parsed.protocol || RECODE_HOSTNAME_FOR.indexOf(parsed.protocol) >= 0) try {
++				parsed.hostname = punycode.toUnicode(parsed.hostname);
++			} catch (er) {}
++		}
++		return mdurl.decode(mdurl.format(parsed), mdurl.decode.defaultChars + "%");
++	}
++	constructor(...args) {
++		super();
++		_defineProperty(
++			this,
++			/**
++			* Instance of {@link ParserInline}. You may need it to add new rules when
++			* writing plugins. For simple rules control use {@link MarkdownIt.disable}
++			* and {@link MarkdownIt.enable}.
++			*/
++			"inline",
++			new ParserInline()
++		);
++		_defineProperty(
++			this,
++			/**
++			* Instance of {@link ParserBlock}. You may need it to add new rules when
++			* writing plugins. For simple rules control use {@link MarkdownIt.disable}
++			* and {@link MarkdownIt.enable}.
++			*/
++			"block",
++			new ParserBlock()
++		);
++		_defineProperty(
++			this,
++			/**
++			* Instance of {@link ParserCore} chain executor. You may need it to add new
++			* rules when writing plugins. For simple rules control use
++			* {@link MarkdownIt.disable} and {@link MarkdownIt.enable}.
++			*/
++			"core",
++			new ParserCore()
++		);
++		_defineProperty(
++			this,
++			/**
++			* Instance of {@link Renderer}. Use it to modify output look. Or to add rendering
++			* rules for new token types, generated by plugins.
++			*
++			* See {@link Renderer} docs and
++			* [source code](https://github.com/markdown-it/markdown-it/blob/master/src/renderer.ts).
++			*
++			* @example
++			* ```javascript
++			* import MarkdownIt from 'markdown-it'
++			* const md = new MarkdownIt()
++			*
++			* function myToken(tokens, idx, options, env, self) {
++			*   //...
++			*   return result;
++			* };
++			*
++			* md.renderer.rules['my_token'] = myToken
++			* ```
++			*/
++			"renderer",
++			new Renderer()
++		);
++		_defineProperty(
++			this,
++			/**
++			* [linkify-it](https://github.com/markdown-it/linkify-it) instance.
++			* Used by [linkify](https://github.com/markdown-it/markdown-it/blob/master/src/rules_core/linkify.ts)
++			* rule.
++			*/
++			"linkify",
++			new LinkifyIt()
++		);
++		_defineProperty(
++			this,
++			/**
++			* Assorted utility functions, useful to write plugins. See details
++			* [here](https://github.com/markdown-it/markdown-it/blob/master/src/common/utils.ts).
++			*/
++			"utils",
++			utils_exports
++		);
++		_defineProperty(
++			this,
++			/**
++			* Link components parser functions, useful to write plugins. See details
++			* [here](https://github.com/markdown-it/markdown-it/blob/master/src/helpers).
++			*/
++			"helpers",
++			Object.assign({}, helpers_exports)
++		);
++		const [presetNameOrOptions, options] = args;
++		if (typeof presetNameOrOptions === "string") {
++			this.configure(presetNameOrOptions);
++			if (options) this.set(options);
++		} else {
++			this.configure("default");
++			this.set(presetNameOrOptions || {});
++		}
++	}
++	/**
++	* Render markdown string into html. It does all magic for you :).
++	*
++	* `env` can be used to inject additional metadata (`{}` by default).
++	* But you will not need it with high probability. See also comment
++	* in {@link MarkdownIt.parse}.
++	*/
++	render(src, env = {}) {
++		return this.renderer.render(this.parse(src, env), this.options, env);
++	}
++	/**
++	* Similar to {@link MarkdownIt.render} but for single paragraph content.
++	* Result will NOT be wrapped into `<p>` tags.
++	*/
++	renderInline(src, env = {}) {
++		return this.renderer.render(this.parseInline(src, env), this.options, env);
++	}
++
++	static Token = Token;
++	static Ruler = Ruler;
++	static Renderer = Renderer;
++	static ParserCore = ParserCore;
++	static StateCore = StateCore;
++	static ParserBlock = ParserBlock;
++	static StateBlock = StateBlock;
++	static ParserInline = ParserInline;
++	static StateInline = StateInline;
++};
++var MarkdownItCallable = callable(MarkdownIt);
++export { MarkdownItCallable as default };
+diff --git a/dist/parser.mjs b/dist/parser.mjs
+new file mode 100644
+--- /dev/null	
++++ b/dist/parser.mjs	
+@@ -0,0 +1,1 @@
++export { TokenEngine, StateCore, StateBlock, StateInline } from './markdown-it.mjs';
+diff --git a/dist/parser.d.mts b/dist/parser.d.mts
+new file mode 100644
+--- /dev/null	
++++ b/dist/parser.d.mts	
+@@ -0,0 +1,72 @@
++/** Token-only entry: the same upstream rules without a renderer, linkifier or URL recoder. */
++import type {
++  Env, Token, Ruler, MarkdownIt, MarkdownItOptions, MarkdownItPreset,
++  StateCore as FullStateCore, StateBlock as FullStateBlock, StateInline as FullStateInline,
++} from './markdown-it.d.mts';
++
++export type { Env, Token, Ruler } from './markdown-it.d.mts';
++
++export interface StateCore extends Omit<FullStateCore, 'md'> { md: TokenEngine }
++export interface StateBlock extends Omit<FullStateBlock, 'md'> { md: TokenEngine }
++export interface StateInline extends Omit<FullStateInline, 'md' | 'pushPending'> {
++  md: TokenEngine;
++  pushPending(): Token;
++}
++
++export const StateCore: {
++  new(src: string, md: TokenEngine, env: Env): StateCore;
++  prototype: StateCore;
++};
++export const StateBlock: {
++  new(src: string, md: TokenEngine, env: Env, tokens: Token[]): StateBlock;
++  prototype: StateBlock;
++};
++export const StateInline: {
++  new(src: string, md: TokenEngine, env: Env, tokens: Token[]): StateInline;
++  prototype: StateInline;
++};
++
++export interface ParserCore {
++  ruler: Ruler<[StateCore], void>;
++  State: typeof StateCore;
++  process(state: StateCore): void;
++}
++export interface ParserBlock {
++  ruler: Ruler<[StateBlock, number, number, boolean], boolean>;
++  State: typeof StateBlock;
++  tokenize(state: StateBlock, startLine: number, endLine: number): void;
++  parse(src: string, md: TokenEngine, env: Env, tokens: Token[]): void;
++}
++export interface ParserInline {
++  ruler: Ruler<[StateInline, boolean], boolean>;
++  ruler2: Ruler<[StateInline], void>;
++  State: typeof StateInline;
++  skipToken(state: StateInline): void;
++  tokenize(state: StateInline): void;
++  parse(src: string, md: TokenEngine, env: Env, tokens: Token[]): void;
++}
++
++/** URLs remain data; the caller owns GFM autolinking and sanitize-last rendering. */
++export class TokenEngine {
++  inline: ParserInline;
++  block: ParserBlock;
++  core: ParserCore;
++  utils: Pick<MarkdownIt['utils'], 'unescapeAll'>;
++  helpers: {
++    parseLinkLabel(state: StateInline, start: number, disableNested?: boolean): number;
++    parseLinkDestination: MarkdownIt['helpers']['parseLinkDestination'];
++    parseLinkTitle: MarkdownIt['helpers']['parseLinkTitle'];
++  };
++  options: Required<MarkdownItOptions>;
++  constructor(options?: Omit<MarkdownItOptions, 'linkify' | 'typographer' | 'highlight'>);
++  validateLink(url: string): boolean;
++  normalizeLink(url: string): string;
++  normalizeLinkText(url: string): string;
++  set(options: MarkdownItOptions): this;
++  configure(preset: 'commonmark' | 'zero' | MarkdownItPreset): this;
++  enable(rules: string | string[], ignoreInvalid?: boolean): this;
++  disable(rules: string | string[], ignoreInvalid?: boolean): this;
++  use<Params extends unknown[]>(plugin: (md: this, ...params: Params) => void, ...params: Params): this;
++  parse(src: string, env: Env): Token[];
++  parseInline(src: string, env: Env): Token[];
++}
+diff --git a/package.json b/package.json
+--- a/package.json	
++++ b/package.json	
+@@ -22,13 +22,13 @@
+     }
+   ],
+   "main": "./dist/markdown-it.cjs.js",
+-  "module": "./dist/markdown-it.mjs",
++  "module": "./dist/root.mjs",
+   "types": "./dist/markdown-it.d.cts",
+   "exports": {
+     ".": {
+       "import": {
+         "types": "./dist/markdown-it.d.mts",
+-        "default": "./dist/markdown-it.mjs"
++        "default": "./dist/root.mjs"
+       },
+       "require": {
+         "types": "./dist/markdown-it.d.cts",
+@@ -46,7 +46,13 @@
+       },
+       "default": "./dist/browser/markdown-it.umd.min.js"
+     },
+-    "./package.json": "./package.json"
++    "./package.json": "./package.json",
++    "./parser": {
++      "import": {
++        "types": "./dist/parser.d.mts",
++        "default": "./dist/parser.mjs"
++      }
++    }
+   },
+   "bin": {
+     "markdown-it": "bin/markdown-it.mjs"

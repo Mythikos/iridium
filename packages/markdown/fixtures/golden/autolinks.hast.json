@@ -1,0 +1,309 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 1,
+        "dataOffset": 0,
+        "dataEndOffset": 70
+      },
+      "children": [
+        {
+          "type": "element",
+          "tagName": "a",
+          "properties": {
+            "href": "http://www.example.com",
+            "dataLine": 1,
+            "dataOffset": 0,
+            "dataEndOffset": 15,
+            "dataLinkKind": "external"
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "www.example.com",
+              "position": {
+                "start": {
+                  "line": 1,
+                  "column": 1,
+                  "offset": 0
+                },
+                "end": {
+                  "line": 1,
+                  "column": 16,
+                  "offset": 15
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 1,
+              "offset": 0
+            },
+            "end": {
+              "line": 1,
+              "column": 16,
+              "offset": 15
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": ",",
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 16,
+              "offset": 15
+            },
+            "end": {
+              "line": 1,
+              "column": 17,
+              "offset": 16
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": " ",
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 17,
+              "offset": 16
+            },
+            "end": {
+              "line": 1,
+              "column": 18,
+              "offset": 17
+            }
+          }
+        },
+        {
+          "type": "element",
+          "tagName": "a",
+          "properties": {
+            "href": "https://example.com/a?b=c&d=e",
+            "dataLine": 1,
+            "dataOffset": 17,
+            "dataEndOffset": 46,
+            "dataLinkKind": "external"
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "https://example.com/a?b=c&d=e",
+              "position": {
+                "start": {
+                  "line": 1,
+                  "column": 18,
+                  "offset": 17
+                },
+                "end": {
+                  "line": 1,
+                  "column": 47,
+                  "offset": 46
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 18,
+              "offset": 17
+            },
+            "end": {
+              "line": 1,
+              "column": 47,
+              "offset": 46
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": " and ",
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 47,
+              "offset": 46
+            },
+            "end": {
+              "line": 1,
+              "column": 52,
+              "offset": 51
+            }
+          }
+        },
+        {
+          "type": "element",
+          "tagName": "a",
+          "properties": {
+            "href": "mailto:author@example.com",
+            "dataLine": 1,
+            "dataOffset": 51,
+            "dataEndOffset": 69,
+            "dataLinkKind": "external"
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "author@example.com",
+              "position": {
+                "start": {
+                  "line": 1,
+                  "column": 52,
+                  "offset": 51
+                },
+                "end": {
+                  "line": 1,
+                  "column": 70,
+                  "offset": 69
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 52,
+              "offset": 51
+            },
+            "end": {
+              "line": 1,
+              "column": 70,
+              "offset": 69
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": ".",
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 70,
+              "offset": 69
+            },
+            "end": {
+              "line": 1,
+              "column": 71,
+              "offset": 70
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 1,
+          "column": 71,
+          "offset": 70
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 3,
+        "dataOffset": 72,
+        "dataEndOffset": 97
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "~literal~ and ",
+          "position": {
+            "start": {
+              "line": 3,
+              "column": 1,
+              "offset": 72
+            },
+            "end": {
+              "line": 3,
+              "column": 15,
+              "offset": 86
+            }
+          }
+        },
+        {
+          "type": "element",
+          "tagName": "del",
+          "properties": {
+            "dataLine": 3,
+            "dataOffset": 86,
+            "dataEndOffset": 97
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "deleted",
+              "position": {
+                "start": {
+                  "line": 3,
+                  "column": 17,
+                  "offset": 88
+                },
+                "end": {
+                  "line": 3,
+                  "column": 24,
+                  "offset": 95
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 3,
+              "column": 15,
+              "offset": 86
+            },
+            "end": {
+              "line": 3,
+              "column": 26,
+              "offset": 97
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 3,
+          "column": 1,
+          "offset": 72
+        },
+        "end": {
+          "line": 3,
+          "column": 26,
+          "offset": 97
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 4,
+      "column": 1,
+      "offset": 98
+    }
+  }
+}

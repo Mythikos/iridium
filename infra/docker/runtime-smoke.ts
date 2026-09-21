@@ -211,6 +211,30 @@ async function main(): Promise<void> {
     }
     console.info(`docker-image: starting ${image} against ${mysqlImage} (${project})`);
     started = true;
+    await docker([
+      ...compose,
+      'up',
+      '--detach',
+      '--no-build',
+      '--wait',
+      '--wait-timeout',
+      '180',
+      'mysql',
+    ]);
+    // This disposable deployment explicitly exercises the operator's maintenance admission.
+    // Boot must never grant itself permission to rebuild a table, even on an empty database.
+    await docker([
+      ...compose,
+      'run',
+      '--rm',
+      '--no-deps',
+      '--name',
+      migrationContainer,
+      'server',
+      'migrate',
+      'up',
+      '--allow-long-running',
+    ]);
     await docker([...compose, 'up', '--detach', '--no-build', '--wait', '--wait-timeout', '180']);
     const container = await docker([...compose, 'ps', '--all', '--quiet', 'server']);
     if (!container || container.includes('\n')) {

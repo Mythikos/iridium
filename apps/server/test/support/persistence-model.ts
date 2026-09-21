@@ -4,7 +4,6 @@ import { signInWeb, type SeededAdmin, type SeededVault } from '@iridium/testkit'
 
 import { idBytes } from '../../src/auth/ids.ts';
 import { KyselyPersistenceStore } from '../../src/collab/persistence/kysely-store.ts';
-import { pruneUpdateLog } from '../../src/collab/persistence/prune.ts';
 import { recordingLogger } from '../../src/collab/persistence/testing/harness.ts';
 import {
   createModelReal,
@@ -19,6 +18,7 @@ import {
   type StartAuthServerOptions,
 } from './auth-app.ts';
 import { ManualClock } from './manual-clock.ts';
+import { pruneUpdateLog } from './prune-updates.ts';
 
 export interface DatabaseModelFixture {
   readonly context: AuthTestServer;

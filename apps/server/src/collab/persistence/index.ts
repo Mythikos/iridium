@@ -23,6 +23,7 @@ import {
 
 import type { Clock } from '../../ops/clock.ts';
 import type { PersistBacklogReading } from '../../ops/readiness.ts';
+import type { PrepareProjection } from '../../projection/prepare.ts';
 import type { CollabHookContext } from '../context.ts';
 import type { CollabLimits } from '../limits.ts';
 import { applyLoaded, loadNote, recordedVectorOf, type LoaderLogger } from './loader.ts';
@@ -66,6 +67,7 @@ export interface PersistenceCallbacks {
 
 /** What `createCollabPersistence` needs. */
 export interface CollabPersistenceOptions {
+  readonly prepareProjection?: PrepareProjection;
   readonly store: PersistenceStore;
   /** A store bound to the current owner generation; captured before each document load. */
   readonly writerStore?: () => OwnedPersistenceStore;
@@ -224,6 +226,9 @@ export class CollabPersistenceService {
         this.#options.callbacks.onWriteRejected(identity.noteId, identity.vaultId, reason),
     };
     const writer = new NoteWriter({
+      ...(this.#options.prepareProjection === undefined
+        ? {}
+        : { prepareProjection: this.#options.prepareProjection }),
       identity,
       document,
       store: scoped ?? this.#options.store,
@@ -369,7 +374,24 @@ export class CollabPersistenceService {
    * Their shared fence locks serialize takeover; uncommitted client edits remain in the client Y.Doc.
    */
   async fenceAll(): Promise<void> {
-    const writers = this.writers();
+    await this.#fence(this.writers());
+  }
+
+  /**
+   * Stops the selected queues synchronously; the returned promise waits for already-running SQL.
+   * Purge starts this while admission holds the vault, then awaits it only after releasing that lock.
+   */
+  beginFenceNotes(noteIds: readonly NoteId[]): Promise<void> {
+    const ids = new Set(noteIds);
+    return this.#fence(this.writers().filter((writer) => ids.has(writer.noteId)));
+  }
+
+  /** Tombstoned notes must have no in-flight writer before their durable rows are purged. */
+  async fenceNotes(noteIds: readonly NoteId[]): Promise<void> {
+    await this.beginFenceNotes(noteIds);
+  }
+
+  async #fence(writers: readonly NoteWriter[]): Promise<void> {
     const settled = Promise.withResolvers<void>();
     for (const writer of writers) {
       if (this.#shutdownWriters?.has(writer)) this.#shutdownWriters.set(writer, 'fenced');
@@ -377,7 +399,7 @@ export class CollabPersistenceService {
       if (document !== undefined) this.#fencedDocuments.set(document, settled.promise);
       writer.fence();
     }
-    await this.#scheduler.idle();
+    await Promise.all(writers.map((writer) => this.#scheduler.settle(writer)));
     for (const writer of writers) this.detach(writer.documentName);
     settled.resolve();
   }

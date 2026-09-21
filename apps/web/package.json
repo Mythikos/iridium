@@ -1,6 +1,6 @@
 {
   "name": "@iridium/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Vite 8 entry mounting @iridium/ui with BrowserHost; static bundle served by the server at /app/*",
   "type": "module",

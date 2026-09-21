@@ -36,6 +36,7 @@ import type { FastifyReply, FastifyRequest, onRequestAsyncHookHandler } from 'fa
 
 import { isOpsPath } from '../ops/paths.ts';
 import { ProblemError } from '../security/problem.ts';
+import { principalKeyOf } from './principal-key.ts';
 import { SESSION_COOKIE_NAME } from './sessions/cookie.ts';
 import type { SessionVerifier } from './sessions/verify.ts';
 import type { TokenDenial, TokenDenialReason, TokenVerifier } from './tokens/verify.ts';
@@ -125,15 +126,6 @@ function mountOf(auth: RouteAuth | undefined): BearerMount {
   if (auth.mcpAudience === 'pat') return 'mcp';
   if (auth.mcpAudience === 'oauth') return 'mcp-connect';
   return 'rest';
-}
-
-/** The rate-limit key of 09 section 1.8 for a principal. */
-export function principalKeyOf(principal: Principal): string | null {
-  if (principal.kind === 'user') return `ses:${principal.sessionId}`;
-  if (principal.kind === 'token') {
-    return `${principal.tokenKind === 'pat' ? 'pat' : 'oat'}:${principal.tokenId}`;
-  }
-  return null;
 }
 
 /** The bearer credential of an `Authorization` header, or `null` for any other shape. */

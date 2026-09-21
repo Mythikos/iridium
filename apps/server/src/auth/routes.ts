@@ -3,7 +3,7 @@
  * 04-auth-and-access-control.md sections 3.7, 3.8, 4.3, 4.6, 4.7 and 7.2).
  *
  * The `rest` plugin composes this under the `/api/v1` prefix and passes the instance's audit
- * writer. Every route is one row of `M1_ROUTES` (`@iridium/contracts`): the path, the policy and
+ * writer. Every route is one row of `API_ROUTES` (`@iridium/contracts`): the path, the policy and
  * the schemas are read from the row through `routeSpec()`, so a route cannot be registered with a
  * policy or a body the document does not describe, and `auth.routes.manifest.unit` asserts that
  * every registration below is its row. Every route audits inside the transaction that made the

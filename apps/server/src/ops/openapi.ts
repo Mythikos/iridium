@@ -33,6 +33,7 @@ import fastifySwagger from '@fastify/swagger';
 import {
   ERROR_CODE_STATUS,
   ERROR_CODE_TITLE,
+  PROBLEM_VARIANTS,
   GLOBAL_ERROR_CODES,
   IfMatchHeaders,
   routeByOperationId,
@@ -301,6 +302,7 @@ function declaredAuth(route: unknown): unknown {
 
 /** How each validator form of 09-api-reference.md §1.2 reads, for the header's description. */
 const ETAG_DESCRIPTIONS: Readonly<Record<ResponseEtag, string>> = {
+  'strong-hash': 'The attachment SHA-256 content hash, as a quoted strong validator.',
   'strong-version':
     'The row version, as `"<version>"`. This is the value `If-Match` compares against.',
   'strong-revision-hash':
@@ -312,7 +314,7 @@ const ETAG_DESCRIPTIONS: Readonly<Record<ResponseEtag, string>> = {
 /**
  * The `ETag` header declarations one operation's responses carry.
  *
- * The validator forms are `M1_ROUTES`' (`etag` on each response row), and reading them from there is
+ * The validator forms are `API_ROUTES`' (`etag` on each response row), and reading them from there is
  * what keeps the document and the route policy from disagreeing about which reads are versioned. The
  * declaration cannot live in the route's own Fastify schema: `fastify-type-provider-zod`'s transform
  * emits `description` and `content` for a response and drops everything else, so a `headers` sibling
@@ -360,7 +362,7 @@ function globalCodesOf(row: RouteSpec): readonly ErrorCode[] {
 /**
  * The refusal responses one operation documents.
  *
- * §6 requires every operation to document every `ProblemDetails` code it can produce, and `M1_ROUTES`
+ * §6 requires every operation to document every `ProblemDetails` code it can produce, and `API_ROUTES`
  * is where those codes are already written down — so they are read from there rather than restated in
  * thirty route schemas. They cannot be a Fastify `schema.response` entry either: Fastify would then
  * build a serializer for each status and the handler's `sendProblem` would be serialized twice.
@@ -392,19 +394,43 @@ function withErrorResponses(schema: Record<string, unknown>): Record<string, unk
   // `@fastify/swagger` emits for it: the moment this function writes a `response` object, that
   // default stops applying. The row's own success statuses are what it would have said.
   const responses: Record<string, unknown> = declared ?? {};
-  if (declared === null) {
+  // Content negotiation can declare several media types for one successful status (revisions.get).
+  if (
+    declared === null ||
+    new Set(row.responses.map((response) => response.status)).size < row.responses.length
+  ) {
     for (const response of row.responses) {
       const body = response.body;
+      const status = String(response.status);
+      const previous = asRecord(responses[status]);
+      const setResponse = (value: Record<string, unknown>): void => {
+        responses[status] = {
+          ...previous,
+          ...value,
+          ...(value['content'] === undefined
+            ? {}
+            : { content: { ...asRecord(previous?.['content']), ...asRecord(value['content']) } }),
+        };
+      };
       if (body.kind === 'empty') {
-        responses[String(response.status)] = { description: 'No response body', type: 'null' };
+        setResponse({ description: 'No response body', type: 'null' });
       } else if (body.kind === 'json') {
         const id = z.globalRegistry.get(body.schema)?.id;
         if (id === undefined)
           throw new Error(`Operation ${operationId} requires a named response schema.`);
-        responses[String(response.status)] = {
+        setResponse({
           description: 'Response',
           content: { 'application/json': { schema: { $ref: `#/components/schemas/${id}` } } },
-        };
+        });
+      } else if (body.kind === 'binary') {
+        setResponse({
+          description: 'Attachment bytes',
+          // OpenAPI 3.1 models raw bytes as an opaque media type, not a JSON string.
+          // `format: binary` has no encoding semantics in 3.1 (§4.8.14.3).
+          content: Object.fromEntries(
+            body.contentTypes.map((mediaType) => [mediaType, { schema: {} }]),
+          ),
+        });
       } else {
         const mediaType =
           body.kind === 'text'
@@ -412,12 +438,12 @@ function withErrorResponses(schema: Record<string, unknown>): Record<string, unk
             : body.kind === 'markdown'
               ? 'text/markdown'
               : 'application/json';
-        responses[String(response.status)] = {
+        setResponse({
           description: 'Response',
           content: {
             [mediaType]: { schema: { type: body.kind === 'opaque-json' ? 'object' : 'string' } },
           },
-        };
+        });
       }
     }
   }
@@ -427,9 +453,14 @@ function withErrorResponses(schema: Record<string, unknown>): Record<string, unk
     if (Object.hasOwn(responses, status)) continue;
     byStatus.set(status, [...(byStatus.get(status) ?? []), code]);
   }
+  for (const variant of row.problemVariants ?? []) {
+    const declaredVariant = PROBLEM_VARIANTS[variant];
+    const status = String(declaredVariant.status);
+    if (Object.hasOwn(responses, status)) continue;
+    byStatus.set(status, [...(byStatus.get(status) ?? []), declaredVariant.code]);
+  }
   const globals = globalCodesOf(row);
   const writesDefault = globals.length > 0 && !Object.hasOwn(responses, 'default');
-  if (byStatus.size === 0 && !writesDefault && declared !== null) return schema;
 
   for (const [status, codes] of byStatus) {
     responses[status] = problemResponse(codes, false);

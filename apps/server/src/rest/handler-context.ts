@@ -3,7 +3,7 @@
  * answer is identical on every route (09-api-reference.md §1.4, §1.5; 02-system-architecture.md
  * ARCH-02).
  *
- *  - **`routeSpec`** — the `M1_ROUTES` row a registration is built from, so a route cannot be
+ *  - **`routeSpec`** — the `API_ROUTES` row a registration is built from, so a route cannot be
  *    registered with a path, a policy or a schema the OpenAPI document does not describe.
  *  - **`requireConnected`** — the `503` a route answers while the pools are not up. ARCH-02 has boot
  *    proceed without a database, so a handler must say so rather than fail inside a query.
@@ -48,11 +48,11 @@ export const EMPTY_RESPONSE: z.ZodType<undefined> = z
 /** A principal a `/api/v1` handler can be reached by: a user or a token, never the system one. */
 export type CallerPrincipal = Extract<Principal, { kind: 'user' } | { kind: 'token' }>;
 
-/** Thrown at boot when a module registers an operation `M1_ROUTES` has no row for. */
+/** Thrown at boot when a module registers an operation `API_ROUTES` has no row for. */
 export class RouteSpecMissingError extends Error {
   constructor(operationId: string) {
     super(
-      `M1_ROUTES has no row for '${operationId}', which the rest plugin registers; add the row to ` +
+      `API_ROUTES has no row for '${operationId}', which the rest plugin registers; add the row to ` +
         '@iridium/contracts/rest/routes.ts or remove the registration (09-api-reference.md §2.18)',
     );
     this.name = 'RouteSpecMissingError';

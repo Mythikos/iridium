@@ -25,6 +25,7 @@
  * `Generated<T>` marks a column with a DEFAULT or AUTO_INCREMENT (optional on insert);
  * `GeneratedAlways<T>` marks a generated column (never insertable, never updatable).
  */
+import type { ObsidianFindings } from '@iridium/markdown';
 import type { ColumnType, Generated, GeneratedAlways } from 'kysely';
 
 /** A JSON column: parsed on the way out (mysql2 `jsonStrings:false`), a JSON string on the way in. */
@@ -127,11 +128,10 @@ export interface ProjectedTask {
   checked: boolean;
 }
 
-/** `note_projections.obsidian_findings`: per-note `detectObsidianSyntax()` output (A45). */
-export interface ObsidianFinding {
-  code: string;
-  count: number;
-  lines?: number[];
+/** Complete detector counts plus the first bounded document-order findings (08 section 6). */
+export interface ProjectedObsidianFindings {
+  counts: ObsidianFindings['counts'];
+  sample: ObsidianFindings['findings'];
 }
 
 /** `audit_events.context`. */
@@ -524,12 +524,20 @@ export interface NoteProjectionsTable {
   headings: NullableJson<ProjectedHeading[]>;
   tasks: NullableJson<ProjectedTask[]>;
   code_langs: NullableJson<string[]>;
-  obsidian_findings: NullableJson<ObsidianFinding[]>;
+  obsidian_findings: NullableJson<ProjectedObsidianFindings>;
   word_count: number | null;
   line_count: number | null;
   status: ProjectionStatus;
   pipeline_version: number;
   projected_at: Date;
+}
+
+/** Bounded, normalized frontmatter lookup terms, replaced atomically with their projection. */
+export interface NoteProjectionTermsTable {
+  note_id: Buffer;
+  vault_id: Buffer;
+  kind: 'tag' | 'alias';
+  term_hash: Buffer;
 }
 
 export interface NoteSearchTable {
@@ -767,6 +775,7 @@ export interface Database {
   note_docs: NoteDocsTable;
   note_links: NoteLinksTable;
   note_projections: NoteProjectionsTable;
+  note_projection_terms: NoteProjectionTermsTable;
   note_revisions: NoteRevisionsTable;
   note_search: NoteSearchTable;
   note_updates: NoteUpdatesTable;

@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: ['node'],
   env: { node: true },
   rules: {
+    // This rule models Express callback lifetimes; Fastify awaits async handlers and serializes returns.
+    'oxc/no-async-endpoint-handlers': 'off',
     'node/no-process-env': 'error',
     'no-restricted-imports': [
       'error',

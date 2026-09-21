@@ -29,12 +29,20 @@ import {
   type PersistFailedReason,
   type UserId,
 } from '@iridium/contracts';
-import { createNoteDoc, mergeV1, projectMarkdown, storedSv } from '@iridium/crdt';
+import {
+  createNoteDoc,
+  deleteSetFingerprint,
+  mergeV1,
+  prefixSuffixDiff,
+  projectMarkdown,
+  storedSv,
+} from '@iridium/crdt';
 
 import { HeadSeqCasViolation } from '../../db/cas.ts';
 import { classifyDatabaseFailure } from '../../db/failure.ts';
 import type { Clock, TimerHandle } from '../../ops/clock.ts';
 import { contentHash } from '../../projection/hash.ts';
+import type { PrepareProjection } from '../../projection/prepare.ts';
 import { CollabOwnershipLost } from '../owner-lease.ts';
 import { UnloadVeto } from '../rejection.ts';
 import { BACKOFF_BASE_MS, FAILED_RETRY_INTERVAL_MS, hasFailed, retryDelayMs } from './backoff.ts';
@@ -46,6 +54,8 @@ import {
   CompactionUnavailable,
   NoteTrashedDuringWrite,
   PersistenceDrainUnavailable,
+  RevisionContentRefused,
+  RestoreTimeout,
 } from './errors.ts';
 import { PersistenceUnavailable } from './kysely-store.ts';
 import { applyLoaded } from './loader.ts';
@@ -61,6 +71,9 @@ import {
   type LastEditor,
   type PendingUpdate,
   type Persisted,
+  type RestoreRequest,
+  type RestoreResult,
+  type RevisionInsert,
   type UpdateActor,
   type UpdateInsert,
   type WriteRun,
@@ -142,6 +155,7 @@ export interface WriterCallbacks {
 
 /** What a writer is created with. */
 export interface NoteWriterOptions {
+  readonly prepareProjection?: PrepareProjection;
   readonly identity: WriterIdentity;
   readonly document: WriterDocument;
   readonly store: PersistenceStore;
@@ -188,7 +202,31 @@ interface CheckpointJob {
   }>;
 }
 
-type WriterJob = CompactionJob | CheckpointJob;
+interface RestoreAttempt {
+  readonly batch: readonly PendingUpdate[];
+  readonly rows: readonly UpdateInsert[];
+  readonly pendingRows: number;
+  readonly from: number;
+  readonly before: Captured;
+  readonly after: Captured;
+  readonly dsAfter: string;
+  readonly changed: boolean;
+  readonly now: Date;
+  submitted: boolean;
+}
+
+interface RestoreJob {
+  readonly kind: 'restore';
+  readonly position: number;
+  readonly request: RestoreRequest;
+  attempt: RestoreAttempt | null;
+  readonly settle: Array<{
+    resolve: (result: RestoreResult) => void;
+    reject: (error: unknown) => void;
+  }>;
+}
+
+type WriterJob = CompactionJob | CheckpointJob | RestoreJob;
 
 /** The `retryInMs` a `backpressure` message carries: the writer drains normally. */
 const BACKPRESSURE_RETRY_HINT_MS = 1_000;
@@ -221,6 +259,7 @@ export class NoteWriter implements Schedulable {
   readonly #identity: WriterIdentity;
   readonly #document: WriterDocument;
   readonly #store: PersistenceStore;
+  readonly #prepareProjection: PrepareProjection | undefined;
   readonly #clock: Clock;
   readonly #logger: WriterLogger;
   readonly #metrics: WriterMetrics;
@@ -274,6 +313,7 @@ export class NoteWriter implements Schedulable {
     this.documentName = options.identity.documentName;
     this.#document = options.document;
     this.#store = options.store;
+    this.#prepareProjection = options.prepareProjection;
     this.#clock = options.clock;
     this.#logger = options.logger;
     this.#metrics = options.metrics;
@@ -483,7 +523,7 @@ export class NoteWriter implements Schedulable {
     const job: CheckpointJob = {
       kind: 'checkpoint',
       position: this.#enqueuedCount,
-      request: { kind: request.kind, label: request.label, actor: { ...request.actor } },
+      request: { ...request, actor: { ...request.actor } },
       settle: [],
     };
     const settled = new Promise<CheckpointResult>((resolve, reject) => {
@@ -496,6 +536,30 @@ export class NoteWriter implements Schedulable {
       settled,
       () => new CheckpointTimeout(this.noteId, this.#compactionAwaitTimeoutMs),
     );
+  }
+
+  /** Captures every currently applied update and the restore diff without yielding (D05-21). */
+  enqueueRestore(request: RestoreRequest): Promise<RestoreResult> {
+    if (this.#ownershipLost) return Promise.reject(new CollabOwnershipLost());
+    if (this.#state !== 'idle' && this.#state !== 'writing') {
+      return Promise.reject(new CheckpointUnavailable(this.noteId, this.#state));
+    }
+    if (this.#contentInvalid) return Promise.reject(new RevisionContentRefused('content_invalid'));
+    if (this.#oversize) return Promise.reject(new RevisionContentRefused('note_oversized'));
+    const job: RestoreJob = {
+      kind: 'restore',
+      position: this.#enqueuedCount,
+      request,
+      attempt: null,
+      settle: [],
+    };
+    const settled = new Promise<RestoreResult>((resolve, reject) => {
+      job.settle.push({ resolve, reject });
+    });
+    settled.catch(() => undefined);
+    this.#jobs.push(job);
+    this.#schedule();
+    return this.#bounded(settled, () => new RestoreTimeout(this.noteId));
   }
 
   #ensureJob(trigger: CompactTrigger): CompactionJob {
@@ -654,6 +718,7 @@ export class NoteWriter implements Schedulable {
       this.#faults.maybeThrow('store.throw', () => new Error('store.throw fault point'));
       head = await this.#store.runWrite(this.noteId, async (tx) => {
         const row = await tx.lockHead();
+        if (this.#ownershipLost) throw new CollabOwnershipLost();
         if (row === null) throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId });
         if (row.deletedAt !== null) throw new NoteTrashedDuringWrite(this.noteId);
         // COMMIT can succeed while its reply is lost. Only this retained, previously submitted
@@ -927,6 +992,14 @@ export class NoteWriter implements Schedulable {
     const job = this.#jobs.shift();
     if (job === undefined) return;
     this.#runningJob = job;
+    if (job.kind === 'restore') {
+      try {
+        await this.#runRestore(job);
+      } finally {
+        this.#runningJob = null;
+      }
+      return;
+    }
     if (job.kind === 'checkpoint') {
       try {
         await this.#runCheckpoint(job);
@@ -945,6 +1018,12 @@ export class NoteWriter implements Schedulable {
     try {
       const captured = await this.#captureCommitted();
       outcome = await runCompaction(this.#store, {
+        assertActive: () => {
+          if (this.#ownershipLost) throw new CollabOwnershipLost();
+        },
+        ...(this.#prepareProjection === undefined
+          ? {}
+          : { prepareProjection: this.#prepareProjection }),
         noteId: this.noteId,
         vaultId: this.#identity.vaultId,
         captured,
@@ -982,10 +1061,12 @@ export class NoteWriter implements Schedulable {
   async #runCheckpoint(job: CheckpointJob): Promise<void> {
     try {
       const captured = await this.#captureCommitted();
+      if (job.request.kind === 'named' && !captured.scan.ok)
+        throw new RevisionContentRefused('content_invalid');
       if (this.#ownershipLost) throw new CollabOwnershipLost();
-      // Reuse the existing fenced snapshot transaction and its declared lock order. This job
-      // writes only the explicit revision, leaving projection and safety latches unchanged.
-      const revision = await this.#store.runCompaction(this.noteId, async (tx) => {
+      // Keep explicit revisions on the fenced per-note transaction. No target lookup or
+      // projection publication occurs, so this path does not need the shared vault gate.
+      const revision = await this.#store.runCheckpoint(this.noteId, async (tx) => {
         const head = await tx.lockHead();
         if (this.#ownershipLost) throw new CollabOwnershipLost();
         if (head === null || head.headSeq !== captured.throughSeq) {
@@ -996,7 +1077,7 @@ export class NoteWriter implements Schedulable {
           });
         }
         if (head.deletedAt !== null) throw new NoteTrashedDuringWrite(this.noteId);
-        return tx.insertRevision({
+        const inserted = await tx.insertRevision({
           seq: captured.throughSeq,
           kind: job.request.kind,
           label: job.request.label,
@@ -1008,8 +1089,31 @@ export class NoteWriter implements Schedulable {
           snapshotSv: storedSv(captured.sv),
           createdAt: this.#clock.date(),
         });
+        if (inserted.inserted && job.request.audit !== undefined) {
+          await tx.recordAudit({
+            ...job.request.audit,
+            metadata: {
+              ...job.request.audit.metadata,
+              revision: captured.throughSeq,
+              revisionId: inserted.id,
+              label: job.request.label,
+            },
+          });
+        }
+        return inserted;
       });
       if (this.#ownershipLost) throw new CollabOwnershipLost();
+      if (revision.inserted && job.request.kind === 'named')
+        this.#document.broadcastStateless(
+          encodeStateless({
+            v: 1,
+            t: 'checkpoint',
+            seq: captured.throughSeq,
+            revisionId: revision.id,
+            kind: 'named',
+            label: job.request.label,
+          }),
+        );
       for (const settle of job.settle) settle.resolve({ captured, revision });
     } catch (error) {
       if (error instanceof HeadSeqCasViolation || error instanceof NoteTrashedDuringWrite) {
@@ -1017,6 +1121,204 @@ export class NoteWriter implements Schedulable {
       }
       for (const settle of job.settle) settle.reject(error);
     }
+  }
+
+  #prepareRestore(job: RestoreJob): RestoreAttempt {
+    if (this.#ownershipLost) throw new CollabOwnershipLost();
+    if (this.#contentInvalid) throw new RevisionContentRefused('content_invalid');
+    const request = job.request;
+    const pending = [...this.#queue];
+    const pendingRuns = groupRuns(pending);
+    const from = this.#lastCommittedSeq;
+    const before = capture(request.document, {
+      lastCommittedSeq: from + pendingRuns.length,
+      lastEditor: this.#lastEditor,
+    });
+    if (!before.scan.ok) throw new RevisionContentRefused('content_invalid');
+    if (
+      this.#oversize ||
+      before.sizeChars > LIMITS.NOTE_SOFT_MAX_UTF16 ||
+      request.target.length > LIMITS.NOTE_SOFT_MAX_UTF16
+    ) {
+      throw new RevisionContentRefused('note_oversized');
+    }
+    const diff = prefixSuffixDiff(before.markdown, request.target);
+    const changed = diff.deleteLength !== 0 || diff.insert.length !== 0;
+    // No promise or callback that yields is permitted from capture through both sets of update events.
+    if (changed) request.apply(diff);
+    const restoreUpdates = this.#queue.slice(pending.length);
+    if (
+      restoreUpdates.some((update) => update.origin !== 'restore') ||
+      (changed && restoreUpdates.length === 0)
+    ) {
+      throw new Error('The synchronous restore did not produce its bounded restore updates.');
+    }
+    const restoreRuns = groupRuns(restoreUpdates);
+    const runs = [...pendingRuns, ...restoreRuns];
+    const after = capture(request.document, {
+      lastCommittedSeq: from + runs.length,
+      lastEditor: this.#lastEditor,
+    });
+    if (after.markdown !== request.target || !after.scan.ok)
+      throw new Error('Restore must reproduce the revision text exactly.');
+    const now = this.#clock.date();
+    return {
+      batch: [...pending, ...restoreUpdates],
+      pendingRows: pendingRuns.length,
+      before,
+      after,
+      from,
+      changed,
+      now,
+      dsAfter: deleteSetFingerprint(request.document),
+      submitted: false,
+      rows: runs.map((run, index) => ({
+        seq: from + index + 1,
+        updateV1: run.merged,
+        svAfter: run.storedSv,
+        actor: run.actor,
+        origin: run.origin,
+        createdAt: now,
+      })),
+    };
+  }
+
+  async #runRestore(job: RestoreJob): Promise<void> {
+    let attempt: RestoreAttempt;
+    try {
+      attempt = job.attempt ?? this.#prepareRestore(job);
+      job.attempt = attempt;
+    } catch (error) {
+      for (const settle of job.settle) settle.reject(error);
+      return;
+    }
+    const { rows, before, after, from, changed, now } = attempt;
+    const recovering = this.#state === 'retrying' || this.#state === 'failed';
+    this.#state = this.#backpressured ? 'backpressure' : 'writing';
+    this.#callbacks.onStateChange(this.#state);
+    const revisionRow = (captured: Captured, kind: 'pre_restore' | 'restore'): RevisionInsert => ({
+      seq: captured.throughSeq,
+      kind,
+      label: null,
+      markdown: captured.markdown,
+      contentHash: captured.contentHash,
+      sizeChars: captured.sizeChars,
+      snapshot: captured.stateV2,
+      snapshotSv: storedSv(captured.sv),
+      actor: job.request.actor,
+      createdAt: now,
+      ...(kind === 'restore' ? { restoredFromRevisionId: job.request.revisionId } : {}),
+    });
+    let result: RestoreResult;
+    try {
+      this.#faults.maybeThrow('store.throw', () => new Error('store.throw fault point'));
+      if (!changed && rows.length === 0)
+        result = { changed: false, seq: from, contentHash: after.contentHash.toString('hex') };
+      else
+        result = await this.#store.runWrite(this.noteId, async (tx) => {
+          const head = await tx.lockHead();
+          if (this.#ownershipLost) throw new CollabOwnershipLost();
+          if (head === null) throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId });
+          if (head.deletedAt !== null) throw new NoteTrashedDuringWrite(this.noteId);
+          const committed =
+            attempt.submitted &&
+            head.headSeq === after.throughSeq &&
+            (await tx.matchesUpdates(rows));
+          if (!committed && head.headSeq !== from)
+            throw new HeadSeqCasViolation({ table: 'note_docs', id: this.noteId, expected: from });
+          attempt.submitted = true;
+          if (!committed) await tx.insertUpdates(rows.slice(0, attempt.pendingRows));
+          const pre = changed ? await tx.insertRevision(revisionRow(before, 'pre_restore')) : null;
+          if (!committed) {
+            await tx.insertUpdates(rows.slice(attempt.pendingRows));
+            if (!(await tx.casHead(from, after.throughSeq, now)))
+              throw new HeadSeqCasViolation({
+                table: 'note_docs',
+                id: this.noteId,
+                expected: from,
+              });
+          }
+          const restored = changed ? await tx.insertRevision(revisionRow(after, 'restore')) : null;
+          if (restored === null || pre === null)
+            return {
+              changed: false,
+              seq: after.throughSeq,
+              contentHash: after.contentHash.toString('hex'),
+            };
+          if (!committed) {
+            await tx.recordAudit({
+              ...job.request.audit,
+              metadata: {
+                ...job.request.audit.metadata,
+                revision: after.throughSeq,
+                revisionId: restored.id,
+                preRestoreRevisionId: pre.id,
+                restoredFromRevisionId: job.request.revisionId,
+              },
+            });
+            await this.#faults.hold('store.hold-before-commit');
+            this.#faults.crash('store.crash-before-commit');
+          }
+          return {
+            changed: true,
+            seq: after.throughSeq,
+            contentHash: after.contentHash.toString('hex'),
+            preRestoreRevisionId: pre.id,
+            restoreRevisionId: restored.id,
+          };
+        });
+      this.#faults.maybeThrow('store.throw-after-commit-before-ack', () =>
+        Object.assign(new Error('The restore commit reply was lost.'), { code: 'ECONNRESET' }),
+      );
+    } catch (error) {
+      this.#jobs.unshift(job);
+      this.#onWriteFailure(error);
+      return;
+    }
+    if (this.#ownershipLost) {
+      for (const settle of job.settle) settle.reject(new CollabOwnershipLost());
+      return;
+    }
+    this.#faults.crash('store.crash-after-commit-before-ack');
+    this.#queue.splice(0, attempt.batch.length);
+    this.#writtenCount += attempt.batch.length;
+    this.#queueBytes -= attempt.batch.reduce((total, update) => total + update.bytes, 0);
+    this.#lastCommittedSeq = after.throughSeq;
+    this.#lastPersisted = { seq: after.throughSeq, sv: after.sv, ds: attempt.dsAfter };
+    const last = attempt.batch.at(-1);
+    if (last !== undefined) this.#lastEditor = { userId: last.actor.userId, at: now };
+    if (rows.length > 0)
+      this.#document.broadcastStateless(
+        encodeStateless({
+          v: 1,
+          t: 'persisted',
+          seq: after.throughSeq,
+          sv: base64(after.sv),
+          ds: attempt.dsAfter,
+        }),
+      );
+    if (result.changed) {
+      this.#document.broadcastStateless(
+        encodeStateless({
+          v: 1,
+          t: 'checkpoint',
+          seq: before.throughSeq,
+          revisionId: result.preRestoreRevisionId,
+          kind: 'pre_restore',
+        }),
+      );
+      this.#document.broadcastStateless(
+        encodeStateless({
+          v: 1,
+          t: 'checkpoint',
+          seq: result.seq,
+          revisionId: result.restoreRevisionId,
+          kind: 'restore',
+        }),
+      );
+    }
+    this.#onWriteSuccess(recovering);
+    for (const settle of job.settle) settle.resolve(result);
   }
 
   /**
@@ -1362,7 +1664,7 @@ export class NoteWriter implements Schedulable {
     this.#ownershipLost = true;
     for (let index = this.#jobs.length - 1; index >= 0; index -= 1) {
       const job = this.#jobs[index];
-      if (job?.kind !== 'checkpoint') continue;
+      if (job === undefined || job.kind === 'compaction') continue;
       this.#jobs.splice(index, 1);
       for (const settle of job.settle) settle.reject(new CollabOwnershipLost());
     }

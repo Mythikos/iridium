@@ -48,6 +48,7 @@ import {
   type CreatorRow,
   type VaultCountRow,
 } from './dto.ts';
+import { assertVaultSettingsFloor, type VaultSettingsFloor } from './settings.ts';
 import { slugCollisionPattern, uniqueSlug } from './slug.ts';
 
 /** The statuses a listing may show. `importing` and `deleting` are invisible to everyone (§2.5). */
@@ -100,7 +101,7 @@ export interface CreatedVault {
  * model's and the member names are the wire's, and a loop over a mapping object would type every
  * value as `unknown` and hand Kysely a row it cannot check.
  */
-function settingsColumns(patch: VaultSettingsPatch | undefined): SettingsColumns {
+export function settingsColumns(patch: VaultSettingsPatch | undefined): SettingsColumns {
   if (patch === undefined) return {};
   return {
     ...(patch.markdownFlavor === undefined ? {} : { markdown_flavor: patch.markdownFlavor }),
@@ -264,10 +265,13 @@ export async function createVault(
     readonly db: Kysely<Database>;
     readonly audit: AuditRecorder;
     readonly ownerFence: OwnerFence;
+    readonly settingsFloor?: VaultSettingsFloor;
   },
   input: CreateVaultInput,
 ): Promise<CreatedVault> {
   const name = storedVaultName(input.name);
+  if (deps.settingsFloor !== undefined)
+    assertVaultSettingsFloor(input.settings ?? {}, deps.settingsFloor);
   const vaultId = VaultId.parse(newId());
   const rootNodeId = newId();
   const vaultBytes = idBytes(vaultId);
@@ -304,6 +308,12 @@ export async function createVault(
         created_at: input.now,
         updated_at: input.now,
         auto_checkpoint_interval_min: LIMITS.CHECKPOINT_MIN_INTERVAL_MIN,
+        ...(deps.settingsFloor === undefined
+          ? {}
+          : {
+              mcp_enabled: deps.settingsFloor.mcpEnabled,
+              trash_retention_days: deps.settingsFloor.trashRetentionDays,
+            }),
         ...settingsColumns(input.settings),
       })
       .execute();

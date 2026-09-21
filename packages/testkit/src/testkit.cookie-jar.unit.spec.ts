@@ -130,6 +130,20 @@ describe('testkit.cookie-jar.unit [area:testkit]', () => {
     expect(seen[0]?.get('cookie')).toBeNull();
   });
 
+  it('preserves an empty Markdown representation while bodyless status codes remain undefined', async () => {
+    const client = restClient({
+      origin: 'https://iridium.test',
+      fetch: async () =>
+        new Response('', {
+          status: 200,
+          headers: { 'content-type': 'text/markdown; charset=utf-8' },
+        }),
+    });
+    const response = await client.get('/notes/empty/markdown');
+    expect(response.status).toBe(200);
+    expect(response.body).toBe('');
+  });
+
   it('accepts Set-Cookie from a response and refuses json plus body together', async () => {
     const client = restClient({
       origin: 'https://iridium.test',

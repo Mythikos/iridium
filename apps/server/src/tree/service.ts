@@ -1,5 +1,5 @@
 /**
- * Node creation — the one structural write M1 has (09-api-reference.md §2.7; 03-data-model.md §6.4).
+ * Category and note creation (09-api-reference.md §2.7; 03-data-model.md §6.4).
  *
  * The transaction is `withVaultLock`'s: the owner generation and then the vault row are locked, so the snapshot is established
  * after the lock, the parent is validated against the rules of §2.7, the `nodes` row is inserted,
@@ -12,8 +12,8 @@
  * renamed between the read and the insert. Locking it as well would add a second row lock for no
  * additional serialisation and would widen the window for a deadlock against a subtree operation.
  *
- * Only notes can be created. The request schema enforces that boundary, and the service also refuses
- * unsupported kinds before starting a transaction for callers that do not pass through HTTP.
+ * Categories have no document. Note parsing happens before the lock and initialization commits
+ * with the structural row, so neither an orphan note nor a partially projected note is visible.
  */
 import {
   newId,
@@ -24,6 +24,7 @@ import {
   type UserId,
   type VaultId,
 } from '@iridium/contracts';
+import type { NoteProjection } from '@iridium/markdown';
 import type { Kysely, Transaction } from 'kysely';
 
 import type { AuditEventContext, AuditRecorder } from '../auth/audit.ts';
@@ -33,6 +34,7 @@ import type { Database } from '../db/index.ts';
 import type { NodeKind } from '../db/schema.ts';
 import { withVaultLock } from '../db/withVaultLock.ts';
 import type { Clock } from '../ops/clock.ts';
+import type { SearchIndexWrites } from '../search/index.ts';
 import { ProblemError } from '../security/problem.ts';
 import { NODE_COLUMNS, toNodeDto, type NoteSummaryRow, type UserRefRow } from './dto.ts';
 import { assertChildDepth, storedNodeName } from './names.ts';
@@ -44,6 +46,7 @@ import { derivePath, parentDepth } from './paths.ts';
  * (05-collaboration-and-durability.md, "NoteService.initialize") rather than on its module.
  */
 export interface NoteInitializer {
+  prepare?(markdown: string): Promise<NoteProjection>;
   initialize(
     trx: Transaction<Database>,
     input: {
@@ -56,6 +59,7 @@ export interface NoteInitializer {
         readonly actorType: 'user' | 'system';
       };
       readonly now: Date;
+      readonly prepared?: NoteProjection;
     },
   ): Promise<unknown>;
 }
@@ -83,6 +87,7 @@ export interface CreatedNode {
 
 /** What node creation needs from the instance. */
 export interface TreeServiceDeps {
+  readonly searchIndex: SearchIndexWrites;
   readonly ownerFence: OwnerFence;
   readonly db: Kysely<Database>;
   readonly clock: Clock;
@@ -91,7 +96,7 @@ export interface TreeServiceDeps {
 }
 
 /** The reasons a `409 invalid_move` carries on this route (§2.7). */
-type InvalidMoveReason = 'parent_not_category' | 'parent_trashed' | 'cross_vault' | 'depth';
+type InvalidMoveReason = 'parent_not_category' | 'cross_vault' | 'depth';
 
 function invalidMove(reason: InvalidMoveReason, detail: string): ProblemError {
   return new ProblemError('invalid_move', {
@@ -166,6 +171,8 @@ export async function readNoteSummaryRow(
       eb.ref('note_projections.content_hash').as('content_hash'),
       eb.ref('note_projections.heading_title').as('heading_title'),
       eb.ref('note_projections.status').as('projection_status'),
+      eb.ref('note_projections.fm_tags').as('fm_tags'),
+      eb.ref('note_projections.fm_aliases').as('fm_aliases'),
     ])
     .where('notes.node_id', '=', noteId)
     .executeTakeFirst();
@@ -183,9 +190,9 @@ export async function createNode(
   deps: TreeServiceDeps,
   input: CreateNodeInput,
 ): Promise<CreatedNode> {
-  if (input.kind !== 'note') {
+  if (input.kind !== 'note' && input.kind !== 'category') {
     throw new ProblemError('validation_failed', {
-      detail: 'Only notes can be created.',
+      detail: 'Only categories and notes can be created.',
       errors: [{ path: 'body.kind', message: 'unsupported_kind', code: 'unsupported_kind' }],
     });
   }
@@ -196,8 +203,10 @@ export async function createNode(
   const vaultBytes = idBytes(input.vaultId);
   const parentBytes = idBytes(input.parentId);
   const actorBytes = idBytes(input.actor.userId);
+  const prepared =
+    input.kind === 'note' ? await deps.notes.prepare?.(input.markdown ?? '') : undefined;
 
-  const treeVersion = await withVaultLock(
+  return withVaultLock(
     { db: deps.db, clock: deps.clock, vaultId: input.vaultId, ownerFence: deps.ownerFence },
     async (ctx) => {
       const now = deps.clock.date();
@@ -218,7 +227,7 @@ export async function createNode(
         throw invalidMove('parent_not_category', 'A node can only be created inside a category.');
       }
       if (parent.deleted_at !== null) {
-        throw invalidMove('parent_trashed', 'The parent is in the trash; restore it first.');
+        throw invalidMove('parent_not_category', 'The parent is in the trash; restore it first.');
       }
       assertChildDepth(await parentDepth(ctx.trx, parentBytes));
 
@@ -238,35 +247,40 @@ export async function createNode(
         })
         .execute();
 
-      await ctx.trx
-        .insertInto('notes')
-        .values({
-          node_id: nodeBytes,
-          vault_id: vaultBytes,
-          initialized_at: null,
-          last_edited_by: actorBytes,
-          last_edited_at: now,
-          last_checkpoint_at: null,
-          created_at: now,
-          updated_at: now,
-        })
-        .execute();
+      if (input.kind === 'note') {
+        await ctx.trx
+          .insertInto('notes')
+          .values({
+            node_id: nodeBytes,
+            vault_id: vaultBytes,
+            initialized_at: null,
+            last_edited_by: actorBytes,
+            last_edited_at: now,
+            last_checkpoint_at: null,
+            created_at: now,
+            updated_at: now,
+          })
+          .execute();
 
-      // The single Markdown → Y.Doc path in the system (03-data-model.md §8.8), inside this
-      // transaction so a note can never exist without its initial state.
-      await deps.notes.initialize(ctx.trx, {
-        noteId: NoteId.parse(nodeId),
-        markdown: input.markdown ?? '',
-        origin: 'create',
-        actor: {
-          userId: input.actor.userId,
-          sessionId: input.actor.sessionId,
-          actorType: 'user',
-        },
-        now,
-      });
+        // The single Markdown → Y.Doc path in the system (03-data-model.md §8.8), inside this
+        // transaction so a note can never exist without its initial state.
+        await deps.notes.initialize(ctx.trx, {
+          noteId: NoteId.parse(nodeId),
+          markdown: input.markdown ?? '',
+          origin: 'create',
+          actor: {
+            userId: input.actor.userId,
+            sessionId: input.actor.sessionId,
+            actorType: 'user',
+          },
+          now,
+          ...(prepared === undefined ? {} : { prepared }),
+        });
+      }
 
       const bumped = await ctx.bumpTreeVersion();
+      const node = await readNode(ctx.trx, nodeId);
+      if (node === null) throw new ProblemError('not_found');
 
       await deps.audit.record(ctx.trx, {
         action: 'node.created',
@@ -283,11 +297,7 @@ export async function createNode(
         metadata: { kind: input.kind, name, parentId: input.parentId },
       });
 
-      return bumped;
+      return { node, treeVersion: bumped };
     },
   );
-
-  const node = await readNode(deps.db, nodeId);
-  if (node === null) throw new Error(`node ${nodeId} vanished between COMMIT and its read`);
-  return { node, treeVersion };
 }

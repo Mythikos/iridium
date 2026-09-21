@@ -108,8 +108,15 @@
       ],
     },
     "packages/markdown": {
-      "entry": ["src/index.ts!", "src/**/*.spec.{ts,tsx}", "test/**/*.ts"],
-      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx}"],
+      // Public package subpaths are real production entry points.
+      "entry": [
+        "src/index.ts!",
+        "src/search/parse-query.ts!",
+        "src/sanitize/schema.ts!",
+        "src/**/*.spec.{ts,tsx}",
+        "test/**/*.{ts,mjs}",
+      ],
+      "project": ["src/**/*.{ts,tsx}!", "test/**/*.{ts,tsx,mjs}"],
       // Declared ahead (see the policy at the top of this file).
       "ignoreDependencies": [
         "@iridium/contracts",
@@ -224,6 +231,16 @@
       // Throwaway harnesses (12-milestones.md D12-5): analysed so a dead dependency is still reported.
       "entry": ["src/**/*.{ts,tsx}", "*.{ts,mjs}"],
       "project": ["**/*.{ts,tsx,mjs}"],
+    },
+    "spikes/s11-markdown": {
+      // Explicit diagnostic entry points and worker URLs; never production application roots.
+      "entry": ["*.mjs"],
+      "project": ["*.mjs"],
+    },
+    "packages/testkit/src/fixtures/hostile": {
+      // Asset-only workspace: its public surface is Markdown bytes and JSON, with no executable entry.
+      "entry": [],
+      "project": [],
     },
     "tooling/tsconfig": {
       "entry": [],

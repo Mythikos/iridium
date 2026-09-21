@@ -38,6 +38,8 @@ export interface TicketStore {
   revokeUser(userId: UserId, keep?: SessionId): number;
   /** Outstanding tickets, expired ones included until the next sweep or lookup. */
   readonly size: number;
+  /** Evict expired entries on a maintenance tick as well as the low-latency local timer. */
+  sweepExpired(): number;
   /** Stops the sweep timer. The owner calls it once, on shutdown. */
   close(): void;
 }

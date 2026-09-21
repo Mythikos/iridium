@@ -31,6 +31,7 @@ import {
   inspectSchemaTables,
   inspectTablesWithoutPrimaryKey,
 } from '@iridium/testkit';
+import { parseSync, Visitor } from 'oxc-parser';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { assertFoundRows } from '../../src/db/assertFoundRows.ts';
@@ -48,45 +49,56 @@ import {
   migrationStatus,
   withMigrationLock,
 } from '../../src/db/migrator.ts';
-import { IRIDIUM_SCHEMA, startIridiumMysql, type IridiumMysql } from '../db-mysql-container.ts';
+import {
+  IRIDIUM_SCHEMA,
+  selectedMysqlLane,
+  startIridiumMysql,
+  type IridiumMysql,
+} from '../db-mysql-container.ts';
 
 const SCHEMA_SOURCE = fileURLToPath(new URL('../../src/db/schema.ts', import.meta.url));
 
 /** Parses the hand-written `Database` interface out of its own source text. */
 function declaredSchema(): Map<string, Set<string>> {
-  const source = readFileSync(SCHEMA_SOURCE, 'utf8');
+  const parsed = parseSync(SCHEMA_SOURCE, readFileSync(SCHEMA_SOURCE, 'utf8'));
+  if (parsed.errors.length > 0) throw new Error('schema.ts could not be parsed');
 
-  const interfaces = new Map<string, Set<string>>();
-  const interfacePattern = /export interface (\w+) \{([^}]*)\}/g;
-  let match = interfacePattern.exec(source);
-  while (match !== null) {
-    const name = match[1];
-    const body = match[2];
-    if (name !== undefined && body !== undefined) {
-      const properties = new Set<string>();
-      for (const line of body.split('\n')) {
-        const property = /^ {2}(\w+):/.exec(line);
-        if (property?.[1] !== undefined) properties.add(property[1]);
+  const interfaces = new Map<string, Map<string, string | null>>();
+  new Visitor({
+    TSInterfaceDeclaration(node) {
+      if (node.extends.length > 0) throw new Error('Schema interfaces must declare all columns');
+      const properties = new Map<string, string | null>();
+      for (const member of node.body.body) {
+        if (
+          member.type !== 'TSPropertySignature' ||
+          member.computed ||
+          member.key.type !== 'Identifier'
+        ) {
+          throw new Error(`Unsupported schema member in ${node.id.name}`);
+        }
+        const type = member.typeAnnotation?.typeAnnotation;
+        properties.set(
+          member.key.name,
+          type?.type === 'TSTypeReference' && type.typeName.type === 'Identifier'
+            ? type.typeName.name
+            : null,
+        );
       }
-      interfaces.set(name, properties);
-    }
-    match = interfacePattern.exec(source);
-  }
+      interfaces.set(node.id.name, properties);
+    },
+  }).visit(parsed.program);
 
-  const databaseBody = /export interface Database \{([^}]*)\}/.exec(source)?.[1];
-  if (databaseBody === undefined) throw new Error('schema.ts declares no Database interface');
+  const database = interfaces.get('Database');
+  if (database === undefined) throw new Error('schema.ts declares no Database interface');
 
   const tables = new Map<string, Set<string>>();
-  for (const line of databaseBody.split('\n')) {
-    const entry = /^ {2}(\w+): (\w+);/.exec(line);
-    const table = entry?.[1];
-    const interfaceName = entry?.[2];
-    if (table === undefined || interfaceName === undefined) continue;
+  for (const [table, interfaceName] of database) {
+    if (interfaceName === null) throw new Error(`Schema table ${table} must name an interface`);
     const columns = interfaces.get(interfaceName);
     if (columns === undefined) {
       throw new Error(`schema.ts names ${interfaceName} but declares no such interface`);
     }
-    tables.set(table, columns);
+    tables.set(table, new Set(columns.keys()));
   }
   return tables;
 }
@@ -100,9 +112,16 @@ describe('migrations.integration [area:ops]', () => {
   beforeAll(async () => {
     mysql = await startIridiumMysql();
     maint = createMaintDb(mysql.migratorUrl());
-    const outcome = await migrateToLatest({ db: maint.db, target: maint.target });
+    const outcome = await migrateToLatest({
+      db: maint.db,
+      target: maint.target,
+      allowLongRunning: true,
+    });
     applied = outcome.results.map((r) => r.migrationName);
-    layer = await createDatabaseLayer({ url: mysql.appUrl() });
+    layer = await createDatabaseLayer({
+      url: mysql.appUrl(),
+      allowUntestedMysql: selectedMysqlLane().allowUntestedMysql,
+    });
   }, 600_000);
 
   afterAll(async () => {
@@ -111,10 +130,15 @@ describe('migrations.integration [area:ops]', () => {
     await mysql?.stop();
   }, 120_000);
 
-  it('applies every migration of the initial set forward, in order', () => {
+  it('applies every migration through the M2 projection term relation forward, in order', () => {
     expect(MIGRATION_NAMES[0]).toBe('0001_users');
-    expect(MIGRATION_NAMES.at(-1)).toBe('0055_min_client_version');
-    expect(MIGRATION_NAMES).toHaveLength(55);
+    expect(MIGRATION_NAMES.slice(-4)).toEqual([
+      '0056_projection_alias_lookup',
+      '0057_projection_terms',
+      '0058_projection_terms_grants',
+      '0059_projection_terms_backfill',
+    ]);
+    expect(MIGRATION_NAMES).toHaveLength(59);
     expect(applied).toEqual(MIGRATION_NAMES);
   });
 
@@ -269,8 +293,8 @@ describe('migrations.integration [area:ops]', () => {
     const b = createMaintDb(mysql.migratorUrl(probeSchema));
     try {
       const [first, second] = await Promise.all([
-        migrateToLatest({ db: a.db, target: a.target }),
-        migrateToLatest({ db: b.db, target: b.target }),
+        migrateToLatest({ db: a.db, target: a.target, allowLongRunning: true }),
+        migrateToLatest({ db: b.db, target: b.target, allowLongRunning: true }),
       ]);
       const names = [
         ...first.results.map((r) => r.migrationName),
@@ -301,7 +325,11 @@ describe('migrations.integration [area:ops]', () => {
 
     await maint.db.deleteFrom('kysely_migration').where('name', 'in', tail).execute();
 
-    const replay = await migrateToLatest({ db: maint.db, target: maint.target });
+    const replay = await migrateToLatest({
+      db: maint.db,
+      target: maint.target,
+      allowLongRunning: true,
+    });
     expect(replay.results.map((r) => r.migrationName)).toEqual(tail);
 
     const status = await migrationStatus(maint.db);
@@ -315,13 +343,13 @@ describe('migrations.integration [area:ops]', () => {
     const objects = await inspectGuardedIndexes(maint.db, IRIDIUM_SCHEMA);
     expect(objects.rows.map((r) => r.index_name).toSorted()).toEqual([
       'ft_note_search',
-      'ix_proj_fm_aliases',
-      'ix_proj_fm_tags',
+      'ix_projection_terms_lookup',
       'ix_tokens_client',
       'ix_tokens_consent',
       'uq_oauth_consents_live',
       'uq_sibling',
     ]);
+    expect(objects.rows.find((row) => row.index_name === 'ix_projection_terms_lookup')?.n).toBe(4);
   }, 600_000);
 
   it('holds the advisory lock for the whole run and releases it afterwards', async () => {

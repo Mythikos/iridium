@@ -7,14 +7,16 @@
  * overrides `UPLOAD_MAX_BYTES`, `COLLAB_MAX_LOADED_DOCS` overrides `LOADED_DOCS_MAX`, and the
  * `NOTE_*` and `MARKDOWN_*` caps have no environment form at all.
  *
- * Adding a limit means adding a member here and an enforcement site; nothing outside this module
- * declares a number.
+ * Adding a limit means adding a member to this policy and an enforcement site. Browser-required
+ * Markdown values live once in markdown-limits.ts and are aggregated here without duplication.
  */
 
 /** One rung of the preview debounce ladder: `[sourceBytesAtMost, debounceMs]`. */
 export type PreviewDebounceTier = readonly [sourceBytesAtMost: number, debounceMs: number];
 
-export const LIMITS = {
+import { MARKDOWN_LIMITS } from './markdown-limits.ts';
+
+const OTHER_LIMITS = {
   // ---- WebSocket transport (02 policy; 09-api-reference.md section 3.10) ------------------
   /** `@fastify/websocket` `maxPayload`; a larger frame is closed by `ws` with 1009. 2 MiB. */
   WS_MAX_PAYLOAD_BYTES: 2_097_152,
@@ -56,8 +58,6 @@ export const LIMITS = {
   // ---- Note size and snapshots -----------------------------------------------------------
   /** Soft note cap in UTF-16 units: client paste guard, compactor flags `notes.oversize`. */
   NOTE_SOFT_MAX_UTF16: 1_000_000,
-  /** Hard note cap in UTF-16 units: initialize, restore, repair and import refuse with 422. */
-  NOTE_HARD_MAX_UTF16: 2_097_152,
   /** A V2 snapshot above this size alerts and latches `notes.oversize`. 8 MB. */
   SNAPSHOT_ALERT_BYTES: 8_000_000,
   /** A V2 snapshot above this size is refused (the blob only, D05-14). 64 MB. */
@@ -173,20 +173,6 @@ export const LIMITS = {
   OAUTH_UNUSED_CLIENT_TTL_DAYS: 7,
   /** Redirect URIs per client. */
   OAUTH_MAX_REDIRECT_URIS: 8,
-
-  // ---- Markdown projection (08-markdown-pipeline-import-export.md; D08-03) ----------------
-  /** Pre-scan cap on the UTF-8 byte length of the source. 2 MiB. */
-  MARKDOWN_SOURCE_MAX_BYTES: 2_097_152,
-  /** Pre-scan blockquote nesting cap; `too_complex`. */
-  MARKDOWN_BLOCKQUOTE_MAX_DEPTH: 32,
-  /** Pre-scan list indent cap in columns; `too_complex`. */
-  MARKDOWN_LIST_INDENT_MAX_COLS: 64,
-  /** Pre-scan lines-per-paragraph cap; `too_complex`. */
-  MARKDOWN_LINES_PER_PARAGRAPH_MAX: 20_000,
-  /** Pre-scan cap on `[^` footnote references; `too_complex` (`detail: 'footnotes'`). */
-  MARKDOWN_FOOTNOTE_REFS_MAX: 10_000,
-  /** Pre-scan cap on `[` characters; `too_complex` (`detail: 'brackets'`). */
-  MARKDOWN_BRACKETS_MAX: 200_000,
   /** Server projection timeout. Env `PROJECTION_TIMEOUT_MS`. */
   PROJECTION_TIMEOUT_SERVER_MS: 10_000,
   /** Client preview worker timeout. */
@@ -206,18 +192,63 @@ export const LIMITS = {
   SNIPPET_MAX_LINES: 3,
   /** Characters per returned snippet line. */
   SNIPPET_MAX_CHARS: 240,
-  /** Frontmatter tag length. */
-  FM_TAG_MAX_LEN: 64,
-  /** Frontmatter tags per note. */
-  FM_TAGS_MAX: 200,
-  /** Frontmatter alias length. */
-  FM_ALIAS_MAX_LEN: 255,
-  /** Frontmatter aliases per note. */
-  FM_ALIASES_MAX: 100,
+  SEARCH_QUERY_MAX_CHARS: 512,
+  SEARCH_LIMIT_MAX: 100,
+  SEARCH_LIMIT_DEFAULT: 20,
+  SEARCH_VAULTS_MAX: 50,
+  SNIPPET_CHARS_MIN: 80,
+  SNIPPET_CHARS_MAX: 1000,
+  SNIPPET_CACHE_MAX: 500,
+  SNIPPET_CACHE_TTL_MS: 120000,
+  REVISION_LIST_MAX: 200,
+  REVISION_LIST_DEFAULT: 50,
+  REVISION_LABEL_MAX: 200,
+  /** Target-side rename warnings report complete counts and at most this many source samples. */
+  AFFECTED_LINK_SAMPLE_MAX: 50,
+  /** Beyond this retained lookup-entry budget, projections resolve through bounded indexed queries. */
+  VAULT_INDEX_MAX_ENTRIES: 100_000,
+  OBSIDIAN_SAMPLE_MAX: 20,
+  /** Bounded worker admission and per-worker memory (08 section 2.11). */
+  PROJECTION_QUEUE_MAX: 1_000,
+  REINDEX_RATE_PER_SECOND: 20,
+  JOB_LOCK_TIMEOUT_MS: 900000,
+  JOB_HEARTBEAT_MS: 30000,
+  JOB_MAX_ATTEMPTS: 5,
+  JOB_PROGRESS_INTERVAL_MS: 1000,
+  JOB_POLL_INTERVAL_MS: 1000,
+  JOB_BATCH_SIZE: 100,
+  JOB_LIST_MAX: 200,
+  JOB_LIST_DEFAULT: 50,
+  JOB_REINDEX_NOTE_MAX: 200,
+  JOB_ARCHIVE_BATCH_SIZE: 1000,
+  JOB_RETENTION_DAYS: 30,
+  SESSION_ROW_RETENTION_DAYS: 30,
+  ATTACHMENT_TEMP_RETENTION_MS: 3600000,
+  REVISION_KEEP_ALL_HOURS: 24,
+  REVISION_HOURLY_DAYS: 30,
+  /** Maximum revision metadata rows examined before a thinning job yields its durable cursor. */
+  REVISION_THINNING_ROWS_PER_RUN: 100,
+  PROJECTION_WORKER_HEAP_MB: 512,
+  PROJECTION_WORKER_STACK_MB: 8,
+  PROJECTION_WORKER_IDLE_MS: 60_000,
 
   // ---- Transfer --------------------------------------------------------------------------
   /** Attachment upload cap. 50 MiB. Env `MAX_UPLOAD_BYTES`. */
   UPLOAD_MAX_BYTES: 52_428_800,
+  /** Signature prefix needed by the S8-pinned MIME detector. */
+  ATTACHMENT_SNIFF_BYTES: 4_100,
+  /** Attachment storage and upload admission bounds (08 section 9). */
+  ATTACHMENT_NAME_MAX_BYTES: 255,
+  ATTACHMENT_PATH_MAX_CHARS: 760,
+  ATTACHMENT_NAME_COLLISION_ATTEMPTS: 50,
+  ATTACHMENT_UPLOAD_CONCURRENCY: 8,
+  ATTACHMENT_UPLOADS_PER_MINUTE: 60,
+  ATTACHMENT_MULTIPART_THRESHOLD_BYTES: 8_388_608,
+  ATTACHMENT_REFERENCE_SAMPLE_MAX: 50,
+  ATTACHMENT_DELETE_REFERENCE_SAMPLE_MAX: 20,
+  ATTACHMENT_SCAN_BATCH: 100,
+  ATTACHMENT_LIST_MAX: 200,
+  ATTACHMENT_LIST_DEFAULT: 100,
   /** Import payload cap. 2 GiB. Env `MAX_IMPORT_BYTES`. */
   IMPORT_MAX_BYTES: 2_147_483_648,
   /** Files in one import. */
@@ -234,6 +265,10 @@ export const LIMITS = {
   TREE_MAX_DEPTH: 64,
   /** `nodes.name` length in UTF-8 bytes. */
   NODE_NAME_MAX_BYTES: 255,
+  /** A maximum-depth note path, including separators and its .md suffix. */
+  NODE_PATH_MAX_CHARS: 16_387,
+  /** Maximum change records in one vault notification. */
+  TREE_CHANGES_MAX: 500,
   /** `vaults.name` length in characters. */
   VAULT_NAME_MAX_CHARS: 120,
 
@@ -245,6 +280,12 @@ export const LIMITS = {
   /** Shutdown drain window. Env `SHUTDOWN_DRAIN_MS`. */
   SHUTDOWN_DRAIN_MS: 20_000,
 } as const;
+
+/** One public policy; each bound is defined once in its owning policy leaf. */
+export const LIMITS: typeof MARKDOWN_LIMITS & typeof OTHER_LIMITS = {
+  ...MARKDOWN_LIMITS,
+  ...OTHER_LIMITS,
+};
 
 /** Every member of the single limits policy. `limits.policy.unit` is exhaustive over it. */
 export type LimitId = keyof typeof LIMITS;
@@ -266,6 +307,7 @@ export const LIMIT_ENV_OVERRIDES = {
   COLLAB_MAX_CONNECTIONS_PER_IP: 'CONNECTIONS_PER_IP',
   MCP_RATE_LIMIT_PER_HOUR: 'MCP_TOKEN_PER_HOUR',
   PROJECTION_TIMEOUT_MS: 'PROJECTION_TIMEOUT_SERVER_MS',
+  REINDEX_RATE_PER_SECOND: 'REINDEX_RATE_PER_SECOND',
   UPDATE_LOG_RETENTION_DAYS: 'UPDATE_LOG_RETENTION_DAYS',
   SHUTDOWN_DRAIN_MS: 'SHUTDOWN_DRAIN_MS',
 } as const;

@@ -202,11 +202,12 @@ export function createAuthExtension(deps: AuthExtensionDeps): Extension<CollabHo
       }
       if (note.deletedAt !== null) throw new CollabRejection('note-trashed');
       noteId = NoteId.parse(parsed.id);
-      if (deps.gateway.isClosing(noteId)) throw new CollabRejection('note-closing');
+      const closing = deps.gateway.closingReason(noteId);
+      if (closing !== null) throw new CollabRejection(closing);
       resolved = note;
     } else {
       const vault = await deps.reads.resolveVault(parsed.id);
-      if (vault === null) throw new CollabRejection('note-not-found');
+      if (vault === null) throw new CollabRejection('unauthorized');
       resolved = vault;
     }
     if (resolved.vaultStatus === 'archived') throw new CollabRejection('vault-archived');
@@ -220,7 +221,10 @@ export function createAuthExtension(deps: AuthExtensionDeps): Extension<CollabHo
       { vaultId, vault: resolved.vault, surface: 'collab' },
     );
     if (read.decision !== 'allow') {
-      const refusal = read.decision.deny === 'not_found' ? 'note-not-found' : 'unauthorized';
+      const refusal =
+        parsed.channel === 'note' && read.decision.deny === 'not_found'
+          ? 'note-not-found'
+          : 'unauthorized';
       throw new CollabRejection(denyAs === 'revoke' ? 'revoked' : refusal, {
         auditReason: `deny_${read.decision.deny}`,
       });
@@ -555,8 +559,9 @@ export function createAuthExtension(deps: AuthExtensionDeps): Extension<CollabHo
         throw unexpectedRejection(error, 'reauthorize_failed');
       }
     }
-    if (context.noteId !== null && deps.gateway.isClosing(context.noteId)) {
-      throw new CollabRejection('note-closing');
+    if (context.noteId !== null) {
+      const closing = deps.gateway.closingReason(context.noteId);
+      if (closing !== null) throw new CollabRejection(closing);
     }
     const header = peekFrame(data.update);
     if (header?.type === FRAME_TYPE.awareness) {

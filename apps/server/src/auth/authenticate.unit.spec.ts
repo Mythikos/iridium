@@ -32,13 +32,9 @@ import {
   type NoDatabaseApp,
 } from '../../test/support/no-database-app.ts';
 import { API_PREFIX } from '../authz/route-policy.ts';
-import {
-  authenticate,
-  principalKeyOf,
-  type AuthenticateView,
-  type AuthenticationOutcome,
-} from './authenticate.ts';
+import { authenticate, type AuthenticateView, type AuthenticationOutcome } from './authenticate.ts';
 import { idBytes } from './ids.ts';
+import { principalKeyOf } from './principal-key.ts';
 import { secretHash } from './secret-hash.ts';
 import { SESSION_COOKIE_NAME } from './sessions/cookie.ts';
 import { sessionTtlsFromConfig } from './sessions/ttl.ts';

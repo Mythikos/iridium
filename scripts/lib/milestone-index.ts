@@ -16,7 +16,8 @@
  *  3. **§2.4 "Specified rules gated outside the nine rows"**, whose *Gated at* column carries the
  *     milestone for each `ruleId`'s tests.
  *
- * The earliest milestone any source names wins, because "due from" is the question the guard asks.
+ * Higher-authority per-test schedules win. Within one authority, the earliest milestone wins:
+ * an area spanning M2 and M4 cannot pull an explicitly scheduled M4 client test back to M2.
  */
 import { readFileSync } from 'node:fs';
 
@@ -74,10 +75,14 @@ export function readMilestoneIndex(): MilestoneIndex {
   const bySectionNumber = milestoneBySectionNumber(sections);
 
   const claims = new Map<string, MilestoneClaim>();
-  const record = (name: string, milestone: string, where: string): void => {
+  const authorities = new Map<string, number>();
+  const record = (name: string, milestone: string, where: string, authority: number): void => {
     const existing = claims.get(name);
-    if (existing === undefined) {
+    const priorAuthority = authorities.get(name);
+    if (priorAuthority !== undefined && priorAuthority < authority) return;
+    if (existing === undefined || priorAuthority === undefined || authority < priorAuthority) {
       claims.set(name, { milestone, source: where });
+      authorities.set(name, authority);
       return;
     }
     const earlier = earlierMilestone(existing.milestone, milestone);
@@ -110,7 +115,7 @@ export function readMilestoneIndex(): MilestoneIndex {
         for (const span of codeSpans(row[0] ?? '')) {
           if (!isTestName(span)) continue;
           names.push(span);
-          record(span, milestone, `12-milestones.md §${section.title}`);
+          record(span, milestone, `12-milestones.md §${section.title}`, 1);
         }
       }
     }
@@ -144,7 +149,7 @@ export function readMilestoneIndex(): MilestoneIndex {
             if (milestone !== undefined) current = milestone;
             if (current === null) continue;
             for (const span of codeSpans(token)) {
-              if (isTestName(span)) record(span, current, '12-milestones.md §2.3');
+              if (isTestName(span)) record(span, current, '12-milestones.md §2.3', 2);
             }
           }
         }
@@ -171,7 +176,7 @@ export function readMilestoneIndex(): MilestoneIndex {
       );
       if (earliest === null) continue;
       for (const span of codeSpans(row[2] ?? '')) {
-        if (isTestName(span)) record(span, earliest, '12-milestones.md §2.4');
+        if (isTestName(span)) record(span, earliest, '12-milestones.md §2.4', 3);
       }
     }
   }
@@ -198,7 +203,7 @@ export function readMilestoneIndex(): MilestoneIndex {
       );
       for (const span of codeSpans(row[1] ?? '')) {
         if (isTestName(span) && !claims.has(span)) {
-          record(span, milestone, '12-milestones.md §3 (cross-cutting gates)');
+          record(span, milestone, '12-milestones.md §3 (cross-cutting gates)', 4);
         }
       }
     }

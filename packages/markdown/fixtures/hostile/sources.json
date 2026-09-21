@@ -1,0 +1,8 @@
+[
+  { "id": "html-elements", "source": "<script>alert(1)</script>\n\n<img src=x onerror=alert(1)>\n<iframe src=javascript:alert(1)></iframe>\n<svg onload=alert(1)></svg>\n<math href=javascript:alert(1)></math>\n<meta http-equiv=refresh content=0;url=https://evil.test>\n<base href=https://evil.test>\n<form action=https://evil.test><input autofocus onfocus=alert(1)></form>\n" },
+  { "id": "url-schemes", "source": "[js](javascript:alert%281%29) [vb](vbscript:msgbox%281%29) [data](data:text/html,attack) [file](file:///etc/passwd) [ftp](ftp://evil.test) [tel](tel:123)\n\n![data image](data:image/svg+xml,attack) ![file](file:///etc/passwd)\n" },
+  { "id": "scheme-smuggling", "source": "[entity](&#x6A;avascript:alert%281%29) [newline](%0Ajavascript:alert%281%29) [tab](java&#x09;script:alert%281%29) [unicode](javascript：alert%281%29) [rtl](\u202Ejavascript:alert%281%29)\n" },
+  { "id": "clobber-style", "source": "<a id=location name=iridium style=\"background:url(javascript:attack())\" href=javascript:attack()>bad</a>\n\n# location\n\n<input type=text name=iridium><img src=x srcset=javascript:attack()>\n" },
+  { "id": "code-is-data", "source": "```html\n<script>window.iridium.eraseEverything()</script>\n```\n\n`<img onerror=alert(1)>`\n\n%%<script>alert(1)</script>%%\n" },
+  { "id": "footnotes", "source": "[^constructor] [^__proto__] [^location]\n\n[^constructor]: a\n[^__proto__]: b\n[^location]: c\n" }
+]

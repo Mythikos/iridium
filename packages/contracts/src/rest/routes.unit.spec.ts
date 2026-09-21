@@ -12,7 +12,7 @@ import { ERROR_CODES, type ErrorCode } from '../errors.ts';
 import { ClientHeaders, IfMatchHeaders } from './common.ts';
 import {
   GLOBAL_ERROR_CODES,
-  M1_ROUTES,
+  API_ROUTES,
   routeByOperationId,
   routeCoveragePairs,
   routeKey,
@@ -21,7 +21,7 @@ import {
 
 const SAFE_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
-/** The route set 12-milestones.md section 5.2 names, spelled as `<METHOD> <mount><path>`. */
+/** The cumulative M1/M2 surface in 12 §§5.2/6.2 and 09 §2.18, independent of registry iteration. */
 const EXPECTED_KEYS: readonly string[] = [
   'POST /api/v1/auth/sessions',
   'DELETE /api/v1/auth/sessions/current',
@@ -43,9 +43,40 @@ const EXPECTED_KEYS: readonly string[] = [
   'PUT /api/v1/vaults/:vaultId/members/:userId',
   'DELETE /api/v1/vaults/:vaultId/members/:userId',
   'POST /api/v1/vaults/:vaultId/nodes',
+  'GET /api/v1/vaults/:vaultId/tree',
+  'GET /api/v1/vaults/:vaultId/nodes',
+  'GET /api/v1/nodes/:nodeId',
+  'PATCH /api/v1/nodes/:nodeId',
+  'POST /api/v1/nodes/:nodeId/trash',
+  'POST /api/v1/nodes/:nodeId/restore',
+  'DELETE /api/v1/nodes/:nodeId',
+  'GET /api/v1/nodes/:nodeId/inbound-links',
+  'GET /api/v1/vaults/:vaultId/trash',
+  'PATCH /api/v1/vaults/:vaultId',
+  'POST /api/v1/vaults/:vaultId/archive',
+  'POST /api/v1/vaults/:vaultId/unarchive',
   'GET /api/v1/notes/:noteId',
   'GET /api/v1/notes/:noteId/markdown',
   'GET /api/v1/notes/:noteId/participants',
+  'GET /api/v1/notes/:noteId/rename-impact',
+  'GET /api/v1/notes/:noteId/links',
+  'GET /api/v1/notes/:noteId/backlinks',
+  'GET /api/v1/notes/:noteId/revisions',
+  'POST /api/v1/notes/:noteId/revisions',
+  'GET /api/v1/notes/:noteId/revisions/:revisionId',
+  'POST /api/v1/notes/:noteId/revisions/:revisionId/restore',
+  'GET /api/v1/vaults/:vaultId/search',
+  'GET /api/v1/search',
+  'GET /api/v1/vaults/:vaultId/attachments',
+  'POST /api/v1/vaults/:vaultId/attachments',
+  'GET /api/v1/vaults/:vaultId/attachments/:attachmentId',
+  'GET /api/v1/vaults/:vaultId/attachments/:attachmentId/meta',
+  'DELETE /api/v1/vaults/:vaultId/attachments/:attachmentId',
+  'GET /api/v1/admin/attachments/unreferenced',
+  'GET /api/v1/admin/jobs',
+  'GET /api/v1/admin/jobs/:jobId',
+  'POST /api/v1/admin/jobs/:type/run',
+  'POST /api/v1/admin/jobs/:jobId/cancel',
   'GET /api/v1/admin/users',
   'POST /api/v1/admin/users',
   'POST /api/v1/admin/users/:userId/disable',
@@ -57,7 +88,7 @@ const EXPECTED_KEYS: readonly string[] = [
 ];
 
 /**
- * The three `201`s that name a row a client can fetch afterwards. The others deliberately carry no
+ * The `201`s that name a row a client can fetch afterwards. The others deliberately carry no
  * `Location`: a `PUT` creates its row *at the request URI*. Session, ticket and admin password-reset
  * operations mint credentials, which no route addresses.
  */
@@ -65,6 +96,8 @@ const ADDRESSABLE_CREATES: ReadonlySet<string> = new Set([
   'vaults.create',
   'nodes.create',
   'admin.users.create',
+  'attachments.upload',
+  'revisions.create',
 ]);
 
 function hasPathParameter(route: RouteSpec): boolean {
@@ -85,7 +118,7 @@ function resolvesAVault(route: RouteSpec): boolean {
 
 /** The offending operation ids, so a failure names the routes rather than a boolean. */
 function offenders(predicate: (route: RouteSpec) => boolean): readonly string[] {
-  return M1_ROUTES.filter(predicate).map((route) => route.operationId);
+  return API_ROUTES.filter(predicate).map((route) => route.operationId);
 }
 
 function missingError(route: RouteSpec, code: ErrorCode): boolean {
@@ -95,24 +128,25 @@ function missingError(route: RouteSpec, code: ErrorCode): boolean {
 describe('rest.routes.unit [area:contracts]', () => {
   describe('the route set', () => {
     it('is exactly the set the milestone names', () => {
-      expect(M1_ROUTES.map(routeKey).toSorted()).toStrictEqual(EXPECTED_KEYS.toSorted());
+      expect(API_ROUTES.map(routeKey).toSorted()).toStrictEqual(EXPECTED_KEYS.toSorted());
     });
 
     it('registers each operation id and each method-and-path once', () => {
-      const ids = M1_ROUTES.map((route) => route.operationId);
+      const ids = API_ROUTES.map((route) => route.operationId);
       expect(new Set(ids).size).toBe(ids.length);
-      const keys = M1_ROUTES.map(routeKey);
+      const keys = API_ROUTES.map(routeKey);
       expect(new Set(keys).size).toBe(keys.length);
     });
 
     it('finds a row by its operation id and nothing by a foreign one', () => {
       expect(routeByOperationId('nodes.create')?.method).toBe('POST');
-      expect(routeByOperationId('nodes.update')).toBeUndefined();
+      expect(routeByOperationId('nodes.update')?.method).toBe('PATCH');
+      expect(routeByOperationId('foreign.unregistered')).toBeUndefined();
     });
 
     it('offers one coverage pair per documented response', () => {
       const pairs = routeCoveragePairs();
-      const responses = M1_ROUTES.reduce((total, route) => total + route.responses.length, 0);
+      const responses = API_ROUTES.reduce((total, route) => total + route.responses.length, 0);
       expect(pairs).toHaveLength(responses);
       expect(pairs).toContainEqual(['ops.readyz', 503]);
       expect(pairs).toContainEqual(['notes.getMarkdown', 304]);
@@ -140,7 +174,7 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('omits the permission only on the two documentation operations', () => {
-      const flagOnly = M1_ROUTES.filter(
+      const flagOnly = API_ROUTES.filter(
         (route) =>
           route.auth !== 'test-only' &&
           'serverAdmin' in route.auth &&
@@ -152,16 +186,26 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('admits a token principal only on a safe method carrying a read permission', () => {
-      const tokenRoutes = M1_ROUTES.filter((route) =>
+      const tokenRoutes = API_ROUTES.filter((route) =>
         routePrincipalKinds(route.auth).includes('token'),
       );
-      expect(tokenRoutes.map((route) => route.operationId)).toStrictEqual([
-        'auth.me',
-        'vaults.list',
-        'vaults.get',
-        'notes.get',
-        'notes.getMarkdown',
-      ]);
+      expect(tokenRoutes.map((route) => route.operationId).toSorted()).toStrictEqual(
+        [
+          'auth.me',
+          'vaults.list',
+          'vaults.get',
+          'nodes.list',
+          'notes.get',
+          'notes.getMarkdown',
+          'attachments.list',
+          'attachments.download',
+          'attachments.getMeta',
+          'search.vault',
+          'search.all',
+          'revisions.list',
+          'revisions.get',
+        ].toSorted(),
+      );
       expect(tokenRoutes.filter(isMutating).map((route) => route.operationId)).toStrictEqual([]);
       expect(
         tokenRoutes
@@ -177,7 +221,7 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('step-up gates every mutating /admin route', () => {
-      const adminMutations = M1_ROUTES.filter(
+      const adminMutations = API_ROUTES.filter(
         (route) => route.path.startsWith('/admin/') && isMutating(route),
       );
       expect(adminMutations).not.toHaveLength(0);
@@ -194,7 +238,7 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('declares the client header on every mutating route that a cookie can reach', () => {
-      const mutations = M1_ROUTES.filter(isMutating);
+      const mutations = API_ROUTES.filter(isMutating);
       expect(
         mutations
           .filter(
@@ -220,11 +264,21 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('gives an If-Match route the header schema that requires the validator', () => {
-      const required = M1_ROUTES.filter((route) => route.ifMatch === 'required');
-      expect(required.map((route) => route.operationId)).toStrictEqual([
-        'me.update',
-        'members.delete',
-      ]);
+      const required = API_ROUTES.filter((route) => route.ifMatch === 'required');
+      expect(required.map((route) => route.operationId).toSorted()).toStrictEqual(
+        [
+          'me.update',
+          'members.delete',
+          'nodes.update',
+          'nodes.trash',
+          'nodes.restore',
+          'nodes.purge',
+          'vaults.update',
+          'vaults.archive',
+          'vaults.unarchive',
+          'attachments.delete',
+        ].toSorted(),
+      );
       expect(
         required
           .filter((route) => route.request.headers !== IfMatchHeaders)
@@ -238,7 +292,7 @@ describe('rest.routes.unit [area:contracts]', () => {
           )
           .map((route) => route.operationId),
       ).toStrictEqual([]);
-      const conditional = M1_ROUTES.filter((route) => route.ifMatch === 'conditional');
+      const conditional = API_ROUTES.filter((route) => route.ifMatch === 'conditional');
       expect(conditional.map((route) => route.operationId)).toStrictEqual(['members.put']);
       expect(
         conditional
@@ -248,7 +302,7 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('answers 204 with no body, and names the non-JSON bodies the surface really has', () => {
-      const responses = M1_ROUTES.flatMap((route) =>
+      const responses = API_ROUTES.flatMap((route) =>
         route.responses.map((response) => ({ operationId: route.operationId, response })),
       );
       expect(
@@ -260,15 +314,18 @@ describe('rest.routes.unit [area:contracts]', () => {
         .filter(({ response }) => response.body.kind !== 'json' && response.body.kind !== 'empty')
         .map(({ operationId, response }) => `${operationId}: ${response.body.kind}`);
       expect(nonJson.toSorted()).toStrictEqual([
+        'attachments.download: binary',
+        'attachments.download: binary',
         'meta.docs: text',
         'meta.openapi: opaque-json',
         'notes.getMarkdown: markdown',
         'ops.metrics: text',
+        'revisions.get: markdown',
       ]);
     });
 
     it('carries a Location header on every 201 that creates an addressable row', () => {
-      const created = M1_ROUTES.flatMap((route) =>
+      const created = API_ROUTES.flatMap((route) =>
         route.responses
           .filter((response) => response.status === 201)
           .map((response) => ({ route, location: response.location })),
@@ -302,7 +359,7 @@ describe('rest.routes.unit [area:contracts]', () => {
       expect(
         offenders((route) => new Set(route.errors).size !== route.errors.length),
       ).toStrictEqual([]);
-      const unknown = M1_ROUTES.flatMap((route) =>
+      const unknown = API_ROUTES.flatMap((route) =>
         route.errors.filter((code) => !ERROR_CODES.includes(code)),
       );
       expect(unknown).toStrictEqual([]);
@@ -310,7 +367,7 @@ describe('rest.routes.unit [area:contracts]', () => {
     });
 
     it('never repeats a code every route already answers', () => {
-      const repeated = M1_ROUTES.flatMap((route) =>
+      const repeated = API_ROUTES.flatMap((route) =>
         route.errors
           .filter((code) => GLOBAL_ERROR_CODES.includes(code))
           .map((code) => `${route.operationId}: ${code}`),

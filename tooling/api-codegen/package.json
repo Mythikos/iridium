@@ -1,6 +1,6 @@
 {
   "name": "@iridium/api-codegen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Host for openapi-typescript 7.13.0 with its own TypeScript 6 alias; step 3 of `pnpm gen` runs it from here and writes into packages/api-client (13-decision-log.md A2, risk R-T10)",
   "type": "module",

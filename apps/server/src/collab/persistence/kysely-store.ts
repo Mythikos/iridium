@@ -14,7 +14,7 @@
  * created at boot works once the pools connect, and a call before that throws
  * `PersistenceUnavailable`, which the writer reports as `db_unavailable` and retries.
  */
-import type { NoteId } from '@iridium/contracts';
+import type { NoteId, VaultId } from '@iridium/contracts';
 import { PIPELINE_VERSION } from '@iridium/markdown';
 import { sql, type Kysely, type Transaction } from 'kysely';
 
@@ -23,10 +23,19 @@ import { idBytes, vaultIdFromBytes } from '../../auth/ids.ts';
 import { matchedOne, monotonicGuardApplied } from '../../db/cas.ts';
 import type { Database } from '../../db/schema.ts';
 import { PERSIST_LOCK_WAIT_TIMEOUT_SECONDS } from '../../db/withVaultLock.ts';
+import { lockNoteParents } from '../../notes/lock-parents.ts';
+import type { ServerLogger } from '../../ops/logging.ts';
+import { lockProjectionVault } from '../../projection/lock-vault.ts';
 import { markProjectionInvalid, upsertProjection } from '../../projection/write.ts';
+import type { SearchIndexWrites } from '../../search/index.ts';
 import type { OwnerFence } from '../owner-lease.ts';
 import { YJS_MAJOR } from './initial-state.ts';
-import type { CompactionTransaction, PersistenceStore, WriteTransaction } from './store.ts';
+import type {
+  CheckpointTransaction,
+  CompactionTransaction,
+  PersistenceStore,
+  WriteTransaction,
+} from './store.ts';
 import {
   asV1Update,
   type CheckpointPolicyInputs,
@@ -107,6 +116,9 @@ async function setLockTimeout(db: Kysely<Database>, seconds: number): Promise<vo
 
 /** What the store needs. */
 export interface KyselyStoreOptions {
+  readonly logger?: Pick<ServerLogger, 'warn'>;
+  /** Required whenever the caller supplies a prepared derived projection. */
+  readonly searchIndex?: SearchIndexWrites;
   /** `dbPersist`, resolved per call. */
   readonly db: () => Kysely<Database> | null;
   readonly audit: AuditWriter;
@@ -116,11 +128,15 @@ export interface KyselyStoreOptions {
 
 /** The store. One per process, owned by the persistence layer. */
 export class KyselyPersistenceStore implements PersistenceStore {
+  readonly #logger: Pick<ServerLogger, 'warn'> | undefined;
+  readonly #searchIndex: SearchIndexWrites | undefined;
   readonly #db: () => Kysely<Database> | null;
   readonly #audit: AuditWriter;
   readonly #ownership: OwnerFence | undefined;
 
   constructor(options: KyselyStoreOptions) {
+    this.#logger = options.logger;
+    this.#searchIndex = options.searchIndex;
     this.#db = options.db;
     this.#audit = options.audit;
     this.#ownership = options.ownership;
@@ -280,18 +296,24 @@ export class KyselyPersistenceStore implements PersistenceStore {
             .executeTakeFirst();
           return matchedOne(result);
         },
+        insertRevision: (row) => insertRevisionRow(trx, id, row),
+        recordAudit: async (event) => {
+          await this.#audit.record(trx, event);
+        },
       }),
     );
   }
 
   async runCompaction<T>(
     noteId: NoteId,
+    vaultId: VaultId,
     work: (tx: CompactionTransaction) => Promise<T>,
   ): Promise<T> {
     const id = idBytes(noteId);
     const audit = this.#audit;
-    return this.#transaction((trx) =>
-      work({
+    return this.#transaction(async (trx) => {
+      await lockProjectionVault(trx, idBytes(vaultId));
+      return work({
         lockHead: () => lockHead(trx, id),
         updateSnapshot: async (write: SnapshotWrite) => {
           const result = await trx
@@ -312,15 +334,21 @@ export class KyselyPersistenceStore implements PersistenceStore {
           return monotonicGuardApplied(result);
         },
         writeProjection: (input: ProjectionInput) =>
-          upsertProjection(trx, {
-            noteId: id,
-            revision: input.revision,
-            markdown: input.markdown,
-            contentHash: input.contentHash,
-            pipelineVersion: PIPELINE_VERSION,
-            now: input.now,
-            strict: true,
-          }),
+          upsertProjection(
+            trx,
+            {
+              ...(input.prepared === undefined ? {} : { prepared: input.prepared }),
+              logger: this.#logger,
+              noteId: id,
+              revision: input.revision,
+              markdown: input.markdown,
+              contentHash: input.contentHash,
+              pipelineVersion: PIPELINE_VERSION,
+              now: input.now,
+              strict: true,
+            },
+            this.#searchIndex,
+          ),
         markProjectionInvalid: (now) => markProjectionInvalid(trx, id, now),
         newestRevision: async (): Promise<NewestRevision | null> => {
           const row = await trx
@@ -376,6 +404,22 @@ export class KyselyPersistenceStore implements PersistenceStore {
         recordAudit: async (event: AuditEventInput) => {
           await audit.record(trx, event);
         },
+      });
+    });
+  }
+
+  async runCheckpoint<T>(
+    noteId: NoteId,
+    work: (tx: CheckpointTransaction) => Promise<T>,
+  ): Promise<T> {
+    const id = idBytes(noteId);
+    return this.#transaction((trx) =>
+      work({
+        lockHead: () => lockHead(trx, id),
+        insertRevision: (row) => insertRevisionRow(trx, id, row),
+        recordAudit: async (event) => {
+          await this.#audit.record(trx, event);
+        },
       }),
     );
   }
@@ -422,14 +466,16 @@ export class KyselyPersistenceStore implements PersistenceStore {
 
 /** The guard statement both transactions open with (03 §8.4, §8.6 step 0). */
 async function lockHead(trx: Kysely<Database>, id: Buffer): Promise<HeadRow | null> {
+  const node = await lockNoteParents(trx, id);
+  if (node === null) return null;
   const row = await trx
-    .selectFrom('note_docs as d')
-    .innerJoin('nodes as n', 'n.id', 'd.note_id')
-    .select(['d.head_seq', 'n.deleted_at'])
-    .where('d.note_id', '=', id)
+    .selectFrom('note_docs')
+    .select('head_seq')
+    .where('note_id', '=', id)
     .forUpdate()
     .executeTakeFirst();
-  return row === undefined ? null : { headSeq: row.head_seq, deletedAt: row.deleted_at };
+  if (row === undefined) return null;
+  return { headSeq: row.head_seq, deletedAt: node.deletedAt };
 }
 
 async function revisionExists(
@@ -458,7 +504,7 @@ function assertRevisionFits(row: RevisionInsert): void {
  * the only write the column-scoped `UPDATE (id)` grant admits (03 §8.7). The id is read back rather
  * than taken from the insert result, because the duplicate-key path reports no insert id.
  */
-async function insertRevisionRow(
+export async function insertRevisionRow(
   db: Kysely<Database>,
   id: Buffer,
   row: RevisionInsert,
@@ -488,7 +534,7 @@ async function insertRevisionRow(
       snapshot_sv: row.snapshotSv === null ? null : Buffer.from(row.snapshotSv),
       actor_type: row.actor.actorType,
       actor_id: row.actor.userId === null ? null : idBytes(row.actor.userId),
-      restored_from_revision_id: null,
+      restored_from_revision_id: row.restoredFromRevisionId ?? null,
       created_at: row.createdAt,
     })
     .onDuplicateKeyUpdate({ id: sql`id` })

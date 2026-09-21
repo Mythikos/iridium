@@ -2,7 +2,7 @@
  * `applyAdminUserRoutes(app)` — the `/admin/users` routes of M1 (09-api-reference.md §2.15.1).
  *
  * Every `/admin/*` route is `serverAdmin` and every mutation additionally requires the step-up
- * window; both come from the `M1_ROUTES` row verbatim, and the boot assertion refuses a mutating
+ * window; both come from the `API_ROUTES` row verbatim, and the boot assertion refuses a mutating
  * `/admin/*` route that does not declare `stepUp` (A26), so the rule cannot be forgotten on a route
  * added later.
  *

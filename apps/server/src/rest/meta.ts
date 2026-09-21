@@ -53,7 +53,7 @@ const META_CACHE_SECONDS = 300;
 /**
  * The OpenAPI document's own body schema.
  *
- * `M1_ROUTES` calls it `opaque-json`: the document is described by the OpenAPI meta-schema, and a
+ * `API_ROUTES` calls it `opaque-json`: the document is described by the OpenAPI meta-schema, and a
  * schema here that tried to describe it would be a circular reference. A permissive object is the
  * honest description, and it is what puts `application/json` into the document so
  * `toMatchOpenApi('meta.openapi', 200)` has a media type to check.

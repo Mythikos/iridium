@@ -252,6 +252,16 @@ const GATEWAY_CHUNKER = `(index, text) => {
     () => owner?.assertActive(),
   );
 }`;
+const GATEWAY_DIFF = `(diff) => {
+  const loaded = direct.document;
+  if (loaded === null) throw new Error('the direct connection is closed');
+  owner?.assertActive();
+  const origin = { source: 'local', context: editContext };
+  if (diff.deleteLength > 0)
+    loaded.transact(() => getContent(loaded).delete(diff.start, diff.deleteLength), origin);
+  if (diff.insert.length > 0)
+    insertChunked(getContent(loaded), diff.start, diff.insert, origin, () => owner?.assertActive());
+}`;
 function syntaxShape(node: Node): string {
   return JSON.stringify(node, (key: string, value: unknown) =>
     ['start', 'end', 'loc', 'range', 'raw'].includes(key) ? undefined : value,
@@ -265,6 +275,13 @@ if (
 )
   throw new Error('invalid gateway chunker guard fixture');
 const GATEWAY_CHUNKER_SHAPE = syntaxShape(chunkerDeclaration.declarations[0].init);
+const diffDeclaration = parseSync('diff.ts', `const diff = ${GATEWAY_DIFF};`).program.body[0];
+if (
+  diffDeclaration?.type !== 'VariableDeclaration' ||
+  diffDeclaration.declarations[0]?.init == null
+)
+  throw new Error('invalid gateway diff guard fixture');
+const GATEWAY_DIFF_SHAPE = syntaxShape(diffDeclaration.declarations[0].init);
 
 function isContentWrite(node: CallExpression): boolean {
   const callee = node.callee;
@@ -308,10 +325,12 @@ function gatewayContentWriters(source: Source): string[] {
             property.type !== 'Property' ||
             property.computed ||
             property.key.type !== 'Identifier' ||
-            property.key.name !== 'insertChunked'
+            !['insertChunked', 'applyDiff'].includes(property.key.name)
           )
             continue;
-          if (syntaxShape(property.value) === GATEWAY_CHUNKER_SHAPE) permitted.push(property.value);
+          const expected =
+            property.key.name === 'insertChunked' ? GATEWAY_CHUNKER_SHAPE : GATEWAY_DIFF_SHAPE;
+          if (syntaxShape(property.value) === expected) permitted.push(property.value);
         }
       }
     },
@@ -343,6 +362,68 @@ function contentWriters(inv: Inventory): string[] {
         'apps/server/src/revisions/',
       ],
     ),
+  ];
+}
+
+/** Purge may remove derived rows and invalidate their target IDs, never rewrite link source text. */
+function linkIndexWriters(inv: Inventory): string[] {
+  const purgePath = 'apps/server/src/tree/trash.ts';
+  const findings = scan(
+    inv,
+    /\.(?:insertInto|updateTable|deleteFrom)\s*\(\s*['"]note_links['"]/,
+    ['apps/server/src/'],
+    'noComments',
+    ['apps/server/src/projection/', purgePath],
+  );
+  const source = inv.sources.find((entry) => entry.path === purgePath);
+  if (source === undefined) return findings;
+  const parsed = parseSync(source.path, source.raw);
+  if (parsed.errors.length > 0) return [...findings, `${purgePath}: link cleanup parse failed`];
+  const allowed = new Set(
+    [
+      "await ctx.trx.deleteFrom('note_links').where('from_note_id', 'in', noteBytes).execute();",
+      "await ctx.trx.updateTable('note_links').set({ resolved_node_id: null, status: 'broken' }).where('vault_id', '=', target.vault_id).where('resolved_node_id', 'in', ids).execute();",
+    ].map((script) => {
+      const statement = parseSync('purge.ts', script).program.body[0];
+      if (statement?.type !== 'ExpressionStatement') throw new Error('invalid purge guard fixture');
+      return syntaxShape(statement.expression);
+    }),
+  );
+  const purge = parsed.program.body.find(
+    (node) => node.type === 'FunctionDeclaration' && node.id?.name === 'purge',
+  );
+  const permitted: { readonly start: number; readonly end: number }[] = [];
+  const writes: CallExpression[] = [];
+  new Visitor({
+    ExpressionStatement(node) {
+      if (
+        purge !== undefined &&
+        purge.start <= node.start &&
+        node.end <= purge.end &&
+        allowed.has(syntaxShape(node.expression))
+      )
+        permitted.push(node);
+    },
+    CallExpression(node) {
+      const callee = node.callee;
+      if (
+        callee.type === 'MemberExpression' &&
+        !callee.computed &&
+        callee.property.type === 'Identifier' &&
+        ['insertInto', 'updateTable', 'deleteFrom'].includes(callee.property.name) &&
+        node.arguments[0]?.type === 'Literal' &&
+        node.arguments[0].value === 'note_links'
+      )
+        writes.push(node);
+    },
+  }).visit(parsed.program);
+  return [
+    ...findings,
+    ...writes
+      .filter(
+        (write) => !permitted.some((range) => range.start <= write.start && write.end <= range.end),
+      )
+      .map(() => purgePath),
   ];
 }
 function hostCapabilities(inv: Inventory): string[] {
@@ -573,9 +654,8 @@ function replaceFile(inv: Inventory, path: string, raw: string): Inventory {
 
 /** Plan 08's committed default registration set; no flavor-specific rendering plugins at 1.0. */
 const MARKDOWN_PLUGINS = [
-  'remarkParse',
-  'remarkGfmIridium',
-  'remarkFrontmatterIridium',
+  'remarkMarkdownIt',
+  'remarkIridiumContext',
   'remarkBreaks',
   'remarkRehype',
   'rehypeIridiumIds',
@@ -584,23 +664,31 @@ const MARKDOWN_PLUGINS = [
   'rehypeHighlightIridium',
   'rehypeSanitize',
 ] as const;
+function registrations(raw: string): string[] {
+  return [...raw.matchAll(/\.use\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/g)].map(
+    (match) => match[1] ?? '',
+  );
+}
 function markdownPlugins(inv: Inventory): string[] {
-  const registered = [
-    ...new Set(
-      sourceText(inv, 'packages/markdown/src/pipeline.ts').match(/\b(?:remark|rehype)[A-Z]\w*/g) ??
-        [],
-    ),
-  ];
+  const path = 'packages/markdown/src/processor.ts';
+  const registered = registrations(sourceText(inv, path)).filter(
+    (name) => !['flavor.remark', 'flavor.rehype'].includes(name),
+  );
   return [
     ...mismatch(registered, MARKDOWN_PLUGINS, 'default markdown registrations'),
-    ...[
-      ...sourceText(inv, 'packages/markdown/src/pipeline.ts').matchAll(
-        /\.use\s*\(\s*([A-Za-z_$][\w$]*)/g,
+    ...inv.sources
+      .filter(
+        (source) => source.path.startsWith('packages/markdown/src/') && !isTestPath(source.path),
+      )
+      .flatMap((source) =>
+        registrations(source.noComments)
+          .filter((name) => {
+            if (source.path === path)
+              return !['flavor.remark', 'flavor.rehype', ...MARKDOWN_PLUGINS].includes(name);
+            return source.path !== 'packages/markdown/src/html.ts' || name !== 'rehypeStringify';
+          })
+          .map((name) => `uncommitted markdown registration ${name}`),
       ),
-    ]
-      .map((match) => match[1] ?? '')
-      .filter((name) => name !== 'flavor' && !MARKDOWN_PLUGINS.some((allowed) => allowed === name))
-      .map((name) => `uncommitted markdown registration ${name}`),
     ...scan(inv, /\bremark(?:WikiLink|Callout|Highlight|Comment)\b/, ['packages/markdown/src/']),
     ...scan(inv, /\b(?:remark|rehype)\s*:\s*\[\s*[^\]\s]|sanitizeExtension\s*:\s*\{\s*[^}\s]/, [
       'packages/markdown/src/flavors.ts',
@@ -720,13 +808,7 @@ const ASSERTIONS = {
         'apps/server/src/migrations/',
       ]),
       ...contentWriters(inv),
-      ...scan(
-        inv,
-        /\.(?:insertInto|updateTable|deleteFrom)\s*\(\s*['"]note_links['"]/,
-        ['apps/server/src/'],
-        'noComments',
-        ['apps/server/src/projection/'],
-      ),
+      ...linkIndexWriters(inv),
     ],
     poison: addSource(
       'apps/server/src/jobs/rewrite.ts',
@@ -735,7 +817,7 @@ const ASSERTIONS = {
   },
   'full-obsidian-syntax-compatibility': {
     sinceMilestone: 'M2',
-    required: ['packages/markdown/src/pipeline.ts'],
+    required: ['packages/markdown/src/processor.ts'],
     check: markdownPlugins,
     poison: addSource('packages/markdown/src/pipeline-added.ts', 'pipeline.use(remarkWikiLink);'),
   },
@@ -1206,12 +1288,38 @@ describe('guards.non-goals.guard [area:non-goals]', () => {
       gateway.raw.replace('() => owner?.assertActive()', '() => undefined'),
     );
     expect(gatewayContentWriters(unowned)).toContain(path);
+    const rewritten = sourceOf(
+      path,
+      gateway.raw.replace('diff.insert,', 'rewriteLinks(diff.insert),'),
+    );
+    expect(gatewayContentWriters(rewritten)).toContain(path);
     const malformed = sourceOf(path, 'const invalid = ;');
     expect(gatewayContentWriters(malformed)).toEqual([`${path}: content producer parse failed`]);
   });
+  it('permits only purge deletion and target invalidation in the structural link writer', () => {
+    const path = 'apps/server/src/tree/trash.ts';
+    const source = inventory.sources.find((entry) => entry.path === path);
+    if (source === undefined) throw new Error('missing live purge implementation');
+    expect(linkIndexWriters(inventory)).toEqual([]);
+    for (const replacement of [
+      ".set({ resolved_node_id: null, status: 'broken', raw_target: rewritten })",
+      ".set({ resolved_node_id: replacement, status: 'resolved' })",
+    ]) {
+      const changed = sourceOf(
+        path,
+        source.raw.replace(/\.set\(\{ resolved_node_id: null, status: 'broken' \}\)/, replacement),
+      );
+      expect(
+        linkIndexWriters({
+          ...inventory,
+          sources: [...inventory.sources.filter((entry) => entry.path !== path), changed],
+        }),
+      ).toContain(path);
+    }
+  });
   it('compares the closed plugin registrations and runtime-major pins, including additions with innocent names', () => {
-    const path = 'packages/markdown/src/pipeline.ts';
-    const defaults = `const pipeline = [${MARKDOWN_PLUGINS.join(', ')}];`;
+    const path = 'packages/markdown/src/processor.ts';
+    const defaults = `const pipeline = unified()${MARKDOWN_PLUGINS.map((name) => `.use(${name})`).join('')};`;
     const baseline = {
       ...inventory,
       sources: [
@@ -1230,6 +1338,14 @@ describe('guards.non-goals.guard [area:non-goals]', () => {
     expect(markdownPlugins(changed)).toContain(
       'uncommitted markdown registration unreviewedSyntax',
     );
+    expect(
+      markdownPlugins(
+        addSource(
+          'packages/markdown/src/innocent.ts',
+          'processor.use(unreviewedSyntax);',
+        )(baseline),
+      ),
+    ).toContain('uncommitted markdown registration unreviewedSyntax');
     const versions = new Map(inventory.dependencyVersions);
     versions.set('yjs', new Set(['14.0.0']));
     expect(publishing({ ...inventory, dependencyVersions: versions })).toContain('yjs 14.0.0');

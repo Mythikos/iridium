@@ -18,6 +18,20 @@ import { z } from 'zod';
 import { NoteId } from './ids.ts';
 import type { EnumOf } from './schema.ts';
 
+/** Closed structural refusal reasons, shared by preview, move and restore (12 section 6.4). */
+export const INVALID_MOVE_REASONS = [
+  'cycle',
+  'depth',
+  'cross_vault',
+  'parent_not_category',
+] as const;
+
+/** A structural refusal that a client can explain without interpreting free text. */
+export type InvalidMoveReason = (typeof INVALID_MOVE_REASONS)[number];
+
+/** The wire schema for a structural refusal reason. */
+export const InvalidMoveReason: EnumOf<typeof INVALID_MOVE_REASONS> = z.enum(INVALID_MOVE_REASONS);
+
 /** The closed error-code vocabulary of 09-api-reference.md section 1.5. */
 export const ERROR_CODES = [
   'unauthenticated',
@@ -68,7 +82,7 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 /** The closed error-code vocabulary as a schema. */
 export const ErrorCode: EnumOf<typeof ERROR_CODES> = z.enum(ERROR_CODES);
 
-/** The HTTP status each code is emitted with. One code, one status. */
+/** The default HTTP status each code is emitted with. */
 export const ERROR_CODE_STATUS: Readonly<Record<ErrorCode, number>> = {
   unauthenticated: 401,
   invalid_credentials: 401,
@@ -111,6 +125,29 @@ export const ERROR_CODE_STATUS: Readonly<Record<ErrorCode, number>> = {
   unavailable: 503,
   server_error: 500,
 };
+
+/** The two attachment transport exceptions explicitly specified in 08 section 9 and 09 section 2.11. */
+export const PROBLEM_VARIANTS: Readonly<
+  Record<
+    'attachment-range' | 'attachment-missing',
+    { readonly code: ErrorCode; readonly status: number }
+  >
+> = {
+  'attachment-range': { code: 'validation_failed', status: 416 },
+  'attachment-missing': { code: 'server_error', status: 503 },
+};
+
+/** A named, closed exception to an error code's default status. */
+export type ProblemVariant = keyof typeof PROBLEM_VARIANTS;
+
+/** Resolves the declared status; a mismatched variant is a programming error. */
+export function problemStatus(code: ErrorCode, variant?: ProblemVariant): number {
+  if (variant === undefined) return ERROR_CODE_STATUS[code];
+  const declared = PROBLEM_VARIANTS[variant];
+  if (declared.code !== code)
+    throw new TypeError(`Problem variant ${variant} cannot carry ${code}`);
+  return declared.status;
+}
 
 /** The human summary each code carries. Fixed per code, English, never request-specific. */
 export const ERROR_CODE_TITLE: Readonly<Record<ErrorCode, string>> = {

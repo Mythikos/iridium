@@ -86,6 +86,8 @@ export interface VaultLockContext {
 }
 
 export interface WithVaultLockOptions {
+  /** A preview takes the identical serialization lock without changing the tree version. */
+  readonly mode?: 'structural' | 'read' | 'metadata';
   /** Immutable admission generation, held before any business row lock. */
   readonly ownerFence: OwnerFence;
   /** `dbApp`. The writer's own transactions never take this lock (`A19`). */
@@ -114,6 +116,16 @@ export class TreeVersionNotBumpedError extends Error {
         'not structural.',
     );
     this.name = 'TreeVersionNotBumpedError';
+  }
+}
+
+/** Structural serialization cannot start inside a transaction that may already own child locks. */
+export class VaultLockOrderError extends Error {
+  constructor(vaultId: string) {
+    super(
+      `Vault ${vaultId} must be locked before opening a transaction on its child rows. Pass the database pool to withVaultLock, never an existing transaction.`,
+    );
+    this.name = 'VaultLockOrderError';
   }
 }
 
@@ -159,6 +171,7 @@ export async function withVaultLock<T>(
   work: (context: VaultLockContext) => Promise<T>,
 ): Promise<T> {
   const { db, clock, vaultId } = options;
+  if (db.isTransaction) throw new VaultLockOrderError(vaultId);
   const statuses = options.statuses ?? MUTABLE_STATUSES;
 
   return db.connection().execute(async (connection) => {
@@ -173,7 +186,14 @@ export async function withVaultLock<T>(
           // eslint-disable-next-line no-await-in-loop -- the retry is sequential by definition
           return await runLocked(
             connection,
-            { clock, vaultId, statuses, attempt, ownerFence: options.ownerFence },
+            {
+              clock,
+              vaultId,
+              statuses,
+              attempt,
+              ownerFence: options.ownerFence,
+              mode: options.mode ?? 'structural',
+            },
             work,
           );
         } catch (error) {
@@ -207,6 +227,7 @@ async function runLocked<T>(
     readonly statuses: readonly VaultStatus[];
     readonly attempt: number;
     readonly ownerFence: OwnerFence;
+    readonly mode: 'structural' | 'read' | 'metadata';
   },
   work: (context: VaultLockContext) => Promise<T>,
 ): Promise<T> {
@@ -238,6 +259,7 @@ async function runLocked<T>(
         attempt,
         vault: { vaultId, treeVersion: row.tree_version, status: row.status },
         async bumpTreeVersion(): Promise<number> {
+          if (context.mode !== 'structural') throw new PreviewTreeMutationError(vaultId);
           if (bumped !== null) return bumped;
           const next = row.tree_version + 1;
           await trx
@@ -251,9 +273,20 @@ async function runLocked<T>(
       };
 
       const result = await work(lockContext);
-      if (bumped === null) throw new TreeVersionNotBumpedError(vaultId);
+      if (bumped === null && context.mode === 'structural')
+        throw new TreeVersionNotBumpedError(vaultId);
       return result;
     });
+}
+
+/** A preview must validate the proposed mutation without committing a tree change. */
+export class PreviewTreeMutationError extends Error {
+  constructor(vaultId: string) {
+    super(
+      `Tree preview for vault ${vaultId} attempted to change its version; use structural mode for writes.`,
+    );
+    this.name = 'PreviewTreeMutationError';
+  }
 }
 
 /**

@@ -25,6 +25,7 @@ const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set([
   '.vitest',
   '.git',
   '.stryker-tmp',
+  '.tmp',
 ]);
 
 /** One file found by a walk, with the size `statSync` reported. */
@@ -63,11 +64,16 @@ export function walkFiles(root: string): FoundFile[] {
   if (!isDirectory(root)) return [];
   const found: FoundFile[] = [];
   const walk = (directory: string): void => {
-    for (const entry of readdirSync(directory).toSorted((a, b) => a.localeCompare(b))) {
-      const path = join(directory, entry);
+    for (const entry of readdirSync(directory, { withFileTypes: true }).toSorted((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      // Prune ignored directories and their symlinks before following a target that may be gone.
+      if (SKIPPED_DIRECTORIES.has(entry.name) && (entry.isDirectory() || entry.isSymbolicLink()))
+        continue;
+      const path = join(directory, entry.name);
       const stats = statSync(path);
       if (stats.isDirectory()) {
-        if (!SKIPPED_DIRECTORIES.has(entry)) walk(path);
+        walk(path);
         continue;
       }
       if (stats.isFile()) found.push({ path, bytes: stats.size });

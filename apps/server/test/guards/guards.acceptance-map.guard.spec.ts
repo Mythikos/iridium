@@ -1403,6 +1403,20 @@ describe('guards.acceptance-map.guard [area:docs]', () => {
     });
   });
   describe('the map and the milestone axis', () => {
+    it('keeps per-test exit schedules above cross-layer and cross-milestone summary rows', () => {
+      for (const [name, milestone] of [
+        ['tree.rename-impact.integration', 'M2'],
+        ['rename-impact.dialog.component', 'M4'],
+        ['rename-impact.e2e', 'M4'],
+        ['editor.formatting.prop', 'M4'],
+        ['preview.worker-only.unit', 'M4'],
+        ['vault-isolation.e2e', 'M4'],
+        ['export.revocation.integration', 'M6'],
+        ['export.sanitized-paths.unit', 'M6'],
+      ] as const) {
+        expect(MAP.tests.get(name)?.sinceMilestone, name).toBe(milestone);
+      }
+    });
     it(`reads ${MAP_REFERENCE} against the milestone ${CURRENT_REFERENCE} names`, () => {
       expect(MAP.entries.length).toBeGreaterThan(0);
       expect(MAP.milestones).toContain(CURRENT);

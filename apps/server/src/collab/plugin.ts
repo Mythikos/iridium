@@ -29,6 +29,9 @@ import {
 import type { Clock } from '../ops/clock.ts';
 import type { ServerLogger } from '../ops/logging.ts';
 import { docBudgetOutcome, persistBacklogOutcome, type Readiness } from '../ops/readiness.ts';
+import { ProjectionPool } from '../projection/pool.ts';
+import { createProjectionPreparer } from '../projection/prepare.ts';
+import { ReindexService } from '../projection/reindex.ts';
 import { ProblemError } from '../security/problem.ts';
 import { collabOriginPolicy, createCollabOriginGuard } from '../security/ws-origin.ts';
 import { CollabAuditSink } from './audit.ts';
@@ -72,6 +75,10 @@ declare module 'fastify' {
     collab: CollabServices;
     /** Boot step 8: the note kernel — initialisation, lifecycle, repair and the committed read. */
     notes: NoteServices;
+    /** The bounded process-owned pool shared with reference scans and reindex. */
+    projectionPool: ProjectionPool;
+    /** Shared durable-source rebuilding for maintenance and the CLI. */
+    reindexService: ReindexService;
   }
 }
 
@@ -133,6 +140,35 @@ export async function applyCollabPlugin(
   }
 
   // ---- persistence ---------------------------------------------------------------------------------
+  const projectionPool = new ProjectionPool({ ...config.projection, clock });
+  const prepareProjection = createProjectionPreparer(
+    projectionPool,
+    logger,
+    clock,
+    () => app.metrics,
+  );
+  app.decorate('projectionPool', projectionPool);
+  app.addHook('onClose', () => projectionPool.close());
+  app.decorate(
+    'reindexService',
+    new ReindexService({
+      logger,
+      searchIndex: app.searchIndex,
+      database: () => {
+        const db = database.dbApp;
+        if (db === null) throw new ProblemError('unavailable');
+        return db;
+      },
+      prepare: prepareProjection,
+      clock,
+      ratePerSecond: config.projection.reindexRatePerSecond,
+      drainAccepted: async (noteId) => {
+        await persistence.writerOf(noteId)?.drainAccepted();
+      },
+      projected: (noteId, seq) =>
+        app.collab.gateway.broadcastNote(noteId, { v: 1, t: 'projected', seq }),
+    }),
+  );
   const audit = new CollabAuditSink({
     db: dbApp,
     audit: app.audit,
@@ -150,11 +186,19 @@ export async function applyCollabPlugin(
     applyWriterLatches: (connection) =>
       persistence.writerOfDocument(connection.document.name)?.applyLatches(connection),
   });
-  const store = new KyselyPersistenceStore({ db: dbPersist, audit: app.audit });
+  const store = new KyselyPersistenceStore({
+    logger,
+    db: dbPersist,
+    audit: app.audit,
+    searchIndex: app.searchIndex,
+  });
   const persistence = new CollabPersistenceService({
+    prepareProjection,
     store,
     writerStore: () =>
       new KyselyPersistenceStore({
+        logger,
+        searchIndex: app.searchIndex,
         db: dbPersist,
         audit: app.audit,
         ownership: ownerLease.captureFence(),
@@ -302,6 +346,7 @@ export async function applyCollabPlugin(
     wsConnections: () => opsMetrics()?.wsConnections ?? null,
   });
   gateway.bind(server.hocuspocus);
+  app.addHook('onReady', () => gateway.sweepTrashedOnBoot());
   const unsubscribeFence = app.authz.sessionFence.subscribe((userId) => {
     gateway.refreshPrincipalFence(userId);
   });
@@ -311,6 +356,9 @@ export async function applyCollabPlugin(
 
   // ---- the note kernel -----------------------------------------------------------------------------
   const notes = createNoteServices({
+    logger,
+    searchIndex: app.searchIndex,
+    prepareProjection,
     gateway,
     persistence,
     db: dbApp,
@@ -375,9 +423,8 @@ export async function applyCollabPlugin(
     return persistBacklogOutcome(persistence.backlog());
   });
   readiness.register('projection_workers', () => ({
-    status: 'ok',
-    detail:
-      'the M1 projection runs inline in the compaction transaction; the piscina pool arrives with M2',
+    status: projectionPool.closed ? 'fail' : 'ok',
+    detail: `${projectionPool.pending} projection tasks admitted; ${config.projection.workers} worker slots`,
   }));
 
   // ---- what exists only after step 10: the registry and the drain --------------------------------

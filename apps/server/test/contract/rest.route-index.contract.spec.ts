@@ -9,7 +9,7 @@
  * three — the operation ids, the policy legend, the `If-Match` column and the `★` PAT column.
  *
  * **The comparison is scoped by milestone, in the honest direction.** §2.18 lists the whole 1.0
- * surface; `M1_ROUTES` lists what this milestone registers. So every M1 row must appear in the table
+ * surface; `API_ROUTES` lists what this milestone registers. So every M1 row must appear in the table
  * and agree with it, and every *documented* operation must be a table row — but a table row this
  * milestone does not register is not a failure, it is M2 through M8.
  *
@@ -21,7 +21,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { M1_ROUTES, routePrincipalKinds, type RouteAuth, type RouteSpec } from '@iridium/contracts';
+import {
+  API_ROUTES,
+  routePrincipalKinds,
+  type RouteAuth,
+  type RouteSpec,
+} from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 const PLAN_PATH = fileURLToPath(
@@ -168,21 +173,21 @@ describe('rest.route-index.contract [area:contracts]', () => {
   });
 
   it('lists every M1 route, at the same method and path', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const indexed = BY_OPERATION.get(row.operationId);
       if (indexed === undefined) return [`${row.operationId} is in no §2.18 table row`];
       if (indexed.method !== row.method) {
-        return [`${row.operationId} is ${indexed.method} in §2.18 and ${row.method} in M1_ROUTES`];
+        return [`${row.operationId} is ${indexed.method} in §2.18 and ${row.method} in API_ROUTES`];
       }
       return indexed.path === row.path
         ? []
-        : [`${row.operationId} is ${indexed.path} in §2.18 and ${row.path} in M1_ROUTES`];
+        : [`${row.operationId} is ${indexed.path} in §2.18 and ${row.path} in API_ROUTES`];
     });
     expect(problemList(problems)).toBe('');
   });
 
   it('agrees with the plan about the policy of every M1 route', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const indexed = BY_OPERATION.get(row.operationId);
       if (indexed === undefined || HANDLER_CHECKED_CREDENTIAL.has(row.operationId)) return [];
       return authAgrees(indexed.auth, row.auth)
@@ -196,7 +201,7 @@ describe('rest.route-index.contract [area:contracts]', () => {
   });
 
   it('agrees with the plan about which M1 routes accept an integration token', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const indexed = BY_OPERATION.get(row.operationId);
       if (indexed?.pat === undefined) return [];
       const accepts = routePrincipalKinds(row.auth).includes('token');
@@ -211,7 +216,7 @@ describe('rest.route-index.contract [area:contracts]', () => {
   });
 
   it('agrees with the plan about every M1 route that requires a validator', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const indexed = BY_OPERATION.get(row.operationId);
       if (indexed?.ifMatch === undefined) return [];
       return indexed.ifMatch === ifMatchFor(row)
@@ -231,14 +236,14 @@ describe('rest.route-index.contract [area:contracts]', () => {
 
   it('documents every `rest` row this milestone registers', () => {
     const documented = documentedOperationIds();
-    const missing = M1_ROUTES.filter(
+    const missing = API_ROUTES.filter(
       (row) => row.plugin === 'rest' && !documented.has(row.operationId),
     ).map((row) => row.operationId);
     expect(missing).toStrictEqual([]);
   });
 
   it('carries every M1 operation in one of its two tables', () => {
-    const missing = M1_ROUTES.filter((row) => !BY_OPERATION.has(row.operationId)).map(
+    const missing = API_ROUTES.filter((row) => !BY_OPERATION.has(row.operationId)).map(
       (row) => row.operationId,
     );
     expect(missing).toStrictEqual([]);

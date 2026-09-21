@@ -18,11 +18,11 @@ import type { NoteId } from '@iridium/contracts';
 
 /** The set. One per Fastify instance, owned by the collab gateway. */
 export class ClosingSet {
-  readonly #ids = new Set<NoteId>();
+  readonly #ids = new Map<NoteId, number>();
 
-  /** Enters the set. Idempotent. */
+  /** Acquires one operation's mark; overlapping mutations retain independent ownership. */
   mark(noteId: NoteId): void {
-    this.#ids.add(noteId);
+    this.#ids.set(noteId, (this.#ids.get(noteId) ?? 0) + 1);
   }
 
   /** Whether a trash or purge of this note is being coordinated right now. */
@@ -30,9 +30,11 @@ export class ClosingSet {
     return this.#ids.has(noteId);
   }
 
-  /** Leaves the set. Idempotent, so a `finally` can call it whether or not `mark` ran. */
+  /** Releases one matching mark. Each operation balances only the marks it acquired. */
   clear(noteId: NoteId): void {
-    this.#ids.delete(noteId);
+    const owners = this.#ids.get(noteId) ?? 0;
+    if (owners <= 1) this.#ids.delete(noteId);
+    else this.#ids.set(noteId, owners - 1);
   }
 
   /** Ids currently closing, for assertions. */

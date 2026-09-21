@@ -18,6 +18,7 @@
  */
 import {
   GetMarkdownQuery,
+  LIMITS,
   markdownEtag,
   NoteId,
   NoteIdParams,
@@ -37,14 +38,13 @@ import {
 import { z } from 'zod';
 
 import { WindowedBudget } from '../auth/tickets/ip-budget.ts';
+import type { ContentReadCore } from '../content/read/index.ts';
 import {
-  appDb,
   EMPTY_RESPONSE,
   requirePrincipal,
   routeSpec as manifestRow,
 } from '../rest/handler-context.ts';
 import { ProblemError } from '../security/problem.ts';
-import { readNoteMeta, readNoteName, readRetainedRevision, sliceLines } from './read.ts';
 
 /**
  * A body this route can serve: the committed projection, or one retained checkpoint.
@@ -62,6 +62,7 @@ export interface MarkdownRead {
 
 /** What the composer passes. */
 export interface NoteReadRouteDeps {
+  readonly core: ContentReadCore;
   /** `app.notes.markdownOf` — the one committed-Markdown accessor, shared with the M3 tools. */
   readonly markdownOf: (
     noteId: NoteId,
@@ -114,7 +115,7 @@ const MS_PER_MINUTE = 60_000;
  * `FLUSH_PER_MINUTE`, which is the same budget on the collaboration channel; it is declared here
  * until that package carries it, and the M1 report asks for the member.
  */
-const FRESH_READS_PER_MINUTE = 6;
+const FRESH_READS_PER_MINUTE = LIMITS.FLUSH_PER_MINUTE;
 
 /** The content type a Markdown read answers with (§2.8). */
 const MARKDOWN_CONTENT_TYPE = 'text/markdown; charset=utf-8';
@@ -205,9 +206,13 @@ export function applyNoteReadRoutes(app: FastifyInstance, deps: NoteReadRouteDep
     },
     async (request, reply) => {
       const note = resolvedNote(request, request.params.noteId);
-      const meta = await readNoteMeta(appDb(app), note.id);
-      if (meta === null) throw new ProblemError('not_found');
-      reply.header('etag', noteMetaEtag(meta.version, meta.revision));
+      const meta = await deps.core.readNoteMeta(requirePrincipal(request.principal), note.id);
+      reply
+        .header('etag', noteMetaEtag(meta.version, meta.revision))
+        .header(RESPONSE_HEADERS.revision, String(meta.revision))
+        .header(RESPONSE_HEADERS.headRevision, String(meta.headRevision))
+        .header(RESPONSE_HEADERS.projectionStatus, meta.projectionStatus);
+      if (meta.contentHash !== null) reply.header(RESPONSE_HEADERS.contentHash, meta.contentHash);
       return reply.code(HTTP_OK).send(meta);
     },
   );
@@ -236,34 +241,66 @@ export function applyNoteReadRoutes(app: FastifyInstance, deps: NoteReadRouteDep
       const { revision, lines, fresh } = request.query;
       if (revision !== undefined || fresh) await requireHistoryRead(request, note.vaultId);
 
-      const content =
-        revision === undefined
-          ? await readCurrent(deps, freshBudget, request, note.id, fresh)
-          : await readRetainedRevision(appDb(app), note.id, revision);
-      if (content === null) throw new ProblemError('not_found');
+      if (fresh && revision === undefined)
+        await readCurrent(deps, freshBudget, request, note.id, true);
+      const lineRange = lines?.split('-').map(Number);
+      if (
+        lineRange !== undefined &&
+        (!Number.isSafeInteger(lineRange[0]) ||
+          !Number.isSafeInteger(lineRange[1]) ||
+          (lineRange[0] ?? 0) < 1 ||
+          (lineRange[1] ?? 0) < (lineRange[0] ?? 0))
+      ) {
+        throw new ProblemError('validation_failed', {
+          detail: 'lines must be a 1-based inclusive range such as 120-260.',
+          errors: [{ path: 'query.lines', message: 'lines_invalid', code: 'lines_invalid' }],
+        });
+      }
+      const content = await deps.core.readNoteMarkdown(
+        requirePrincipal(request.principal),
+        note.id,
+        {
+          ...(revision === undefined ? {} : { revision }),
+          ...(lineRange === undefined
+            ? {}
+            : { lines: { start: lineRange[0] ?? 1, end: lineRange[1] ?? 1 } }),
+        },
+      );
 
       const etag = markdownEtag(content.revision, content.contentHash);
-      if (matchesEtag(request.headers['if-none-match'], etag)) {
-        return reply.header('etag', etag).code(HTTP_NOT_MODIFIED).send();
-      }
-
-      const slice = lines === undefined ? null : sliceLines(content.markdown, lines);
-      const body = slice === null ? content.markdown : slice.text;
-      const lineCount = slice === null ? content.markdown.split('\n').length : slice.lineCount;
-      const name = (await readNoteName(appDb(app), note.id)) ?? 'note';
-
       reply
         .header('etag', etag)
         .header(RESPONSE_HEADERS.revision, String(content.revision))
-        .header(RESPONSE_HEADERS.headRevision, String(headRevisionOf(content)))
+        .header(RESPONSE_HEADERS.headRevision, String(content.headRevision))
         .header(RESPONSE_HEADERS.contentHash, content.contentHash)
-        .header(RESPONSE_HEADERS.lineCount, String(lineCount))
-        .header(RESPONSE_HEADERS.projectionStatus, statusOf(content))
-        .header('content-disposition', `inline; filename="${encodeURIComponent(name)}.md"`);
-      if (slice !== null) {
-        reply.header(RESPONSE_HEADERS.returnedLines, `${String(slice.start)}-${String(slice.end)}`);
+        .header(RESPONSE_HEADERS.lineCount, String(content.lineCount))
+        .header(RESPONSE_HEADERS.projectionStatus, content.projectionStatus);
+      if (matchesEtag(request.headers['if-none-match'], etag)) {
+        return reply.code(HTTP_NOT_MODIFIED).send();
       }
-      return reply.code(HTTP_OK).type(MARKDOWN_CONTENT_TYPE).send(body);
+
+      // The shared read core clamps source selections for bounded excerpts (A37). The REST
+      // query retains its published M1 refusal when the first requested line does not exist.
+      if (lineRange !== undefined && (lineRange[0] ?? 1) > content.lineCount) {
+        throw new ProblemError('validation_failed', {
+          detail: `lines starts at ${String(lineRange[0])} and the note has ${String(content.lineCount)} line(s).`,
+          errors: [
+            { path: 'query.lines', message: 'lines_out_of_range', code: 'lines_out_of_range' },
+          ],
+        });
+      }
+
+      reply.header(
+        'content-disposition',
+        `inline; filename="${encodeURIComponent(content.meta.name)}.md"`,
+      );
+      if (lines !== undefined) {
+        reply.header(
+          RESPONSE_HEADERS.returnedLines,
+          `${String(content.returnedRange[0])}-${String(content.returnedRange[1])}`,
+        );
+      }
+      return reply.code(HTTP_OK).type(MARKDOWN_CONTENT_TYPE).send(content.markdown);
     },
   );
 
@@ -317,14 +354,4 @@ async function readCurrent(
     });
   }
   return deps.markdownOf(noteId, { fresh: true });
-}
-
-/** `note_docs.head_seq` when the read carried one; a retained revision reports its own seq. */
-function headRevisionOf(content: MarkdownRead): number {
-  return content.headSeq ?? content.revision;
-}
-
-/** The projection status a read reports; a retained revision is `ok` by construction. */
-function statusOf(content: MarkdownRead): string {
-  return content.status ?? 'ok';
 }

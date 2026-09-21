@@ -98,6 +98,25 @@ export class CheckpointTimeout extends Error {
   }
 }
 
+/** A writer refuses a content mutation before the synchronous capture-and-apply boundary. */
+export class RevisionContentRefused extends Error {
+  readonly reason: 'content_invalid' | 'note_oversized';
+  constructor(reason: 'content_invalid' | 'note_oversized') {
+    super(`The revision operation cannot change ${reason} content.`);
+    this.name = 'RevisionContentRefused';
+    this.reason = reason;
+  }
+}
+
+/** The accepted restore remains in the FIFO until its atomic write can commit. */
+export class RestoreTimeout extends Error {
+  readonly code = 'persist.restore_timeout';
+  constructor(noteId: NoteId) {
+    super(`The restore of ${noteId} has not committed within the writer deadline.`);
+    this.name = 'RestoreTimeout';
+  }
+}
+
 /** A `note_docs` row that should exist does not: invariant I-06 is broken (03 §8.3). */
 export class NoteDocMissing extends Error {
   readonly code = 'persist.note_doc_missing';

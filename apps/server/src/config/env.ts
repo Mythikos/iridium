@@ -395,6 +395,7 @@ export function envShape(measurements: BootMeasurements) {
     UPDATE_LOG_RETENTION_DAYS: intField(LIMITS.UPDATE_LOG_RETENTION_DAYS, { min: 1 }),
     PROJECTION_WORKERS: intField(measurements.defaultProjectionWorkers, { min: 1 }),
     PROJECTION_TIMEOUT_MS: intField(LIMITS.PROJECTION_TIMEOUT_SERVER_MS, { min: 1 }),
+    REINDEX_RATE_PER_SECOND: intField(LIMITS.REINDEX_RATE_PER_SECOND, { min: 1 }),
     TRANSFER_WORKERS: intField(1, { min: 1 }),
 
     // ---- Storage and transfer -----------------------------------------------------------------
@@ -514,6 +515,7 @@ export const ENV_SCHEMA_KEYS: readonly string[] = Object.freeze([
   'UPDATE_LOG_RETENTION_DAYS',
   'PROJECTION_WORKERS',
   'PROJECTION_TIMEOUT_MS',
+  'REINDEX_RATE_PER_SECOND',
   'TRANSFER_WORKERS',
   'ATTACHMENTS_DRIVER',
   'ATTACHMENTS_DIR',
@@ -653,7 +655,11 @@ export interface IridiumConfig {
     readonly wsMaxPayloadBytes: number;
     readonly updateLogRetentionDays: number;
   };
-  readonly projection: { readonly workers: number; readonly timeoutMs: number };
+  readonly projection: {
+    readonly workers: number;
+    readonly timeoutMs: number;
+    readonly reindexRatePerSecond: number;
+  };
   readonly transfer: {
     readonly workers: number;
     readonly stagingDir: string;
@@ -1092,6 +1098,7 @@ function toConfig(parsed: ParsedEnv, secrets: SecretMaterial): IridiumConfig {
     projection: Object.freeze({
       workers: parsed.PROJECTION_WORKERS,
       timeoutMs: parsed.PROJECTION_TIMEOUT_MS,
+      reindexRatePerSecond: parsed.REINDEX_RATE_PER_SECOND,
     }),
     transfer: Object.freeze({
       workers: parsed.TRANSFER_WORKERS,

@@ -401,13 +401,13 @@ export const TreeChangedMsg: z.ZodObject<
         nodeId: NodeId,
         parentId: NodeId,
         kind: z.enum(['category', 'note'] as const),
-        name: z.string().min(1).max(200),
-        path: z.string().max(4096),
+        name: z.string().min(1).max(LIMITS.NODE_NAME_MAX_BYTES),
+        path: z.string().max(LIMITS.NODE_PATH_MAX_CHARS),
         op: TreeChangeOp,
         version: z.int().positive(),
       }),
     )
-    .max(500),
+    .max(LIMITS.TREE_CHANGES_MAX),
 });
 
 /** A membership was added, changed or removed (`role: null`). */

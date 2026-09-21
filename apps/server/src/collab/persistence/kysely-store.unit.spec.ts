@@ -10,6 +10,7 @@ import {
 import { ManualClock } from '../../../test/support/manual-clock.ts';
 import { AuditKeyMissingError, AuditWriter } from '../../audit/chain.ts';
 import { idBytes } from '../../auth/ids.ts';
+import type { OwnerFence } from '../owner-lease.ts';
 import {
   KyselyPersistenceStore,
   PersistenceUnavailable,
@@ -34,17 +35,27 @@ const audit = (): AuditWriter =>
 function fixture(
   script: QueryScript,
   timeout: unknown = 50,
+  ownership?: OwnerFence,
 ): { db: FakeDatabase; store: KyselyPersistenceStore } {
   const db = fakeDatabase({
     script: (query, ordinal) => {
       if (query.sql.startsWith('SELECT @@SESSION'))
         return { rows: timeout === null ? [] : [{ value: timeout }] };
       if (query.sql.startsWith('SET SESSION')) return { numAffectedRows: 0n };
+      if (query.sql === 'select `id` from `vaults` where `id` = ? for share')
+        return { rows: [{ id: idBytes(vaultId) }] };
       return script(query, ordinal);
     },
   });
   opened.push(db);
-  return { db, store: new KyselyPersistenceStore({ db: () => db.db, audit: audit() }) };
+  return {
+    db,
+    store: new KyselyPersistenceStore({
+      db: () => db.db,
+      audit: audit(),
+      ...(ownership === undefined ? {} : { ownership }),
+    }),
+  };
 }
 afterEach(async () => {
   await Promise.all(opened.splice(0).map((database) => database.db.destroy()));
@@ -226,9 +237,14 @@ describe('collab.kysely-store.unit [area:collab]', () => {
     expect(insert?.parameters).toContain(null);
     expect(insert?.parameters).toContainEqual(idBytes(userId));
     expect(insert?.parameters).toContainEqual(idBytes(sessionId));
-    expect(db.executed.find((query) => query.sql.includes('inner join'))?.sql).toContain(
-      'for update',
-    );
+    expect(
+      db.executed.filter((query) => query.sql.startsWith('select')).map((query) => query.sql),
+    ).toEqual([
+      'select `deleted_at` from `nodes` where `id` = ? for share',
+      'select `node_id` from `notes` where `node_id` = ? for update',
+      'select `head_seq` from `note_docs` where `note_id` = ? for update',
+    ]);
+    expect(db.executed.some((query) => query.sql.includes('from `vaults`'))).toBe(false);
     expect(db.lifecycle).toEqual(['acquire', 'begin', 'commit', 'release']);
   });
   for (const [value, restored] of [
@@ -321,7 +337,7 @@ describe('collab.kysely-store.unit [area:collab]', () => {
   });
   it('loads present or absent compaction policy/revision inputs without inventing a checkpoint', async () => {
     const empty = fixture(absent);
-    await empty.store.runCompaction(noteId, async (tx) => {
+    await empty.store.runCompaction(noteId, vaultId, async (tx) => {
       expect(await tx.newestRevision()).toBeNull();
       expect(await tx.revisionExistsAt(2)).toBe(false);
       await expect(tx.checkpointPolicyInputs()).rejects.toThrow('no result');
@@ -331,7 +347,7 @@ describe('collab.kysely-store.unit [area:collab]', () => {
         ? [{ last_checkpoint_at: now, auto_checkpoint_interval_min: 7 }]
         : [{ seq: 3, content_hash: Buffer.from([2]), id: 9 }],
     }));
-    await store.runCompaction(noteId, async (tx) => {
+    await store.runCompaction(noteId, vaultId, async (tx) => {
       expect(await tx.newestRevision()).toEqual({ seq: 3, contentHash: Uint8Array.of(2) });
       expect(await tx.revisionExistsAt(3)).toBe(true);
       expect(await tx.checkpointPolicyInputs()).toEqual({
@@ -351,7 +367,7 @@ describe('collab.kysely-store.unit [area:collab]', () => {
       }
       return { numAffectedRows: 1n };
     });
-    await store.runCompaction(noteId, async (tx) => {
+    await store.runCompaction(noteId, vaultId, async (tx) => {
       expect(await tx.lockHead()).toEqual({ headSeq: 3, deletedAt: null });
       const snapshot = {
         snapshot: Uint8Array.of(1),
@@ -396,7 +412,7 @@ describe('collab.kysely-store.unit [area:collab]', () => {
   it('keeps audit failure inside the same compaction transaction and rolls its mutations back', async () => {
     const { store, db } = fixture(() => ({ numAffectedRows: 1n }));
     await expect(
-      store.runCompaction(noteId, async (tx) => {
+      store.runCompaction(noteId, vaultId, async (tx) => {
         await tx.markProjectionInvalid(now);
         await tx.recordAudit({
           action: 'note.content.invalid',
@@ -412,5 +428,41 @@ describe('collab.kysely-store.unit [area:collab]', () => {
     expect(db.executed.some((query) => query.sql.startsWith('update `note_projections`'))).toBe(
       true,
     );
+  });
+
+  it('takes the publication gate after its owner fence and before every note parent lock', async () => {
+    let fenceAt = -1;
+    const { store, db } = fixture(() => ({ rows: [{ head_seq: 3, deleted_at: null }] }), 50, {
+      assertActive(): void {},
+      assertCurrent: async () => {
+        fenceAt = db.executed.length;
+      },
+    });
+    await store.runCompaction(noteId, vaultId, async (tx) => {
+      expect(await tx.lockHead()).toEqual({ headSeq: 3, deletedAt: null });
+    });
+    const gateAt = db.executed.findIndex((query) => query.sql.includes('from `vaults`'));
+    expect(gateAt).toBe(fenceAt);
+    expect(db.executed.slice(gateAt, -1).map((query) => query.sql)).toEqual([
+      'select `id` from `vaults` where `id` = ? for share',
+      'select `deleted_at` from `nodes` where `id` = ? for share',
+      'select `node_id` from `notes` where `node_id` = ? for update',
+      'select `head_seq` from `note_docs` where `note_id` = ? for update',
+    ]);
+    expect(db.executed[gateAt]?.parameters).toEqual([idBytes(vaultId)]);
+  });
+
+  it('keeps an explicit checkpoint per-note and exposes no projection publication methods', async () => {
+    const { store, db } = fixture(() => ({ rows: [{ head_seq: 3, deleted_at: null, id: 71 }] }));
+    await store.runCheckpoint(noteId, async (tx) => {
+      expect(Object.keys(tx).toSorted()).toEqual(['insertRevision', 'lockHead', 'recordAudit']);
+      expect(await tx.lockHead()).toEqual({ headSeq: 3, deletedAt: null });
+      expect(await tx.insertRevision(revision({ kind: 'named', label: 'Retained' }))).toEqual({
+        id: 71,
+        inserted: false,
+      });
+    });
+    expect(db.executed.some((query) => query.sql.includes('from `vaults`'))).toBe(false);
+    expect(db.lifecycle).toEqual(['acquire', 'begin', 'commit', 'release']);
   });
 });

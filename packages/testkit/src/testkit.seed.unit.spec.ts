@@ -237,4 +237,11 @@ describe('testkit.seed.unit [area:testkit]', () => {
     expect(() => setPasswordTokenFrom(`${ORIGIN}/set-password`)).toThrow(/irid_spl_/);
     expect(() => setPasswordTokenFrom(`${ORIGIN}/set-password#irid_tkt_x`)).toThrow(/irid_spl_/);
   });
+
+  it('refuses unsupported bulk seeding before creating any user or vault', async () => {
+    const server = scriptedServer();
+    await expect(seedFor(server).structure()).rejects.toThrow(/in-process structureWriter adapter/);
+    expect(server.cliArgs).toEqual([]);
+    expect(server.calls).toEqual([]);
+  });
 });

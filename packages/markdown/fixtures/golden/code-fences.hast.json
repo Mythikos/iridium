@@ -1,0 +1,258 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "element",
+      "tagName": "pre",
+      "properties": {
+        "dataLine": 1,
+        "dataOffset": 0,
+        "dataEndOffset": 36
+      },
+      "children": [
+        {
+          "type": "element",
+          "tagName": "code",
+          "properties": {
+            "className": [
+              "hljs",
+              "language-ts"
+            ],
+            "dataLine": 1,
+            "dataOffset": 0,
+            "dataEndOffset": 36
+          },
+          "children": [
+            {
+              "type": "element",
+              "tagName": "span",
+              "properties": {
+                "className": [
+                  "hljs-keyword"
+                ]
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "const"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": " "
+            },
+            {
+              "type": "element",
+              "tagName": "span",
+              "properties": {
+                "className": [
+                  "hljs-attr"
+                ]
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "answer"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": ": "
+            },
+            {
+              "type": "element",
+              "tagName": "span",
+              "properties": {
+                "className": [
+                  "hljs-built_in"
+                ]
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "number"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": " = "
+            },
+            {
+              "type": "element",
+              "tagName": "span",
+              "properties": {
+                "className": [
+                  "hljs-number"
+                ]
+              },
+              "children": [
+                {
+                  "type": "text",
+                  "value": "42"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "value": ";\n"
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 1,
+              "offset": 0
+            },
+            "end": {
+              "line": 3,
+              "column": 4,
+              "offset": 36
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 3,
+          "column": 4,
+          "offset": 36
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "pre",
+      "properties": {
+        "dataLine": 5,
+        "dataOffset": 38,
+        "dataEndOffset": 85
+      },
+      "children": [
+        {
+          "type": "element",
+          "tagName": "code",
+          "properties": {
+            "className": [
+              "hljs",
+              "language-not-a-language"
+            ],
+            "dataLine": 5,
+            "dataOffset": 38,
+            "dataEndOffset": 85
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "<script>alert(1)</script>\n"
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 5,
+              "column": 1,
+              "offset": 38
+            },
+            "end": {
+              "line": 7,
+              "column": 4,
+              "offset": 85
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 5,
+          "column": 1,
+          "offset": 38
+        },
+        "end": {
+          "line": 7,
+          "column": 4,
+          "offset": 85
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "pre",
+      "properties": {
+        "dataLine": 9,
+        "dataOffset": 87,
+        "dataEndOffset": 118
+      },
+      "children": [
+        {
+          "type": "element",
+          "tagName": "code",
+          "properties": {
+            "className": [
+              "language-mermaid"
+            ],
+            "dataLine": 9,
+            "dataOffset": 87,
+            "dataEndOffset": 118
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "graph LR; A-->B;\n"
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 9,
+              "column": 1,
+              "offset": 87
+            },
+            "end": {
+              "line": 11,
+              "column": 4,
+              "offset": 118
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 9,
+          "column": 1,
+          "offset": 87
+        },
+        "end": {
+          "line": 11,
+          "column": 4,
+          "offset": 118
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 12,
+      "column": 1,
+      "offset": 119
+    }
+  }
+}

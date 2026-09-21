@@ -1,0 +1,12 @@
+{
+  "name": "@iridium/testkit-fixtures",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Canonical hostile Markdown bytes and JSON expectations; inert assets only",
+  "exports": {
+    "./*.md": "./*.md",
+    "./expectations.json": "./expectations.json",
+    "./package.json": "./package.json"
+  },
+  "files": ["*.md", "expectations.json"]
+}

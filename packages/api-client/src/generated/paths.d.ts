@@ -11,6 +11,91 @@
  */
 
 export interface paths {
+    readonly "/admin/attachments/unreferenced": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Read the last completed report of attachments unused by live or retained content. */
+        readonly get: operations["admin.attachments.unreferenced"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/admin/jobs": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** List durable jobs in creation order. */
+        readonly get: operations["admin.jobs.list"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/admin/jobs/{jobId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Read job progress and outcome. */
+        readonly get: operations["admin.jobs.get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/admin/jobs/{jobId}/cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Cancel a queued maintenance job. */
+        readonly post: operations["admin.jobs.cancel"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/admin/jobs/{type}/run": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Enqueue a maintenance job with audited inputs. */
+        readonly post: operations["admin.jobs.run"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/admin/users": {
         readonly parameters: {
             readonly query?: never;
@@ -318,6 +403,76 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/nodes/{nodeId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** One live or trashed node with its derived path and current version. */
+        readonly get: operations["nodes.get"];
+        readonly put?: never;
+        readonly post?: never;
+        /** Permanently delete a trashed subtree and its note rows; attachments are retained. */
+        readonly delete: operations["nodes.purge"];
+        readonly options?: never;
+        readonly head?: never;
+        /** Rename or move a node, or preview the same validation and link impact without writes. */
+        readonly patch: operations["nodes.update"];
+        readonly trace?: never;
+    };
+    readonly "/nodes/{nodeId}/inbound-links": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Page the same target-side links that rename and move warnings summarize. */
+        readonly get: operations["nodes.inboundLinks"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/nodes/{nodeId}/restore": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Restore one cascade group or a selected member, resolving name and parent conflicts explicitly. */
+        readonly post: operations["nodes.restore"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/nodes/{nodeId}/trash": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Trash a node and, when explicitly recursive, its live descendants. */
+        readonly post: operations["nodes.trash"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/notes/{noteId}": {
         readonly parameters: {
             readonly query?: never;
@@ -327,6 +482,40 @@ export interface paths {
         };
         /** Full note metadata from the committed projection. */
         readonly get: operations["notes.get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/notes/{noteId}/backlinks": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Incoming references ordered by source path and row id. */
+        readonly get: operations["notes.backlinks"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/notes/{noteId}/links": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Outgoing references at one committed projection revision. */
+        readonly get: operations["notes.links"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -369,6 +558,75 @@ export interface paths {
         readonly patch?: never;
         readonly trace?: never;
     };
+    readonly "/notes/{noteId}/rename-impact": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Preview a proposed note path and its link impact without write permission. */
+        readonly get: operations["notes.renameImpact"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/notes/{noteId}/revisions": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** List retained checkpoints with their thinning policy, newest first. */
+        readonly get: operations["revisions.list"];
+        readonly put?: never;
+        /** Retain a named checkpoint of the current committed head. */
+        readonly post: operations["revisions.create"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/notes/{noteId}/revisions/{revisionId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Read immutable revision metadata and Markdown, or negotiate its Markdown text. */
+        readonly get: operations["revisions.get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/notes/{noteId}/revisions/{revisionId}/restore": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Restore retained content as one reversible writer operation, preserving the document identity. */
+        readonly post: operations["revisions.restore"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
     readonly "/openapi.json": {
         readonly parameters: {
             readonly query?: never;
@@ -395,6 +653,23 @@ export interface paths {
         };
         /** The readiness checklist; the same body with 200 and 503, and the status is the signal. */
         readonly get: operations["ops.readyz"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/search": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Search committed notes across the principal's accessible vaults. */
+        readonly get: operations["search.all"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -430,6 +705,77 @@ export interface paths {
         };
         /** The full vault with its treeVersion and the caller's role; a non-member gets 404. */
         readonly get: operations["vaults.get"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        /** Update vault metadata and settings while enforcing environment floors. */
+        readonly patch: operations["vaults.update"];
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Freeze the vault for reading and close its collaboration sessions after commit. */
+        readonly post: operations["vaults.archive"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/attachments": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** List attachment metadata and optional live references. */
+        readonly get: operations["attachments.list"];
+        readonly put?: never;
+        /** Stream, sniff and deduplicate exactly one multipart attachment. */
+        readonly post: operations["attachments.upload"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/attachments/{attachmentId}": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Read immutable attachment bytes with safe disposition and single-range support. */
+        readonly get: operations["attachments.download"];
+        readonly put?: never;
+        readonly post?: never;
+        /** Soft-delete an attachment; referenced files require force=true. */
+        readonly delete: operations["attachments.delete"];
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/attachments/{attachmentId}/meta": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Read attachment metadata and its deletion validator. */
+        readonly get: operations["attachments.getMeta"];
         readonly put?: never;
         readonly post?: never;
         readonly delete?: never;
@@ -480,10 +826,79 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        readonly get?: never;
+        /** Derived paths and committed summaries, with history authorization for trashed nodes. */
+        readonly get: operations["nodes.list"];
         readonly put?: never;
         /** Create a note inside a category. */
         readonly post: operations["nodes.create"];
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/search": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Search the committed index of one accessible vault. */
+        readonly get: operations["search.vault"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/trash": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** Newest-first trash groups with current validators; requires history:read. */
+        readonly get: operations["trash.list"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/tree": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        /** One live parent and its children, categories first, with natural name ordering. */
+        readonly get: operations["tree.listChildren"];
+        readonly put?: never;
+        readonly post?: never;
+        readonly delete?: never;
+        readonly options?: never;
+        readonly head?: never;
+        readonly patch?: never;
+        readonly trace?: never;
+    };
+    readonly "/vaults/{vaultId}/unarchive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly get?: never;
+        readonly put?: never;
+        /** Return an archived vault to active use. */
+        readonly post: operations["vaults.unarchive"];
         readonly delete?: never;
         readonly options?: never;
         readonly head?: never;
@@ -529,6 +944,56 @@ export interface components {
             readonly vaultCount: number;
             readonly version: components["schemas"]["Version"];
         };
+        readonly AffectedLinks: {
+            readonly byStatus: {
+                readonly ambiguous: number;
+                readonly broken: number;
+                readonly external: number;
+                readonly resolved: number;
+            };
+            readonly samples: readonly {
+                readonly fromNoteId: string;
+                readonly fromPath: string;
+                readonly line: number;
+                readonly rawTarget: string;
+            }[];
+            readonly total: number;
+        };
+        readonly Attachment: {
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly deletedAt: components["schemas"]["Timestamp"] | null;
+            readonly id: string;
+            readonly inlineable: boolean;
+            readonly mime: string;
+            readonly originalName: string;
+            readonly pathHint: string;
+            readonly referencedBy?: readonly components["schemas"]["AttachmentReference"][];
+            readonly referencedByTotal?: number;
+            readonly sha256: components["schemas"]["Sha256Hex"];
+            readonly sizeBytes: number;
+            readonly uploadedBy: components["schemas"]["UserRef"];
+            readonly vaultId: string;
+            readonly version: components["schemas"]["Version"];
+        };
+        readonly AttachmentPage: {
+            readonly items: readonly components["schemas"]["Attachment"][];
+            readonly nextCursor?: string;
+        };
+        readonly AttachmentReference: {
+            readonly noteId: string;
+            readonly path: string;
+        };
+        readonly AttachmentUploadBodyInput: {
+            /** Format: binary */
+            readonly file: string;
+            readonly noteId?: string;
+            readonly pathHint?: string;
+        };
+        readonly AttachmentUploaded: {
+            readonly attachment: components["schemas"]["Attachment"];
+            readonly deduplicated: boolean;
+            readonly markdownReference: string;
+        };
         readonly ChangePasswordBodyInput: {
             readonly currentPassword: string;
             readonly newPassword: components["schemas"]["PasswordInput"];
@@ -543,6 +1008,10 @@ export interface components {
             readonly tickets: readonly string[];
         };
         readonly ColorHue: number;
+        readonly ConfirmVaultBodyInput: {
+            /** @constant */
+            readonly confirm: true;
+        };
         readonly CreateAdminUserBodyInput: {
             readonly displayName: components["schemas"]["DisplayNameInput"];
             readonly email: components["schemas"]["EmailInput"];
@@ -554,12 +1023,15 @@ export interface components {
             readonly count: number;
         };
         readonly CreateNodeBodyInput: {
-            /** @constant */
-            readonly kind: "note";
+            /** @enum {string} */
+            readonly kind: "category" | "note";
             /** @description At most 2,097,152 UTF-16 code units. */
             readonly markdown?: string;
             readonly name: components["schemas"]["NodeNameInput"];
             readonly parentId: string;
+        };
+        readonly CreateRevisionBodyInput: {
+            readonly label: string;
         };
         readonly CreateSessionBodyInput: {
             readonly client: components["schemas"]["ClientKindInput"];
@@ -598,14 +1070,65 @@ export interface components {
             readonly uptimeSeconds: number;
             readonly version: string;
         };
+        readonly InboundLinksPage: {
+            readonly items: readonly components["schemas"]["Link"][];
+            readonly nextCursor?: string;
+            readonly subtreeNodeIds: number;
+        };
+        readonly Job: {
+            readonly attempts: number;
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly error: string | null;
+            readonly finishedAt: components["schemas"]["Timestamp"] | null;
+            readonly id: string;
+            readonly progress: components["schemas"]["JobProgress"] | null;
+            readonly requestedBy: components["schemas"]["UserRef"] | null;
+            readonly result: {
+                readonly [key: string]: unknown;
+            } | null;
+            readonly startedAt: components["schemas"]["Timestamp"] | null;
+            readonly status: components["schemas"]["JobStatus"];
+            readonly type: components["schemas"]["JobType"];
+            readonly vaultId: string | null;
+        };
+        readonly JobPage: {
+            readonly items: readonly components["schemas"]["Job"][];
+            readonly nextCursor?: string;
+        };
+        readonly JobProgress: {
+            readonly cursor?: string;
+            readonly done: number;
+            readonly phase: string;
+            readonly total: number;
+        };
         /** @enum {string} */
-        readonly LoadExternalImages: "never" | "click" | "always";
+        readonly JobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         /** @enum {string} */
-        readonly LoadExternalImagesInput: "never" | "click" | "always";
+        readonly JobType: "import" | "export" | "reindex" | "trash_purge" | "update_log_prune" | "revision_thinning" | "access_log_partitions" | "audit_archive" | "transfer_cleanup" | "session_ticket_sweep" | "last_used_flush" | "attachment_unreferenced_report";
+        readonly Link: {
+            readonly endOffset: number;
+            readonly fragment: string | null;
+            readonly fromNoteId: string;
+            readonly fromPath: string;
+            readonly id: number;
+            /** @enum {string} */
+            readonly kind: "markdown" | "image" | "wikilink" | "embed" | "definition";
+            readonly line: number;
+            readonly ordinal: number;
+            readonly rawTarget: string;
+            readonly resolvedAttachmentId: string | null;
+            readonly resolvedNodeId: string | null;
+            readonly revision: number;
+            readonly startOffset: number;
+            /** @enum {string} */
+            readonly status: "resolved" | "ambiguous" | "broken" | "external";
+        };
+        readonly LinkPage: {
+            readonly items: readonly components["schemas"]["Link"][];
+            readonly nextCursor?: string;
+        };
         /** @enum {string} */
         readonly MarkdownFlavor: "gfm" | "obsidian-compat";
-        /** @enum {string} */
-        readonly MarkdownFlavorInput: "gfm" | "obsidian-compat";
         readonly Me: {
             readonly isServerAdmin: boolean;
             readonly lastAuthenticatedAt?: components["schemas"]["Timestamp"];
@@ -708,12 +1231,27 @@ export interface components {
         readonly NodeKind: "category" | "note";
         /** Format: iridium-node-name */
         readonly NodeNameInput: string;
+        readonly NodePage: {
+            readonly items: readonly components["schemas"]["Node"][];
+            readonly nextCursor?: string;
+            readonly stale?: boolean;
+            readonly treeVersion: number;
+        };
+        readonly NodePatchResult: {
+            readonly affectedLinks: components["schemas"]["AffectedLinks"];
+            readonly dryRun: boolean;
+            readonly node: components["schemas"]["Node"];
+        };
         readonly NoteHeading: {
             readonly depth: number;
             readonly line: number;
             readonly offset: number;
             readonly slug: string;
             readonly text: string;
+        };
+        readonly NoteLinks: {
+            readonly items: readonly components["schemas"]["Link"][];
+            readonly revision: number;
         };
         readonly NoteMarkdown: string;
         readonly NoteMeta: {
@@ -766,6 +1304,32 @@ export interface components {
             readonly items: readonly components["schemas"]["NoteParticipant"][];
             readonly loaded: boolean;
         };
+        readonly NoteRevision: {
+            readonly author: {
+                /** @constant */
+                readonly kind: "user";
+                readonly user: components["schemas"]["UserRef"];
+            } | {
+                /** @constant */
+                readonly kind: "token";
+                readonly name: string;
+                readonly tokenId: string;
+            } | {
+                /** @constant */
+                readonly kind: "system";
+            };
+            readonly contentHash: components["schemas"]["Sha256Hex"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly hasSnapshot: boolean;
+            readonly id: number;
+            /** @enum {string} */
+            readonly kind: "create" | "import" | "checkpoint" | "unload" | "named" | "pre_restore" | "restore" | "trash";
+            readonly label: string | null;
+            readonly noteId: string;
+            readonly restoredFromRevisionId: number | null;
+            readonly revision: number;
+            readonly sizeChars: number;
+        };
         readonly NoteSummary: {
             readonly contentHash: components["schemas"]["Sha256Hex"] | null;
             readonly contentInvalid: boolean;
@@ -791,6 +1355,26 @@ export interface components {
         /** @enum {string} */
         readonly OriginalEol: "lf" | "crlf" | "cr" | "mixed";
         readonly PasswordInput: string;
+        readonly PatchNodeBodyInput: {
+            /** @default false */
+            readonly dryRun: boolean;
+            readonly name?: components["schemas"]["NodeNameInput"];
+            readonly parentId?: string;
+        };
+        readonly PatchVaultBodyInput: {
+            readonly aiGuidance?: string | null;
+            readonly attachmentFolder?: string;
+            readonly autoCheckpointIntervalMin?: number;
+            readonly description?: string | null;
+            /** @enum {string} */
+            readonly loadExternalImages?: "never" | "click" | "always";
+            /** @enum {string} */
+            readonly markdownFlavor?: "gfm" | "obsidian-compat";
+            readonly mcpEnabled?: boolean;
+            readonly name?: components["schemas"]["VaultNameInput"];
+            readonly softBreaks?: boolean;
+            readonly trashRetentionDays?: number;
+        };
         /** @enum {string} */
         readonly Permission: "vault:read" | "note:read" | "search:read" | "history:read" | "attachment:read" | "export:read" | "note:write" | "node:create" | "node:rename" | "node:move" | "node:trash" | "node:restore" | "attachment:write" | "revision:name" | "vault:manage_members" | "vault:settings" | "vault:archive" | "history:restore" | "node:purge" | "import:commit" | "server:users" | "server:vaults:create" | "server:settings" | "server:audit:all" | "server:tokens:all" | "server:sessions:all" | "server:jobs" | "server:releases";
         readonly ProblemDetails: {
@@ -842,10 +1426,123 @@ export interface components {
             readonly lastAuthenticatedAt: components["schemas"]["Timestamp"];
             readonly stepUpExpiresAt: components["schemas"]["Timestamp"];
         };
+        readonly RenameImpactResult: {
+            readonly affectedLinks: components["schemas"]["AffectedLinks"];
+            readonly newPath: string;
+            readonly wouldConflict: boolean;
+        };
+        readonly RestoredRevision: {
+            /** @constant */
+            readonly changed: false;
+            readonly contentHash: components["schemas"]["Sha256Hex"];
+            readonly revision: number;
+        } | {
+            /** @constant */
+            readonly changed: true;
+            readonly contentHash: components["schemas"]["Sha256Hex"];
+            readonly preRestore: components["schemas"]["NoteRevision"];
+            readonly restored: components["schemas"]["NoteRevision"];
+            readonly revision: number;
+        };
+        readonly RestoreNodeBodyInput: {
+            /** @default false */
+            readonly dryRun: boolean;
+            readonly newName?: components["schemas"]["NodeNameInput"];
+            readonly newParentId?: string;
+        };
+        readonly RestoreNodeResult: {
+            readonly dryRun: boolean;
+            readonly nodes: readonly components["schemas"]["Node"][];
+            readonly treeVersion: number;
+        };
+        readonly RestoreRevisionBodyInput: {
+            /** @constant */
+            readonly confirm: true;
+        };
+        readonly RetentionPolicy: {
+            readonly neverThinned: readonly ("create" | "import" | "checkpoint" | "unload" | "named" | "pre_restore" | "restore" | "trash")[];
+            /** @constant */
+            readonly rule: "all for 24h, hourly for 30d, daily thereafter";
+            /** @constant */
+            readonly thinned: true;
+        };
+        readonly RevisionContent: {
+            readonly author: {
+                /** @constant */
+                readonly kind: "user";
+                readonly user: components["schemas"]["UserRef"];
+            } | {
+                /** @constant */
+                readonly kind: "token";
+                readonly name: string;
+                readonly tokenId: string;
+            } | {
+                /** @constant */
+                readonly kind: "system";
+            };
+            readonly contentHash: components["schemas"]["Sha256Hex"];
+            readonly createdAt: components["schemas"]["Timestamp"];
+            readonly hasSnapshot: boolean;
+            readonly id: number;
+            /** @enum {string} */
+            readonly kind: "create" | "import" | "checkpoint" | "unload" | "named" | "pre_restore" | "restore" | "trash";
+            readonly label: string | null;
+            readonly markdown: string;
+            readonly noteId: string;
+            readonly restoredFromRevisionId: number | null;
+            readonly revision: number;
+            readonly sizeChars: number;
+        };
+        readonly RevisionPage: {
+            readonly headRevision: number;
+            readonly items: readonly components["schemas"]["NoteRevision"][];
+            readonly nextCursor?: string;
+            readonly retention: components["schemas"]["RetentionPolicy"];
+        };
         /** @enum {string} */
         readonly Role: "viewer" | "editor" | "manager";
         /** @enum {string} */
         readonly RoleInput: "viewer" | "editor" | "manager";
+        readonly RunJobBodyInput: {
+            /** @default {} */
+            readonly payload: {
+                readonly [key: string]: unknown;
+            };
+        };
+        readonly SearchHit: {
+            readonly noteId: string;
+            readonly path: string;
+            readonly revision: number;
+            readonly score: number;
+            readonly snippets: readonly components["schemas"]["SearchSnippet"][];
+            readonly stale: boolean;
+            readonly title: string;
+            readonly updatedAt: components["schemas"]["Timestamp"];
+            readonly vaultId: string;
+            readonly vaultName: string;
+        };
+        readonly SearchPage: {
+            readonly nextCursor?: string;
+            readonly query: {
+                readonly negations: readonly string[];
+                readonly operators: {
+                    readonly [key: string]: string;
+                };
+                readonly phrases: readonly string[];
+                readonly raw: string;
+                readonly terms: readonly string[];
+            };
+            readonly results: readonly components["schemas"]["SearchHit"][];
+            readonly totalEstimate?: number;
+        };
+        readonly SearchSnippet: {
+            readonly line: number;
+            readonly ranges?: readonly {
+                readonly end: number;
+                readonly start: number;
+            }[];
+            readonly text: string;
+        };
         readonly Session: {
             readonly absoluteExpiresAt: components["schemas"]["Timestamp"];
             readonly clientName: string | null;
@@ -878,6 +1575,61 @@ export interface components {
         readonly Sha256Hex: string;
         readonly SwaggerUiPage: string;
         readonly Timestamp: string;
+        readonly TrashEntry: {
+            readonly cascadeRootId: string;
+            readonly deletedAt: components["schemas"]["Timestamp"];
+            readonly deletedBy: components["schemas"]["UserRef"];
+            readonly descendantCount: number;
+            readonly expiresAt: components["schemas"]["Timestamp"];
+            readonly kind: components["schemas"]["NodeKind"];
+            readonly name: string;
+            readonly nodeId: string;
+            readonly originalParentId: string;
+            readonly originalPath: string;
+            readonly version: number;
+        };
+        readonly TrashNodeBodyInput: {
+            /** @default false */
+            readonly recursive: boolean;
+        };
+        readonly TrashNodeResult: {
+            readonly nodes: readonly components["schemas"]["Node"][];
+            readonly trashEntry: components["schemas"]["TrashEntry"];
+            readonly treeVersion: number;
+        };
+        readonly TrashPage: {
+            readonly items: readonly components["schemas"]["TrashEntry"][];
+            readonly nextCursor?: string;
+            readonly retentionDays: number;
+        };
+        readonly TreePage: {
+            readonly items: readonly components["schemas"]["Node"][];
+            readonly nextCursor?: string;
+            readonly parent: components["schemas"]["Node"];
+            readonly treeVersion: number;
+        };
+        readonly UnreferencedAttachmentPage: {
+            readonly items: readonly {
+                readonly createdAt: components["schemas"]["Timestamp"];
+                readonly deletedAt: components["schemas"]["Timestamp"] | null;
+                readonly id: string;
+                readonly inlineable: boolean;
+                readonly lastReferencedRevision: number | null;
+                readonly mime: string;
+                readonly originalName: string;
+                readonly pathHint: string;
+                readonly referencedBy?: readonly components["schemas"]["AttachmentReference"][];
+                readonly referencedByTotal?: number;
+                readonly sha256: components["schemas"]["Sha256Hex"];
+                readonly sizeBytes: number;
+                readonly uploadedBy: components["schemas"]["UserRef"];
+                readonly vaultId: string;
+                readonly version: components["schemas"]["Version"];
+            }[];
+            readonly jobId: string;
+            readonly nextCursor?: string;
+            readonly scannedAt: components["schemas"]["Timestamp"];
+        };
         readonly UpdateMeBodyInput: {
             readonly displayName: components["schemas"]["DisplayNameInput"];
         };
@@ -935,8 +1687,10 @@ export interface components {
             readonly aiGuidance: string | null;
             readonly attachmentFolder: string;
             readonly autoCheckpointIntervalMin: number;
-            readonly loadExternalImages: components["schemas"]["LoadExternalImages"];
-            readonly markdownFlavor: components["schemas"]["MarkdownFlavor"];
+            /** @enum {string} */
+            readonly loadExternalImages: "never" | "click" | "always";
+            /** @enum {string} */
+            readonly markdownFlavor: "gfm" | "obsidian-compat";
             readonly mcpEnabled: boolean;
             readonly softBreaks: boolean;
             readonly trashRetentionDays: number;
@@ -945,8 +1699,10 @@ export interface components {
             readonly aiGuidance?: string | null;
             readonly attachmentFolder?: string;
             readonly autoCheckpointIntervalMin?: number;
-            readonly loadExternalImages?: components["schemas"]["LoadExternalImagesInput"];
-            readonly markdownFlavor?: components["schemas"]["MarkdownFlavorInput"];
+            /** @enum {string} */
+            readonly loadExternalImages?: "never" | "click" | "always";
+            /** @enum {string} */
+            readonly markdownFlavor?: "gfm" | "obsidian-compat";
             readonly mcpEnabled?: boolean;
             readonly softBreaks?: boolean;
             readonly trashRetentionDays?: number;
@@ -984,6 +1740,333 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    readonly "admin.attachments.unreferenced": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly vaultId?: string;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["UnreferencedAttachmentPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `unavailable` — Temporarily unavailable */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "admin.jobs.list": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly status?: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+                readonly type?: "import" | "export" | "reindex" | "trash_purge" | "update_log_prune" | "revision_thinning" | "access_log_partitions" | "audit_archive" | "transfer_cleanup" | "session_ticket_sweep" | "last_used_flush" | "attachment_unreferenced_report";
+                readonly vaultId?: string;
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["JobPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "admin.jobs.get": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly jobId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "admin.jobs.cancel": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly jobId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid_state` — Not possible in the current state */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "admin.jobs.run": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly type: "reindex" | "trash_purge" | "update_log_prune" | "revision_thinning" | "access_log_partitions" | "audit_archive" | "transfer_cleanup" | "session_ticket_sweep" | "attachment_unreferenced_report";
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RunJobBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 202: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     readonly "admin.users.list": {
         readonly parameters: {
             readonly query?: {
@@ -2062,6 +3145,485 @@ export interface operations {
             };
         };
     };
+    readonly "nodes.get": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Node"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "nodes.purge": {
+        readonly parameters: {
+            readonly query: {
+                readonly purge: "true";
+            };
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description No content; the status is the whole answer. */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "nodes.update": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["PatchNodeBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["NodePatchResult"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived; `node_trashed` — This item is in the trash */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "nodes.inboundLinks": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly status?: ("resolved" | "ambiguous" | "broken" | "external") | readonly ("resolved" | "ambiguous" | "broken" | "external")[];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["InboundLinksPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "nodes.restore": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RestoreNodeBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RestoreNodeResult"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "nodes.trash": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly nodeId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["TrashNodeBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["TrashNodeResult"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived; `category_not_empty` — This category is not empty */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     readonly "notes.get": {
         readonly parameters: {
             readonly query?: never;
@@ -2095,6 +3657,126 @@ export interface operations {
             };
             /** @description `not_found` — Not found */
             readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "notes.backlinks": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly status?: ("resolved" | "ambiguous" | "broken" | "external") | readonly ("resolved" | "ambiguous" | "broken" | "external")[];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["LinkPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "notes.links": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["NoteLinks"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
@@ -2271,6 +3953,415 @@ export interface operations {
             };
         };
     };
+    readonly "notes.renameImpact": {
+        readonly parameters: {
+            readonly query?: {
+                readonly name?: string;
+                readonly parentId?: string;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RenameImpactResult"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid_move` — That move is not allowed */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "revisions.list": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly kinds?: ("create" | "import" | "checkpoint" | "unload" | "named" | "pre_restore" | "restore" | "trash") | readonly ("create" | "import" | "checkpoint" | "unload" | "named" | "pre_restore" | "restore" | "trash")[];
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RevisionPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "revisions.create": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["CreateRevisionBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["NoteRevision"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `node_trashed` — This item is in the trash; `content_invalid` — This note needs repair; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `rate_limited` — Too many requests */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `capacity` — The server is at capacity; `unavailable` — Temporarily unavailable */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "revisions.get": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+                readonly revisionId: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RevisionContent"];
+                    readonly "text/markdown": string;
+                };
+            };
+            /** @description No response body */
+            readonly 304: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "revisions.restore": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly noteId: string;
+                readonly revisionId: number;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["RestoreRevisionBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["RestoredRevision"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `node_trashed` — This item is in the trash; `content_invalid` — This note needs repair; `note_oversized` — This note is too large; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `capacity` — The server is at capacity; `unavailable` — Temporarily unavailable */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     readonly "meta.openapi": {
         readonly parameters: {
             readonly query?: never;
@@ -2343,6 +4434,69 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": components["schemas"]["ReadyzBody"];
+                };
+            };
+        };
+    };
+    readonly "search.all": {
+        readonly parameters: {
+            readonly query: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly pathPrefix?: string;
+                readonly q: string;
+                readonly snippetChars?: number;
+                readonly vaultIds?: string | readonly string[];
+            };
+            readonly header?: never;
+            readonly path?: never;
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["SearchPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `rate_limited` — Too many requests */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -2494,6 +4648,673 @@ export interface operations {
                 };
                 content: {
                     readonly "application/json": components["schemas"]["Vault"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "vaults.update": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["PatchVaultBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Vault"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "vaults.archive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ConfirmVaultBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Vault"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid_state` — Not possible in the current state; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "attachments.list": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly includeDeleted?: "true" | "false";
+                readonly includeReferences?: "true" | "false";
+                readonly limit?: number;
+                readonly noteId?: string;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AttachmentPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "attachments.upload": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "multipart/form-data": components["schemas"]["AttachmentUploadBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 201: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["AttachmentUploaded"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `name_conflict` — That name is already taken here; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `unsupported_media` — Unsupported content type */
+            readonly 415: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `rate_limited` — Too many requests */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `capacity` — The server is at capacity */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "attachments.download": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly attachmentId: string;
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The attachment SHA-256 content hash, as a quoted strong validator. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": unknown;
+                    readonly "application/msword": unknown;
+                    readonly "application/pdf": unknown;
+                    readonly "application/vnd.ms-excel": unknown;
+                    readonly "application/vnd.ms-outlook": unknown;
+                    readonly "application/vnd.ms-powerpoint": unknown;
+                    readonly "application/vnd.oasis.opendocument.presentation": unknown;
+                    readonly "application/vnd.oasis.opendocument.spreadsheet": unknown;
+                    readonly "application/vnd.oasis.opendocument.text": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.presentationml.presentation": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                    readonly "audio/3gpp": unknown;
+                    readonly "audio/flac": unknown;
+                    readonly "audio/mp4": unknown;
+                    readonly "audio/mpeg": unknown;
+                    readonly "audio/ogg": unknown;
+                    readonly "audio/wav": unknown;
+                    readonly "audio/webm": unknown;
+                    readonly "image/avif": unknown;
+                    readonly "image/bmp": unknown;
+                    readonly "image/gif": unknown;
+                    readonly "image/jpeg": unknown;
+                    readonly "image/png": unknown;
+                    readonly "image/svg+xml": unknown;
+                    readonly "image/webp": unknown;
+                    readonly "text/csv": unknown;
+                    readonly "text/markdown": unknown;
+                    readonly "text/plain": unknown;
+                    readonly "text/xml": unknown;
+                    readonly "video/mp4": unknown;
+                    readonly "video/ogg": unknown;
+                    readonly "video/quicktime": unknown;
+                    readonly "video/webm": unknown;
+                    readonly "video/x-matroska": unknown;
+                };
+            };
+            /** @description Default Response */
+            readonly 206: {
+                headers: {
+                    /** @description The attachment SHA-256 content hash, as a quoted strong validator. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": unknown;
+                    readonly "application/msword": unknown;
+                    readonly "application/pdf": unknown;
+                    readonly "application/vnd.ms-excel": unknown;
+                    readonly "application/vnd.ms-outlook": unknown;
+                    readonly "application/vnd.ms-powerpoint": unknown;
+                    readonly "application/vnd.oasis.opendocument.presentation": unknown;
+                    readonly "application/vnd.oasis.opendocument.spreadsheet": unknown;
+                    readonly "application/vnd.oasis.opendocument.text": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.presentationml.presentation": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": unknown;
+                    readonly "application/vnd.openxmlformats-officedocument.wordprocessingml.document": unknown;
+                    readonly "audio/3gpp": unknown;
+                    readonly "audio/flac": unknown;
+                    readonly "audio/mp4": unknown;
+                    readonly "audio/mpeg": unknown;
+                    readonly "audio/ogg": unknown;
+                    readonly "audio/wav": unknown;
+                    readonly "audio/webm": unknown;
+                    readonly "image/avif": unknown;
+                    readonly "image/bmp": unknown;
+                    readonly "image/gif": unknown;
+                    readonly "image/jpeg": unknown;
+                    readonly "image/png": unknown;
+                    readonly "image/svg+xml": unknown;
+                    readonly "image/webp": unknown;
+                    readonly "text/csv": unknown;
+                    readonly "text/markdown": unknown;
+                    readonly "text/plain": unknown;
+                    readonly "text/xml": unknown;
+                    readonly "video/mp4": unknown;
+                    readonly "video/ogg": unknown;
+                    readonly "video/quicktime": unknown;
+                    readonly "video/webm": unknown;
+                    readonly "video/x-matroska": unknown;
+                };
+            };
+            /** @description No content; the status is the whole answer. */
+            readonly 304: {
+                headers: {
+                    /** @description The attachment SHA-256 content hash, as a quoted strong validator. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 416: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `server_error` — Something went wrong */
+            readonly 503: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "attachments.delete": {
+        readonly parameters: {
+            readonly query?: {
+                readonly force?: "true" | "false";
+            };
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly attachmentId: string;
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description No content; the status is the whole answer. */
+            readonly 204: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `attachment_referenced` — This attachment is still in use; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "attachments.getMeta": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header?: never;
+            readonly path: {
+                readonly attachmentId: string;
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Attachment"];
                 };
             };
             /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
@@ -2763,6 +5584,80 @@ export interface operations {
             };
         };
     };
+    readonly "nodes.list": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly includeTrashed?: "true" | "false";
+                readonly kinds?: ("category" | "note") | readonly ("category" | "note")[];
+                readonly limit?: number;
+                readonly pathPrefix?: string;
+                readonly recursive?: "true" | "false";
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["NodePage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     readonly "nodes.create": {
         readonly parameters: {
             readonly query?: never;
@@ -2825,6 +5720,306 @@ export interface operations {
             };
             /** @description `validation_failed` — Some fields need attention */
             readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "search.vault": {
+        readonly parameters: {
+            readonly query: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly pathPrefix?: string;
+                readonly q: string;
+                readonly snippetChars?: number;
+                readonly vaultIds?: string | readonly string[];
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["SearchPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in; `token_expired` — This token has expired */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `rate_limited` — Too many requests */
+            readonly 429: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "trash.list": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["TrashPage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "tree.listChildren": {
+        readonly parameters: {
+            readonly query?: {
+                readonly cursor?: string;
+                readonly limit?: number;
+                readonly parent?: string;
+            };
+            readonly header?: never;
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody?: never;
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["TreePage"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong */
+            readonly default: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    readonly "vaults.unarchive": {
+        readonly parameters: {
+            readonly query?: never;
+            readonly header: {
+                /** @description The `"<version>"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`. */
+                readonly "if-match": string;
+            };
+            readonly path: {
+                readonly vaultId: string;
+            };
+            readonly cookie?: never;
+        };
+        readonly requestBody: {
+            readonly content: {
+                readonly "application/json": components["schemas"]["ConfirmVaultBodyInput"];
+            };
+        };
+        readonly responses: {
+            /** @description Default Response */
+            readonly 200: {
+                headers: {
+                    /** @description The row version, as `"<version>"`. This is the value `If-Match` compares against. */
+                    readonly ETag?: string;
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/json": components["schemas"]["Vault"];
+                };
+            };
+            /** @description `unauthenticated` — Not signed in */
+            readonly 401: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required */
+            readonly 403: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `not_found` — Not found */
+            readonly 404: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `invalid_state` — Not possible in the current state; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived */
+            readonly 409: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description `precondition_required` — A version is required for this change */
+            readonly 428: {
                 headers: {
                     readonly [name: string]: unknown;
                 };

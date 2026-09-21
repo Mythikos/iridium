@@ -70,40 +70,40 @@
         "format": "iridium-node-name",
         "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$"
       },
-      "MarkdownFlavorInput": {
-        "type": "string",
-        "enum": [
-          "gfm",
-          "obsidian-compat"
-        ]
-      },
-      "LoadExternalImagesInput": {
-        "type": "string",
-        "enum": [
-          "never",
-          "click",
-          "always"
-        ]
-      },
       "VaultSettingsPatchInput": {
         "type": "object",
         "properties": {
           "markdownFlavor": {
-            "$ref": "#/components/schemas/MarkdownFlavorInput"
+            "type": "string",
+            "enum": [
+              "gfm",
+              "obsidian-compat"
+            ],
+            "x-iridium-stricter": "none"
           },
           "softBreaks": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-iridium-stricter": "none"
           },
           "attachmentFolder": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 255
+            "maxLength": 255,
+            "x-iridium-stricter": "none"
           },
           "loadExternalImages": {
-            "$ref": "#/components/schemas/LoadExternalImagesInput"
+            "type": "string",
+            "enum": [
+              "never",
+              "click",
+              "always"
+            ],
+            "x-iridium-stricter": "none"
           },
           "mcpEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-iridium-stricter": "false",
+            "x-iridium-environment": "MCP_ENABLED"
           },
           "aiGuidance": {
             "anyOf": [
@@ -114,17 +114,21 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "x-iridium-stricter": "none"
           },
           "trashRetentionDays": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3650
+            "maximum": 3650,
+            "x-iridium-stricter": "higher",
+            "x-iridium-environment": "TRASH_RETENTION_DAYS"
           },
           "autoCheckpointIntervalMin": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1440
+            "maximum": 1440,
+            "x-iridium-stricter": "none"
           }
         },
         "additionalProperties": false
@@ -304,7 +308,10 @@
         "properties": {
           "kind": {
             "type": "string",
-            "const": "note"
+            "enum": [
+              "category",
+              "note"
+            ]
           },
           "parentId": {
             "type": "string",
@@ -323,6 +330,111 @@
           "kind",
           "parentId",
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentUploadBodyInput": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          },
+          "pathHint": {
+            "type": "string"
+          },
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "additionalProperties": false
+      },
+      "RunJobBodyInput": {
+        "type": "object",
+        "properties": {
+          "payload": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "additionalProperties": false
+      },
+      "PatchNodeBodyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/NodeNameInput"
+          },
+          "parentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "dryRun": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrashNodeBodyInput": {
+        "type": "object",
+        "properties": {
+          "recursive": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestoreNodeBodyInput": {
+        "type": "object",
+        "properties": {
+          "newName": {
+            "$ref": "#/components/schemas/NodeNameInput"
+          },
+          "newParentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "dryRun": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateRevisionBodyInput": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "RestoreRevisionBodyInput": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirm"
         ],
         "additionalProperties": false
       },
@@ -366,6 +478,96 @@
         },
         "required": [
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "PatchVaultBodyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/VaultNameInput"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "markdownFlavor": {
+            "type": "string",
+            "enum": [
+              "gfm",
+              "obsidian-compat"
+            ],
+            "x-iridium-stricter": "none"
+          },
+          "softBreaks": {
+            "type": "boolean",
+            "x-iridium-stricter": "none"
+          },
+          "attachmentFolder": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "x-iridium-stricter": "none"
+          },
+          "loadExternalImages": {
+            "type": "string",
+            "enum": [
+              "never",
+              "click",
+              "always"
+            ],
+            "x-iridium-stricter": "none"
+          },
+          "mcpEnabled": {
+            "type": "boolean",
+            "x-iridium-stricter": "false",
+            "x-iridium-environment": "MCP_ENABLED"
+          },
+          "aiGuidance": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "x-iridium-stricter": "none"
+          },
+          "trashRetentionDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650,
+            "x-iridium-stricter": "higher",
+            "x-iridium-environment": "TRASH_RETENTION_DAYS"
+          },
+          "autoCheckpointIntervalMin": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440,
+            "x-iridium-stricter": "none"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConfirmVaultBodyInput": {
+        "type": "object",
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "confirm"
         ],
         "additionalProperties": false
       },
@@ -822,33 +1024,40 @@
           "obsidian-compat"
         ]
       },
-      "LoadExternalImages": {
-        "type": "string",
-        "enum": [
-          "never",
-          "click",
-          "always"
-        ]
-      },
       "VaultSettings": {
         "type": "object",
         "properties": {
           "markdownFlavor": {
-            "$ref": "#/components/schemas/MarkdownFlavor"
+            "type": "string",
+            "enum": [
+              "gfm",
+              "obsidian-compat"
+            ],
+            "x-iridium-stricter": "none"
           },
           "softBreaks": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-iridium-stricter": "none"
           },
           "attachmentFolder": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 255
+            "maxLength": 255,
+            "x-iridium-stricter": "none"
           },
           "loadExternalImages": {
-            "$ref": "#/components/schemas/LoadExternalImages"
+            "type": "string",
+            "enum": [
+              "never",
+              "click",
+              "always"
+            ],
+            "x-iridium-stricter": "none"
           },
           "mcpEnabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "x-iridium-stricter": "false",
+            "x-iridium-environment": "MCP_ENABLED"
           },
           "aiGuidance": {
             "anyOf": [
@@ -859,17 +1068,21 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "x-iridium-stricter": "none"
           },
           "trashRetentionDays": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 3650
+            "maximum": 3650,
+            "x-iridium-stricter": "higher",
+            "x-iridium-environment": "TRASH_RETENTION_DAYS"
           },
           "autoCheckpointIntervalMin": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1440
+            "maximum": 1440,
+            "x-iridium-stricter": "none"
           }
         },
         "required": [
@@ -2339,6 +2552,1474 @@
           "status",
           "checks",
           "checkedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentReference": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "noteId",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "vaultId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256Hex"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "mime": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "pathHint": {
+            "type": "string",
+            "maxLength": 760
+          },
+          "inlineable": {
+            "type": "boolean"
+          },
+          "uploadedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "deletedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "referencedBy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttachmentReference"
+            }
+          },
+          "referencedByTotal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "vaultId",
+          "sha256",
+          "sizeBytes",
+          "mime",
+          "originalName",
+          "pathHint",
+          "inlineable",
+          "uploadedBy",
+          "createdAt",
+          "deletedAt",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AttachmentUploaded": {
+        "type": "object",
+        "properties": {
+          "attachment": {
+            "$ref": "#/components/schemas/Attachment"
+          },
+          "markdownReference": {
+            "type": "string"
+          },
+          "deduplicated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "attachment",
+          "markdownReference",
+          "deduplicated"
+        ],
+        "additionalProperties": false
+      },
+      "UnreferencedAttachmentPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                },
+                "vaultId": {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                },
+                "sha256": {
+                  "$ref": "#/components/schemas/Sha256Hex"
+                },
+                "sizeBytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "mime": {
+                  "type": "string"
+                },
+                "originalName": {
+                  "type": "string"
+                },
+                "pathHint": {
+                  "type": "string",
+                  "maxLength": 760
+                },
+                "inlineable": {
+                  "type": "boolean"
+                },
+                "uploadedBy": {
+                  "$ref": "#/components/schemas/UserRef"
+                },
+                "createdAt": {
+                  "$ref": "#/components/schemas/Timestamp"
+                },
+                "deletedAt": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Timestamp"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "version": {
+                  "$ref": "#/components/schemas/Version"
+                },
+                "referencedBy": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttachmentReference"
+                  }
+                },
+                "referencedByTotal": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "lastReferencedRevision": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "vaultId",
+                "sha256",
+                "sizeBytes",
+                "mime",
+                "originalName",
+                "pathHint",
+                "inlineable",
+                "uploadedBy",
+                "createdAt",
+                "deletedAt",
+                "version",
+                "lastReferencedRevision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "scannedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "jobId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          }
+        },
+        "required": [
+          "items",
+          "scannedAt",
+          "jobId"
+        ],
+        "additionalProperties": false
+      },
+      "JobType": {
+        "type": "string",
+        "enum": [
+          "import",
+          "export",
+          "reindex",
+          "trash_purge",
+          "update_log_prune",
+          "revision_thinning",
+          "access_log_partitions",
+          "audit_archive",
+          "transfer_cleanup",
+          "session_ticket_sweep",
+          "last_used_flush",
+          "attachment_unreferenced_report"
+        ]
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ]
+      },
+      "JobProgress": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string"
+          },
+          "done": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "done",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "type": {
+            "$ref": "#/components/schemas/JobType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "vaultId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Timestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "vaultId",
+          "requestedBy",
+          "progress",
+          "result",
+          "error",
+          "attempts",
+          "createdAt",
+          "startedAt",
+          "finishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "JobPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "Link": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "fromNoteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "fromPath": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "image",
+              "wikilink",
+              "embed",
+              "definition"
+            ]
+          },
+          "rawTarget": {
+            "type": "string"
+          },
+          "resolvedNodeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedAttachmentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fragment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "broken",
+              "external"
+            ]
+          },
+          "startOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "endOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "line": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "fromNoteId",
+          "fromPath",
+          "revision",
+          "ordinal",
+          "kind",
+          "rawTarget",
+          "resolvedNodeId",
+          "resolvedAttachmentId",
+          "fragment",
+          "status",
+          "startOffset",
+          "endOffset",
+          "line"
+        ],
+        "additionalProperties": false
+      },
+      "LinkPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AffectedLinks": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "byStatus": {
+            "type": "object",
+            "properties": {
+              "resolved": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "ambiguous": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "broken": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "external": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "resolved",
+              "ambiguous",
+              "broken",
+              "external"
+            ],
+            "additionalProperties": false
+          },
+          "samples": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fromNoteId": {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                },
+                "fromPath": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "rawTarget": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "fromNoteId",
+                "fromPath",
+                "line",
+                "rawTarget"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "total",
+          "byStatus",
+          "samples"
+        ],
+        "additionalProperties": false
+      },
+      "TreePage": {
+        "type": "object",
+        "properties": {
+          "parent": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "parent",
+          "items",
+          "treeVersion"
+        ],
+        "additionalProperties": false
+      },
+      "NodePage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "treeVersion"
+        ],
+        "additionalProperties": false
+      },
+      "NodePatchResult": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/Node"
+          },
+          "affectedLinks": {
+            "$ref": "#/components/schemas/AffectedLinks"
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "node",
+          "affectedLinks",
+          "dryRun"
+        ],
+        "additionalProperties": false
+      },
+      "RenameImpactResult": {
+        "type": "object",
+        "properties": {
+          "affectedLinks": {
+            "$ref": "#/components/schemas/AffectedLinks"
+          },
+          "wouldConflict": {
+            "type": "boolean"
+          },
+          "newPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "affectedLinks",
+          "wouldConflict",
+          "newPath"
+        ],
+        "additionalProperties": false
+      },
+      "TrashEntry": {
+        "type": "object",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "cascadeRootId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NodeKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "originalPath": {
+            "type": "string"
+          },
+          "originalParentId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "deletedBy": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "deletedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "expiresAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "descendantCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "nodeId",
+          "cascadeRootId",
+          "kind",
+          "name",
+          "originalPath",
+          "originalParentId",
+          "deletedBy",
+          "deletedAt",
+          "expiresAt",
+          "descendantCount",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "TrashNodeResult": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "trashEntry": {
+            "$ref": "#/components/schemas/TrashEntry"
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "nodes",
+          "trashEntry",
+          "treeVersion"
+        ],
+        "additionalProperties": false
+      },
+      "RestoreNodeResult": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "treeVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "dryRun": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "nodes",
+          "treeVersion",
+          "dryRun"
+        ],
+        "additionalProperties": false
+      },
+      "TrashPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrashEntry"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "retentionDays": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "retentionDays"
+        ],
+        "additionalProperties": false
+      },
+      "InboundLinksPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "subtreeNodeIds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "subtreeNodeIds"
+        ],
+        "additionalProperties": false
+      },
+      "NoteLinks": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 10000,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            }
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "revision"
+        ],
+        "additionalProperties": false
+      },
+      "NoteRevision": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "create",
+              "import",
+              "checkpoint",
+              "unload",
+              "named",
+              "pre_restore",
+              "restore",
+              "trash"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contentHash": {
+            "$ref": "#/components/schemas/Sha256Hex"
+          },
+          "sizeChars": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "author": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "user"
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/UserRef"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "user"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "token"
+                  },
+                  "tokenId": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "tokenId",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "system"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "restoredFromRevisionId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasSnapshot": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "noteId",
+          "revision",
+          "kind",
+          "label",
+          "contentHash",
+          "sizeChars",
+          "author",
+          "restoredFromRevisionId",
+          "hasSnapshot",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "RevisionContent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "create",
+              "import",
+              "checkpoint",
+              "unload",
+              "named",
+              "pre_restore",
+              "restore",
+              "trash"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contentHash": {
+            "$ref": "#/components/schemas/Sha256Hex"
+          },
+          "sizeChars": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "author": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "user"
+                  },
+                  "user": {
+                    "$ref": "#/components/schemas/UserRef"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "user"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "token"
+                  },
+                  "tokenId": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "tokenId",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "system"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "restoredFromRevisionId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hasSnapshot": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "markdown": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "noteId",
+          "revision",
+          "kind",
+          "label",
+          "contentHash",
+          "sizeChars",
+          "author",
+          "restoredFromRevisionId",
+          "hasSnapshot",
+          "createdAt",
+          "markdown"
+        ],
+        "additionalProperties": false
+      },
+      "RetentionPolicy": {
+        "type": "object",
+        "properties": {
+          "thinned": {
+            "type": "boolean",
+            "const": true
+          },
+          "rule": {
+            "type": "string",
+            "const": "all for 24h, hourly for 30d, daily thereafter"
+          },
+          "neverThinned": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "create",
+                "import",
+                "checkpoint",
+                "unload",
+                "named",
+                "pre_restore",
+                "restore",
+                "trash"
+              ]
+            }
+          }
+        },
+        "required": [
+          "thinned",
+          "rule",
+          "neverThinned"
+        ],
+        "additionalProperties": false
+      },
+      "RevisionPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteRevision"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "headRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "retention": {
+            "$ref": "#/components/schemas/RetentionPolicy"
+          }
+        },
+        "required": [
+          "items",
+          "headRevision",
+          "retention"
+        ],
+        "additionalProperties": false
+      },
+      "RestoredRevision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "changed": {
+                "type": "boolean",
+                "const": false
+              },
+              "revision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "contentHash": {
+                "$ref": "#/components/schemas/Sha256Hex"
+              }
+            },
+            "required": [
+              "changed",
+              "revision",
+              "contentHash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "changed": {
+                "type": "boolean",
+                "const": true
+              },
+              "restored": {
+                "$ref": "#/components/schemas/NoteRevision"
+              },
+              "preRestore": {
+                "$ref": "#/components/schemas/NoteRevision"
+              },
+              "revision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "contentHash": {
+                "$ref": "#/components/schemas/Sha256Hex"
+              }
+            },
+            "required": [
+              "changed",
+              "restored",
+              "preRestore",
+              "revision",
+              "contentHash"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SearchSnippet": {
+        "type": "object",
+        "properties": {
+          "line": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "text": {
+            "type": "string"
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "line",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "SearchHit": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "vaultId": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+          },
+          "vaultName": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "score": {
+            "type": "number"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Timestamp"
+          },
+          "snippets": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchSnippet"
+            }
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "noteId",
+          "vaultId",
+          "vaultName",
+          "path",
+          "title",
+          "revision",
+          "score",
+          "updatedAt",
+          "snippets",
+          "stale"
+        ],
+        "additionalProperties": false
+      },
+      "SearchPage": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "raw": {
+                "type": "string"
+              },
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "phrases": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "negations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "operators": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "raw",
+              "terms",
+              "phrases",
+              "negations",
+              "operators"
+            ],
+            "additionalProperties": false
+          },
+          "totalEstimate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "results",
+          "query"
         ],
         "additionalProperties": false
       },
@@ -4013,6 +5694,421 @@
             }
           }
         }
+      },
+      "patch": {
+        "operationId": "vaults.update",
+        "summary": "Update vault metadata and settings while enforcing environment floors.",
+        "tags": [
+          "vaults"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchVaultBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/archive": {
+      "post": {
+        "operationId": "vaults.archive",
+        "summary": "Freeze the vault for reading and close its collaboration sessions after commit.",
+        "tags": [
+          "vaults"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmVaultBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invalid_state` — Not possible in the current state; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/unarchive": {
+      "post": {
+        "operationId": "vaults.unarchive",
+        "summary": "Return an archived vault to active use.",
+        "tags": [
+          "vaults"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmVaultBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invalid_state` — Not possible in the current state; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/vaults/{vaultId}/members": {
@@ -4453,6 +6549,3635 @@
           },
           "422": {
             "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "nodes.list",
+        "summary": "Derived paths and committed summaries, with history authorization for trashed nodes.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "pathPrefix",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "category",
+                    "note"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "category",
+                      "note"
+                    ]
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "kinds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "recursive",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "includeTrashed",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/tree": {
+      "get": {
+        "operationId": "tree.listChildren",
+        "summary": "One live parent and its children, categories first, with natural name ordering.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "parent",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}": {
+      "get": {
+        "operationId": "nodes.get",
+        "summary": "One live or trashed node with its derived path and current version.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "nodes.update",
+        "summary": "Rename or move a node, or preview the same validation and link impact without writes.",
+        "tags": [
+          "nodes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchNodeBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodePatchResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived; `node_trashed` — This item is in the trash",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "nodes.purge",
+        "summary": "Permanently delete a trashed subtree and its note rows; attachments are retained.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            },
+            "in": "query",
+            "name": "purge",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content; the status is the whole answer."
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/trash": {
+      "post": {
+        "operationId": "nodes.trash",
+        "summary": "Trash a node and, when explicitly recursive, its live descendants.",
+        "tags": [
+          "nodes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrashNodeBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashNodeResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived; `category_not_empty` — This category is not empty",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/restore": {
+      "post": {
+        "operationId": "nodes.restore",
+        "summary": "Restore one cascade group or a selected member, resolving name and parent conflicts explicitly.",
+        "tags": [
+          "nodes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreNodeBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreNodeResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`stale_version` — This has changed since you loaded it; `name_conflict` — That name is already taken here; `invalid_move` — That move is not allowed; `invalid_state` — Not possible in the current state; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{nodeId}/inbound-links": {
+      "get": {
+        "operationId": "nodes.inboundLinks",
+        "summary": "Page the same target-side links that rename and move warnings summarize.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "resolved",
+                    "ambiguous",
+                    "broken",
+                    "external"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "resolved",
+                      "ambiguous",
+                      "broken",
+                      "external"
+                    ]
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "nodeId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundLinksPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/trash": {
+      "get": {
+        "operationId": "trash.list",
+        "summary": "Newest-first trash groups with current validators; requires history:read.",
+        "tags": [
+          "nodes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/rename-impact": {
+      "get": {
+        "operationId": "notes.renameImpact",
+        "summary": "Preview a proposed note path and its link impact without write permission.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "format": "iridium-node-name",
+              "pattern": "^(?![.\\s])(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm]1|[Cc][Oo][Mm]2|[Cc][Oo][Mm]3|[Cc][Oo][Mm]4|[Cc][Oo][Mm]5|[Cc][Oo][Mm]6|[Cc][Oo][Mm]7|[Cc][Oo][Mm]8|[Cc][Oo][Mm]9|[Ll][Pp][Tt]1|[Ll][Pp][Tt]2|[Ll][Pp][Tt]3|[Ll][Pp][Tt]4|[Ll][Pp][Tt]5|[Ll][Pp][Tt]6|[Ll][Pp][Tt]7|[Ll][Pp][Tt]8|[Ll][Pp][Tt]9)(?:\\.|$))[^\\x00-\\x1f\\x7f-\\x9f/\\\\]*[^.\\s\\x00-\\x1f\\x7f-\\x9f/\\\\]$"
+            },
+            "in": "query",
+            "name": "name",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "parentId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameImpactResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invalid_move` — That move is not allowed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "search.all",
+        "summary": "Search committed notes across the principal's accessible vaults.",
+        "tags": [
+          "search"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "in": "query",
+            "name": "q",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 16387
+            },
+            "in": "query",
+            "name": "pathPrefix",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 240,
+              "type": "integer",
+              "minimum": 80,
+              "maximum": 1000
+            },
+            "in": "query",
+            "name": "snippetChars",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "vaultIds",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/search": {
+      "get": {
+        "operationId": "search.vault",
+        "summary": "Search the committed index of one accessible vault.",
+        "tags": [
+          "search"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "in": "query",
+            "name": "q",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 16387
+            },
+            "in": "query",
+            "name": "pathPrefix",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 240,
+              "type": "integer",
+              "minimum": 80,
+              "maximum": 1000
+            },
+            "in": "query",
+            "name": "snippetChars",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "vaultIds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/links": {
+      "get": {
+        "operationId": "notes.links",
+        "summary": "Outgoing references at one committed projection revision.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteLinks"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/backlinks": {
+      "get": {
+        "operationId": "notes.backlinks",
+        "summary": "Incoming references ordered by source path and row id.",
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "resolved",
+                    "ambiguous",
+                    "broken",
+                    "external"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "resolved",
+                      "ambiguous",
+                      "broken",
+                      "external"
+                    ]
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/jobs": {
+      "get": {
+        "operationId": "admin.jobs.list",
+        "summary": "List durable jobs in creation order.",
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "import",
+                "export",
+                "reindex",
+                "trash_purge",
+                "update_log_prune",
+                "revision_thinning",
+                "access_log_partitions",
+                "audit_archive",
+                "transfer_cleanup",
+                "session_ticket_sweep",
+                "last_used_flush",
+                "attachment_unreferenced_report"
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "queued",
+                "running",
+                "succeeded",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "vaultId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/jobs/{jobId}": {
+      "get": {
+        "operationId": "admin.jobs.get",
+        "summary": "Read job progress and outcome.",
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/jobs/{type}/run": {
+      "post": {
+        "operationId": "admin.jobs.run",
+        "summary": "Enqueue a maintenance job with audited inputs.",
+        "tags": [
+          "jobs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunJobBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "reindex",
+                "trash_purge",
+                "update_log_prune",
+                "revision_thinning",
+                "access_log_partitions",
+                "audit_archive",
+                "transfer_cleanup",
+                "session_ticket_sweep",
+                "attachment_unreferenced_report"
+              ]
+            },
+            "in": "path",
+            "name": "type",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/jobs/{jobId}/cancel": {
+      "post": {
+        "operationId": "admin.jobs.cancel",
+        "summary": "Cancel a queued maintenance job.",
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected; `step_up_required` — Re-authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`invalid_state` — Not possible in the current state",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/revisions": {
+      "get": {
+        "operationId": "revisions.list",
+        "summary": "List retained checkpoints with their thinning policy, newest first.",
+        "tags": [
+          "revisions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "import",
+                    "checkpoint",
+                    "unload",
+                    "named",
+                    "pre_restore",
+                    "restore",
+                    "trash"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "create",
+                      "import",
+                      "checkpoint",
+                      "unload",
+                      "named",
+                      "pre_restore",
+                      "restore",
+                      "trash"
+                    ]
+                  }
+                }
+              ]
+            },
+            "in": "query",
+            "name": "kinds",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "revisions.create",
+        "summary": "Retain a named checkpoint of the current committed head.",
+        "tags": [
+          "revisions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRevisionBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteRevision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`node_trashed` — This item is in the trash; `content_invalid` — This note needs repair; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`capacity` — The server is at capacity; `unavailable` — Temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/revisions/{revisionId}": {
+      "get": {
+        "operationId": "revisions.get",
+        "summary": "Read immutable revision metadata and Markdown, or negotiate its Markdown text.",
+        "tags": [
+          "revisions"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "revisionId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevisionContent"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "No response body",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{noteId}/revisions/{revisionId}/restore": {
+      "post": {
+        "operationId": "revisions.restore",
+        "summary": "Restore retained content as one reversible writer operation, preserving the document identity.",
+        "tags": [
+          "revisions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRevisionBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "noteId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "revisionId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoredRevision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `step_up_required` — Re-authentication required; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`node_trashed` — This item is in the trash; `content_invalid` — This note needs repair; `note_oversized` — This note is too large; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`capacity` — The server is at capacity; `unavailable` — Temporarily unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/attachments": {
+      "get": {
+        "operationId": "attachments.list",
+        "summary": "List attachment metadata and optional live references.",
+        "tags": [
+          "attachments"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "noteId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "includeReferences",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "includeDeleted",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 100,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "attachments.upload",
+        "summary": "Stream, sniff and deduplicate exactly one multipart attachment.",
+        "tags": [
+          "attachments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentUploadBodyInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentUploaded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`name_conflict` — That name is already taken here; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media` — Unsupported content type",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`capacity` — The server is at capacity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/attachments/{attachmentId}": {
+      "get": {
+        "operationId": "attachments.download",
+        "summary": "Read immutable attachment bytes with safe disposition and single-range support.",
+        "tags": [
+          "attachments"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "attachmentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The attachment SHA-256 content hash, as a quoted strong validator."
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {}
+              },
+              "image/jpeg": {
+                "schema": {}
+              },
+              "image/gif": {
+                "schema": {}
+              },
+              "image/webp": {
+                "schema": {}
+              },
+              "image/avif": {
+                "schema": {}
+              },
+              "image/bmp": {
+                "schema": {}
+              },
+              "image/svg+xml": {
+                "schema": {}
+              },
+              "audio/flac": {
+                "schema": {}
+              },
+              "audio/mpeg": {
+                "schema": {}
+              },
+              "audio/mp4": {
+                "schema": {}
+              },
+              "audio/ogg": {
+                "schema": {}
+              },
+              "audio/wav": {
+                "schema": {}
+              },
+              "audio/webm": {
+                "schema": {}
+              },
+              "audio/3gpp": {
+                "schema": {}
+              },
+              "video/mp4": {
+                "schema": {}
+              },
+              "video/webm": {
+                "schema": {}
+              },
+              "video/ogg": {
+                "schema": {}
+              },
+              "video/quicktime": {
+                "schema": {}
+              },
+              "video/x-matroska": {
+                "schema": {}
+              },
+              "application/pdf": {
+                "schema": {}
+              },
+              "text/plain": {
+                "schema": {}
+              },
+              "text/markdown": {
+                "schema": {}
+              },
+              "text/csv": {
+                "schema": {}
+              },
+              "application/json": {
+                "schema": {}
+              },
+              "text/xml": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.text": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.spreadsheet": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.presentation": {
+                "schema": {}
+              },
+              "application/msword": {
+                "schema": {}
+              },
+              "application/vnd.ms-excel": {
+                "schema": {}
+              },
+              "application/vnd.ms-powerpoint": {
+                "schema": {}
+              },
+              "application/vnd.ms-outlook": {
+                "schema": {}
+              }
+            }
+          },
+          "206": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The attachment SHA-256 content hash, as a quoted strong validator."
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {}
+              },
+              "image/jpeg": {
+                "schema": {}
+              },
+              "image/gif": {
+                "schema": {}
+              },
+              "image/webp": {
+                "schema": {}
+              },
+              "image/avif": {
+                "schema": {}
+              },
+              "image/bmp": {
+                "schema": {}
+              },
+              "image/svg+xml": {
+                "schema": {}
+              },
+              "audio/flac": {
+                "schema": {}
+              },
+              "audio/mpeg": {
+                "schema": {}
+              },
+              "audio/mp4": {
+                "schema": {}
+              },
+              "audio/ogg": {
+                "schema": {}
+              },
+              "audio/wav": {
+                "schema": {}
+              },
+              "audio/webm": {
+                "schema": {}
+              },
+              "audio/3gpp": {
+                "schema": {}
+              },
+              "video/mp4": {
+                "schema": {}
+              },
+              "video/webm": {
+                "schema": {}
+              },
+              "video/ogg": {
+                "schema": {}
+              },
+              "video/quicktime": {
+                "schema": {}
+              },
+              "video/x-matroska": {
+                "schema": {}
+              },
+              "application/pdf": {
+                "schema": {}
+              },
+              "text/plain": {
+                "schema": {}
+              },
+              "text/markdown": {
+                "schema": {}
+              },
+              "text/csv": {
+                "schema": {}
+              },
+              "application/json": {
+                "schema": {}
+              },
+              "text/xml": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {}
+              },
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.text": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.spreadsheet": {
+                "schema": {}
+              },
+              "application/vnd.oasis.opendocument.presentation": {
+                "schema": {}
+              },
+              "application/msword": {
+                "schema": {}
+              },
+              "application/vnd.ms-excel": {
+                "schema": {}
+              },
+              "application/vnd.ms-powerpoint": {
+                "schema": {}
+              },
+              "application/vnd.ms-outlook": {
+                "schema": {}
+              }
+            }
+          },
+          "304": {
+            "description": "No content; the status is the whole answer.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The attachment SHA-256 content hash, as a quoted strong validator."
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`server_error` — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "attachments.delete",
+        "summary": "Soft-delete an attachment; referenced files require force=true.",
+        "tags": [
+          "attachments"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "force",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "attachmentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "iridium-strong-etag",
+              "pattern": "^\\s*\"0*[1-9][0-9]*\"\\s*$"
+            },
+            "in": "header",
+            "name": "if-match",
+            "required": true,
+            "description": "The `\"<version>\"` this write is conditional on. Absent, weak, `*` or malformed is `428 precondition_required`."
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content; the status is the whole answer."
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that; `csrf_rejected` — Request rejected",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`attachment_referenced` — This attachment is still in use; `stale_version` — This has changed since you loaded it; `vault_archived` — This vault is archived",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "`precondition_required` — A version is required for this change",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vaults/{vaultId}/attachments/{attachmentId}/meta": {
+      "get": {
+        "operationId": "attachments.getMeta",
+        "summary": "Read attachment metadata and its deletion validator.",
+        "tags": [
+          "attachments"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "vaultId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "attachmentId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "The row version, as `\"<version>\"`. This is the value `If-Match` compares against."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in; `token_expired` — This token has expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — Not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "`host_rejected` (421) — Wrong host; `client_outdated` (426) — Update required; `not_ready` (503) — The server is not ready; `payload_too_large` (413) — That is too large to send; `server_error` (500) — Something went wrong",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/attachments/unreferenced": {
+      "get": {
+        "operationId": "admin.attachments.unreferenced",
+        "summary": "Read the last completed report of attachments unused by live or retained content.",
+        "tags": [
+          "admin"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "query",
+            "name": "vaultId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreferencedAttachmentPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthenticated` — Not signed in",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable` — Temporarily unavailable",
             "content": {
               "application/problem+json": {
                 "schema": {

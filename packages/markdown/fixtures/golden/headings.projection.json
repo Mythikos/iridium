@@ -1,0 +1,147 @@
+{
+  "status": "ok",
+  "pipelineVersion": 2,
+  "contentHash": "fixture-hash",
+  "sizeChars": 74,
+  "lineCount": 8,
+  "wordCount": 7,
+  "headingTitle": "A heading with code",
+  "frontmatter": null,
+  "fmTags": [],
+  "fmAliases": [],
+  "headings": [
+    {
+      "depth": 1,
+      "text": "A heading with code",
+      "slug": "a-heading-with-code",
+      "line": 1,
+      "offset": 0
+    },
+    {
+      "depth": 2,
+      "text": "Repeated",
+      "slug": "repeated",
+      "line": 3,
+      "offset": 27
+    },
+    {
+      "depth": 2,
+      "text": "Repeated",
+      "slug": "repeated-1",
+      "line": 5,
+      "offset": 40
+    }
+  ],
+  "tasks": [],
+  "codeLangs": [],
+  "bodyText": "A heading with code\nRepeated\nRepeated\noutline\n",
+  "bodyRuns": [
+    [
+      0,
+      2,
+      2
+    ],
+    [
+      2,
+      5,
+      7
+    ],
+    [
+      9,
+      13,
+      6
+    ],
+    [
+      15,
+      20,
+      4
+    ],
+    [
+      19,
+      24,
+      0
+    ],
+    [
+      20,
+      30,
+      8
+    ],
+    [
+      28,
+      38,
+      0
+    ],
+    [
+      29,
+      43,
+      8
+    ],
+    [
+      37,
+      51,
+      0
+    ],
+    [
+      38,
+      54,
+      7
+    ],
+    [
+      45,
+      61,
+      0
+    ]
+  ],
+  "links": [
+    {
+      "ordinal": 0,
+      "kind": "markdown",
+      "rawTarget": "#Repeated",
+      "startOffset": 53,
+      "endOffset": 73,
+      "line": 7,
+      "resolved": {
+        "kind": "anchor",
+        "fragment": "repeated",
+        "valid": true
+      }
+    }
+  ],
+  "obsidian": {
+    "counts": {
+      "wikilink": 0,
+      "embed": 0,
+      "block_id": 0,
+      "block_ref": 0,
+      "callout": 0,
+      "tag": 0,
+      "tag_invalid": 0,
+      "highlight": 0,
+      "comment": 0,
+      "inline_footnote": 0,
+      "math_inline": 0,
+      "math_block": 0,
+      "mermaid": 0,
+      "dataview": 0,
+      "dataviewjs": 0,
+      "query_block": 0,
+      "image_size_syntax": 0,
+      "non_gfm_task_state": 0,
+      "soft_break_reliance": 0,
+      "deprecated_frontmatter_key": 0,
+      "frontmatter_link_unquoted": 0,
+      "strict_line_breaks_off": 0,
+      "canvas": 0,
+      "bases": 0,
+      "obsidian_config": 0,
+      "obsidian_trash": 0
+    },
+    "findings": [],
+    "truncated": false
+  },
+  "timings": {
+    "prescanMs": 0,
+    "parseMs": 0,
+    "projectMs": 0
+  }
+}

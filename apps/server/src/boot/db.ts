@@ -36,6 +36,7 @@
 import { sql, type Kysely } from 'kysely';
 
 import type { IridiumConfig } from '../config/env.ts';
+import { accessLogPartitionsOutcome } from '../db/access-log-partitions.ts';
 import { AppGrantVerifier } from '../db/grants-readiness.ts';
 import {
   assertFoundRows,
@@ -52,6 +53,7 @@ import {
   createMaintDb,
   migrateToLatest,
   migrationStatus,
+  MigrationLongRunningRefusedError,
   type MigrationStatus,
 } from '../db/migrator.ts';
 import { elapsedMs, withDeadline, type Clock } from '../ops/clock.ts';
@@ -346,7 +348,10 @@ export async function applyDbPlugin(options: DbPluginOptions): Promise<DatabaseH
         detail: `unknown newer migrations recorded: ${status.unknown.join(', ')}`,
       };
     }
-    return { status: 'fail', detail: `pending: ${status.pending.join(', ')}` };
+    return {
+      status: 'fail',
+      detail: `pending${status.pendingLongRunning.length > 0 ? ' (operator action required)' : ''}: ${status.pending.join(', ')}`,
+    };
   });
 
   readiness.register('grants', async () => {
@@ -403,12 +408,16 @@ export async function applyDbPlugin(options: DbPluginOptions): Promise<DatabaseH
       : { status: 'fail', detail: `no key material configured for: ${missing.join(', ')}` };
   });
 
-  readiness.register('access_log_partitions', () => ({
-    status: 'warn',
-    detail:
-      'scheduled access_log partition maintenance arrives with M2; the p_overflow catch-all ' +
-      'keeps inserts working (D03-03, invariant I-20)',
-  }));
+  readiness.register('access_log_partitions', () => {
+    const db = adapter.dbApp;
+    if (db === null) return absent();
+    return accessLogPartitionsOutcome(db, {
+      now: clock.date(),
+      leadMonths: config.retention.accessLogPartitionLeadMonths,
+      ddlCredentialConfigured: config.db.migrateUrl !== null,
+      jobsEnabled: config.ops.jobsEnabled,
+    });
+  });
 
   return adapter;
 }
@@ -448,6 +457,10 @@ async function migrateOnBoot(options: DbPluginOptions): Promise<void> {
         'migration applied',
       );
     }
+  } catch (error) {
+    if (!(error instanceof MigrationLongRunningRefusedError)) throw error;
+    // Keep diagnostics reachable while readiness refuses all application traffic.
+    logger.warn({ event: 'migration.pending', migrations: error.migrations }, error.message);
   } finally {
     await maint.db.destroy();
   }

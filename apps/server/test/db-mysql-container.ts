@@ -25,19 +25,40 @@ import {
   TEST_DB_PASSWORDS,
 } from '@iridium/testkit';
 
-export { DEFAULT_MYSQL_IMAGE, REQUIRED_MYSQL_IMAGES } from '@iridium/testkit';
-
 /** The schema every Iridium deployment uses, and the one `init/01_roles.sh` grants on. */
 export const IRIDIUM_SCHEMA = DEFAULT_DATABASE_NAME;
-
-/** The reference production image, named so a suite can assert the matrix rather than spell a tag. */
-export const REFERENCE_MYSQL_IMAGE = REQUIRED_MYSQL_IMAGES[1] ?? 'mysql:9.7.2-oraclelinux9';
 
 type StartedMysql = Awaited<ReturnType<typeof startMysql>>;
 
 /** `IRIDIUM_MYSQL_IMAGE`, or the compatibility floor. */
 export function selectedMysqlImage(): string {
   return resolveMysqlImage();
+}
+
+export interface MysqlLaneExpectation {
+  readonly image: string;
+  readonly required: boolean;
+  readonly allowUntestedMysql: boolean;
+  readonly versionPattern: RegExp;
+}
+
+/** Keep required-engine assertions exact while admitting the explicitly selected advisory lane. */
+export function selectedMysqlLane(): MysqlLaneExpectation {
+  const image = selectedMysqlImage();
+  const required = REQUIRED_MYSQL_IMAGES.includes(image);
+  const allowUntestedMysql = !required && process.env['IRIDIUM_ALLOW_UNTESTED_MYSQL'] === 'true';
+  if (!required && !allowUntestedMysql) {
+    throw new Error(`The selected test image ${image} requires IRIDIUM_ALLOW_UNTESTED_MYSQL=true`);
+  }
+  const version = /:(\d+\.\d+(?:\.\d+)?)(?:[-@]|$)/.exec(image)?.[1];
+  if (version === undefined)
+    throw new Error(`The selected MySQL image has no version tag: ${image}`);
+  return {
+    image,
+    required,
+    allowUntestedMysql,
+    versionPattern: new RegExp(`^${version.replaceAll('.', '\\.')}\\b`),
+  };
 }
 
 export interface StartMysqlOptions {

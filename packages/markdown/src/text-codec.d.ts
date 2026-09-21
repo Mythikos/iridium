@@ -21,4 +21,8 @@ declare class TextDecoder {
 
 declare class TextEncoder {
   encode(input?: string): Uint8Array;
+  encodeInto(input: string, destination: Uint8Array): { read: number; written: number };
 }
+
+/** Native in Node 24 and both supported worker hosts; used to keep parsed trees immutable. */
+declare function structuredClone<T>(value: T): T;

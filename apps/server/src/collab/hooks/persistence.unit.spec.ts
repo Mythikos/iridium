@@ -423,7 +423,8 @@ describe('collab.persistence-hook.unit [hp:HP-2]', () => {
       await Promise.all([fencing, pendingStore, unloading]);
       expect(unloaded).toBe(true);
       expect(s.harness.persistence.writers()).toEqual([]);
-      expect(s.harness.store.note(s.noteId)?.headSeq).toBe(2);
+      expect(s.harness.store.note(s.noteId)?.headSeq).toBe(1);
+      expect(s.harness.store.note(s.noteId)?.updates.map((row) => row.seq)).toEqual([1]);
       expect(s.harness.store.note(s.noteId)?.snapshotThroughSeq).toBe(1);
       expect(s.harness.store.counts.compactions).toBe(0);
       expect(writer?.lastPersisted.seq).toBe(1);
@@ -439,12 +440,24 @@ describe('collab.persistence-hook.unit [hp:HP-2]', () => {
       await hookOf(s.extension, 'afterLoadDocument')(afterLoadPayload(replacement, s.context));
       expect(s.harness.persistence.isFenced(replacement)).toBe(false);
       expect(s.harness.persistence.isFenced(s.document)).toBe(true);
-      expect(projectMarkdown(replacement)).toBe('seed:committing');
+      expect(projectMarkdown(replacement)).toBe('seed');
+      const { connection: replacementConnection, socket: replacementSocket } = fakeConnection(
+        replacement,
+        s.context,
+      );
+      type({ ...s, document: replacement }, replacementConnection, ':successor');
+      const replacementWriter = s.harness.persistence.writerOfDocument(replacement.name);
+      expect(replacementWriter).not.toBe(writer);
+      await replacementWriter?.drain();
+      expect(s.harness.store.note(s.noteId)?.headSeq).toBe(2);
+      expect(projectMarkdown(replacement)).toBe('seed:successor');
+      expect(
+        messages(replacementSocket).filter((message) => message.t === 'persisted'),
+      ).toMatchObject([{ v: 1, t: 'persisted', seq: 2 }]);
+      replacementConnection.close();
       await expect(
         hookOf(s.extension, 'beforeUnloadDocument')(beforeUnloadPayload(replacement)),
       ).rejects.toBeInstanceOf(UnloadVeto);
-      const replacementWriter = s.harness.persistence.writerOfDocument(replacement.name);
-      expect(replacementWriter).not.toBe(writer);
       await replacementWriter?.drain();
       expect(s.harness.store.note(s.noteId)?.snapshotThroughSeq).toBe(2);
       expect(

@@ -8,7 +8,7 @@
  * register none. Registering it anywhere else would silently produce a document missing whole route
  * families (`apps/server/src/ops/openapi.ts` records the same ordering from the other side).
  *
- * **Every route comes from `M1_ROUTES`.** Each area exports `applyXRoutes(instance, deps)` and reads
+ * **Every route comes from `API_ROUTES`.** Each area exports `applyXRoutes(instance, deps)` and reads
  * its own rows through `routeSpec()`, so a route cannot be registered with a path, a policy or a
  * schema the OpenAPI document does not describe, and `rest.route-index.contract` holds the served
  * set, the documented set and 09-api-reference.md §2.18's table equal.
@@ -34,24 +34,44 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, normalize, sep } from 'node:path';
 
 import fastifyStatic from '@fastify/static';
-import { NodeId, noteDocName, VaultId } from '@iridium/contracts';
+import { noteDocName, VaultId } from '@iridium/contracts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { FsStorageDriver } from '../attachments/fs-storage.ts';
+import { applyAttachmentRoutes } from '../attachments/routes.ts';
+import { S3StorageDriver } from '../attachments/s3-storage.ts';
+import { AttachmentService } from '../attachments/service.ts';
+import type { StorageDriver } from '../attachments/storage.ts';
 import { applyAuthRoutes } from '../auth/routes.ts';
 import { API_PREFIX } from '../authz/route-policy.ts';
+import type { OwnerFence } from '../collab/owner-lease.ts';
+import { treeNotification } from '../collab/tree-notification.ts';
 import type { IridiumConfig } from '../config/env.ts';
+import { ContentReadCore } from '../content/read/index.ts';
+import { applyJobRoutes } from '../jobs/routes.ts';
+import { applyLinkRoutes } from '../links/routes.ts';
 import { CursorCodec, readPromotedCursorKeyVersion } from '../mcp/cursor.ts';
 import { applyMemberRoutes } from '../members/routes.ts';
 import { applyNoteReadRoutes } from '../notes-rest/routes.ts';
+import { checkpointTrash } from '../notes/trash-checkpoint.ts';
+import { applyRestAccessLog } from '../ops/access-log.ts';
 import type { ServerLogger } from '../ops/logging.ts';
 import { applyOpenApiPlugin, hasOpenApi } from '../ops/openapi.ts';
+import { applyRevisionRoutes } from '../revisions/routes.ts';
+import { RevisionService } from '../revisions/service.ts';
+import { MysqlFulltextSearch, type SearchIndex } from '../search/index.ts';
+import { applySearchRoutes } from '../search/routes.ts';
+import { SearchService } from '../search/service.ts';
+import { SnippetBuilder } from '../search/snippets.ts';
 import {
   CSP_NONCE_PLACEHOLDER,
   ENTRY_DOCUMENT_CACHE_CONTROL,
   IMMUTABLE_ASSET_CACHE_CONTROL,
   STATIC_METADATA_CACHE_CONTROL,
 } from '../security/csp.ts';
-import { applyNodeRoutes } from '../tree/routes.ts';
+import { treeChanges } from '../tree/mutations.ts';
+import { applyNodeRoutes, type NodeRouteDeps } from '../tree/routes.ts';
+import { purgeExpiredTrash, type ExpiredTrashResult } from '../tree/trash.ts';
 import { applyAdminUserRoutes } from '../users/routes.ts';
 import { applyVaultRoutes } from '../vaults/routes.ts';
 import { applyDocsUi } from './docs.ts';
@@ -62,6 +82,19 @@ import { applyMetaRoutes } from './meta.ts';
 export interface RestPluginOptions {
   readonly config: IridiumConfig;
   readonly logger: ServerLogger;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Shared storage lifetime for REST and maintenance reports. */
+    attachmentStorage: StorageDriver;
+    attachmentService: AttachmentService;
+    contentRead: ContentReadCore;
+    searchIndex: SearchIndex;
+    purgeExpiredTrash(
+      input: Parameters<typeof purgeExpiredTrash>[1] & { readonly ownerFence: OwnerFence },
+    ): Promise<ExpiredTrashResult>;
+  }
 }
 
 /** The prefix the SPA is served under. */
@@ -140,37 +173,183 @@ export async function applyRestPlugin(
   if (!hasOpenApi(app)) await applyOpenApiPlugin(app);
 
   const cursors = cursorCodecFactory(app, config);
+  const storage: StorageDriver =
+    config.storage.driver === 'fs'
+      ? new FsStorageDriver(config.storage.dir)
+      : new S3StorageDriver(config.storage);
+  const attachments = new AttachmentService({
+    database: () => appDb(app),
+    clock: app.clock,
+    audit: app.audit,
+    authorize: (...args) => app.authz.authorize(...args),
+    storage,
+  });
+  app.decorate('attachmentStorage', storage);
+  app.decorate('attachmentService', attachments);
+  app.addHook('onClose', () => storage.close());
+  const snippets = new SnippetBuilder({
+    clock: app.clock,
+    pool: {
+      run: <T>(task: unknown, runOptions?: { readonly filename?: string }) =>
+        app.projectionPool.run<T>(task, runOptions),
+    },
+  });
+  const searchIndex = new MysqlFulltextSearch({
+    database: () => appDb(app),
+    snippets,
+    rebuild: (selection, context) => app.reindexService.run(selection, context),
+  });
+  app.decorate('searchIndex', searchIndex);
+  const contentRead = new ContentReadCore({
+    database: () => appDb(app),
+    authorize: (...args) => app.authz.authorize(...args),
+    accessibleVaultIds: (...args) => app.authz.accessibleVaultIds(...args),
+    cursors,
+    attachments,
+    search: new SearchService(searchIndex),
+    outline: async (markdown) => (await app.notes.prepare(markdown)).headings,
+  });
+  app.decorate('contentRead', contentRead);
+  const lifecycle: NodeRouteDeps['lifecycle'] = {
+    afterTrashCommit: async () => {
+      app.faults.crash('tree.crash-after-commit-before-notify');
+      await app.faults.hold('tree.hold-after-commit-before-notify');
+    },
+    markClosing: (noteId) => app.notes.markClosing(noteId),
+    clearClosing: (noteId) => app.notes.clearClosing(noteId),
+    checkpointTrash: (trx, noteIds, actor, now) =>
+      checkpointTrash(
+        trx,
+        noteIds,
+        {
+          userId: actor.userId,
+          sessionId: actor.sessionId,
+          actorType: actor.userId === null ? 'system' : 'user',
+        },
+        now,
+      ),
+    afterTrash: async (vaultId, noteIds) => {
+      await Promise.all(
+        noteIds.map((noteId) =>
+          app.authz.bus.publishAndWait({ type: 'note.trashed', vaultId, noteId }),
+        ),
+      );
+    },
+    beginPurge: (noteIds) => app.collab.persistence.beginFenceNotes(noteIds),
+    beforePurge: async (noteIds) => {
+      const hp = app.collab.server.hocuspocus;
+      await Promise.allSettled(
+        noteIds
+          .map((noteId) => hp.loadingDocuments.get(noteDocName(noteId)))
+          .filter((loading) => loading !== undefined),
+      );
+      await Promise.all(noteIds.map((noteId) => app.notes.closeNote(noteId, 'note-closing')));
+      await app.collab.persistence.fenceNotes(noteIds);
+      await Promise.all(
+        noteIds.map(async (noteId) => {
+          const document = hp.documents.get(noteDocName(noteId));
+          if (document !== undefined) await hp.unloadDocument(document);
+        }),
+      );
+    },
+    afterPurge: async (vaultId, noteIds) => {
+      await Promise.all(
+        noteIds.map((noteId) =>
+          app.authz.bus.publishAndWait({ type: 'note.trashed', vaultId, noteId }),
+        ),
+      );
+    },
+  };
+  app.decorate(
+    'purgeExpiredTrash',
+    async (
+      input: Parameters<typeof purgeExpiredTrash>[1] & { readonly ownerFence: OwnerFence },
+    ) => {
+      const result = await purgeExpiredTrash(
+        {
+          db: appDb(app),
+          clock: app.clock,
+          audit: app.audit,
+          notes: app.notes,
+          searchIndex,
+          ownerFence: input.ownerFence,
+          ...lifecycle,
+        },
+        input,
+      );
+      if (result.status === 'purged')
+        app.collab.gateway.broadcastVault(
+          input.vaultId,
+          treeNotification(result.treeVersion, treeChanges(result.nodes, 'purged')),
+        );
+      return result;
+    },
+  );
 
   await app.register(
     async (api: FastifyInstance) => {
+      applyRestAccessLog(api);
       applyMetaRoutes(api, config);
       applyAuthRoutes(api, { audit: app.audit });
       applyAdminUserRoutes(api, { audit: app.audit, cursors });
-      applyVaultRoutes(api, { audit: app.audit });
-      applyMemberRoutes(api, { audit: app.audit });
-      applyNodeRoutes(api, {
+      applyVaultRoutes(api, {
         audit: app.audit,
-        notes: () => app.notes,
-        broadcastTreeChanged: (vaultId, treeVersion, node) => {
+        core: () => contentRead,
+        broadcastVaultUpdated: (vaultId, version, changed) =>
           app.collab.gateway.broadcastVault(VaultId.parse(vaultId), {
             v: 1,
-            t: 'tree-changed',
-            treeVersion,
-            changes: [
-              {
-                nodeId: NodeId.parse(node.id),
-                parentId: NodeId.parse(node.parentId),
-                kind: node.kind,
-                name: node.name,
-                path: node.path,
-                op: 'created',
-                version: node.version,
-              },
-            ],
-          });
+            t: 'vault-updated',
+            version,
+            changed: [...changed],
+          }),
+      });
+      applyMemberRoutes(api, { audit: app.audit });
+      applyNodeRoutes(api, {
+        searchIndex: () => searchIndex,
+        audit: app.audit,
+        notes: () => app.notes,
+        core: () => contentRead,
+        lifecycle,
+        broadcastTreeChanged: (vaultId, treeVersion, changes) => {
+          app.collab.gateway.broadcastVault(
+            VaultId.parse(vaultId),
+            treeNotification(treeVersion, changes),
+          );
+        },
+      });
+      applySearchRoutes(api, contentRead);
+      applyLinkRoutes(api, contentRead);
+      applyJobRoutes(api, { jobs: () => app.jobs.scheduler, cursors });
+      applyRevisionRoutes(api, {
+        core: () => contentRead,
+        service: () =>
+          new RevisionService({
+            db: () => appDb(app),
+            gateway: app.collab.gateway,
+            persistence: app.collab.persistence,
+            captureOwner: () => app.collab.ownerLease.captureFence(),
+            audit: app.audit,
+            clock: app.clock,
+            logger: options.logger,
+          }),
+      });
+      await applyAttachmentRoutes(api, {
+        service: attachments,
+        core: contentRead,
+        cursors,
+        tempDirectory: join(
+          config.storage.driver === 'fs' ? config.storage.dir : config.transfer.stagingDir,
+          '.tmp',
+        ),
+        maxUploadBytes: config.transfer.maxUploadBytes,
+        metrics: {
+          uploaded: (status) => app.metrics.attachmentUploadsTotal.inc({ status }),
+          served: (bytes) => app.metrics.attachmentServedBytesTotal.inc(bytes),
+          missing: () => app.metrics.attachmentMissingTotal.inc(),
         },
       });
       applyNoteReadRoutes(api, {
+        core: contentRead,
         markdownOf: (noteId, o) => app.notes.markdownOf(noteId, o),
         participants: (noteId) => app.collab.gateway.participants(noteId),
         isLoaded: (noteId) =>

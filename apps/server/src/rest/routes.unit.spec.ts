@@ -2,7 +2,7 @@
  * `rest.routes.unit` — the served route set is exactly the manifest (09-api-reference.md §2.18;
  * 12-milestones.md §5.2, the `rest` row).
  *
- * `M1_ROUTES` is data with three consumers, and this is the one that holds the *server* to it: the
+ * `API_ROUTES` is data with three consumers, and this is the one that holds the *server* to it: the
  * instance is built through the one boot path with no database, readied — which runs the route-policy
  * boot assertion — and its `app.routes()` compared with the manifest in both directions. A route
  * registered without a row is as much a failure as a row nobody registered: the first is an
@@ -12,7 +12,7 @@
  * beneath `/docs` carries a policy (otherwise `ready()` would have thrown), and none of them is an
  * operation of the API.
  */
-import { GLOBAL_ERROR_CODES, M1_ROUTES, routeKey } from '@iridium/contracts';
+import { GLOBAL_ERROR_CODES, API_ROUTES, routeKey } from '@iridium/contracts';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -87,7 +87,7 @@ afterAll(async () => {
 describe('rest.routes.unit [area:contracts]', () => {
   it('registers every `rest` row of the manifest', () => {
     const served = servedKeys();
-    const missing = M1_ROUTES.filter(
+    const missing = API_ROUTES.filter(
       (row) => row.plugin === 'rest' && !served.has(routeKey(row)),
     ).map(routeKey);
     expect(missing).toStrictEqual([]);
@@ -95,14 +95,14 @@ describe('rest.routes.unit [area:contracts]', () => {
 
   it('registers every `ops` row of the manifest', () => {
     const served = servedKeys();
-    const missing = M1_ROUTES.filter(
+    const missing = API_ROUTES.filter(
       (row) => row.plugin === 'ops' && !served.has(routeKey(row)),
     ).map(routeKey);
     expect(missing).toStrictEqual([]);
   });
 
   it('registers no `/api/v1` route the manifest does not name', () => {
-    const documented = new Set(M1_ROUTES.map(routeKey));
+    const documented = new Set(API_ROUTES.map(routeKey));
     const undocumented = [...servedKeys()].filter(
       (key) =>
         key.includes(` ${API_PREFIX}/`) && !documented.has(key) && !key.includes(` ${DOCS_PREFIX}`),
@@ -112,7 +112,7 @@ describe('rest.routes.unit [area:contracts]', () => {
 
   it('serves each row under the policy its row declares', () => {
     const byKey = new Map(routes.map((route) => [`${route.method} ${route.url}`, route]));
-    for (const row of M1_ROUTES) {
+    for (const row of API_ROUTES) {
       const served = byKey.get(routeKey(row));
       expect(served, `${routeKey(row)} is not registered`).toBeDefined();
       expect(
@@ -165,7 +165,7 @@ describe('rest.routes.unit [area:contracts]', () => {
   });
 
   it('repeats no global error code in a row', () => {
-    const repeated = M1_ROUTES.filter((row) =>
+    const repeated = API_ROUTES.filter((row) =>
       row.errors.some((code) => GLOBAL_ERROR_CODES.includes(code)),
     ).map((row) => routeKey(row));
     expect(repeated).toStrictEqual([]);

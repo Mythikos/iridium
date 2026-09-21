@@ -25,6 +25,7 @@ import {
   migrationStatus,
   MigrationDirectionRefusedError,
   MigrationLockedError,
+  MigrationLongRunningRefusedError,
 } from '../db/migrator.ts';
 import type { Clock } from '../ops/clock.ts';
 import type { CliArgs } from './args.ts';
@@ -83,6 +84,7 @@ export async function runMigrate(input: MigrateInput): Promise<number> {
           status: status.status,
           applied: status.applied.length,
           pending: status.pending,
+          pendingLongRunning: status.pendingLongRunning,
           unknown: status.unknown,
         }),
       );
@@ -95,17 +97,26 @@ export async function runMigrate(input: MigrateInput): Promise<number> {
       return EXIT.refused;
     }
 
+    const options = {
+      db: maint.db,
+      target: maint.target,
+      allowLongRunning: args.has('allow-long-running'),
+    };
     const outcome =
       subcommand === 'to'
-        ? await migrateTo({ db: maint.db, target: maint.target }, name, config.env)
-        : await migrateToLatest({ db: maint.db, target: maint.target });
+        ? await migrateTo(options, name, config.env)
+        : await migrateToLatest(options);
     const applied = outcome.results.filter((result) => result.status === 'Success');
     io.out(renderJson({ applied: applied.map((result) => result.migrationName) }));
 
     await reconcileAudit(input, maint, actor.actor);
     return EXIT.success;
   } catch (error) {
-    if (error instanceof MigrationLockedError || error instanceof MigrationDirectionRefusedError) {
+    if (
+      error instanceof MigrationLockedError ||
+      error instanceof MigrationDirectionRefusedError ||
+      error instanceof MigrationLongRunningRefusedError
+    ) {
       io.err(error.message);
       return EXIT.refused;
     }

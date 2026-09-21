@@ -3,8 +3,8 @@ import { newId, NoteId } from '@iridium/contracts';
 import { DummyDriver, Kysely, MysqlAdapter, MysqlIntrospector, MysqlQueryCompiler } from 'kysely';
 import { describe, expect, it } from 'vitest';
 
+import { pruneUpdateLog, type PruneUpdateLogOptions } from '../../../test/support/prune-updates.ts';
 import type { Database } from '../../db/schema.ts';
-import { pruneUpdateLog, type PruneUpdateLogOptions } from './prune.ts';
 
 /** Only the database result seam is replaced; every query runs through the real MySQL compiler. */
 function database(results: readonly (number | Error)[]): {

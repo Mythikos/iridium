@@ -2,6 +2,7 @@ import { GenericContainer, Wait, type ExecResult } from 'testcontainers';
 
 /** Execute the clients copied into the production image, never host-installed replacements. */
 import { TEST_DB_PASSWORDS, type DatabasePasswords } from '../server/env.ts';
+import { assertDbaGrantScript } from './dba-grants.ts';
 
 export type DatabaseRole = 'app' | 'migrator' | 'backup' | 'root';
 export interface ShippedMysqlClient {
@@ -11,6 +12,8 @@ export interface ShippedMysqlClient {
   query(role: DatabaseRole, statement: string, schema?: string): Promise<string>;
   dump(argv: readonly string[]): Promise<string>;
   restore(dump: string): Promise<void>;
+  /** Restore the documented, unmodified role artifact as the isolated database's DBA. */
+  applyDbaGrants(script: string): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -123,6 +126,23 @@ export async function startShippedMysqlClient(
           { env: { MYSQL_PWD: passwords.migrator } },
         ),
         'shipped mysql restore',
+      );
+    },
+    async applyDbaGrants(script) {
+      assertDbaGrantScript(script);
+      await container.copyContentToContainer([
+        { content: script, target: '/tmp/iridium-dba-grants.sql', mode: 0o444 },
+      ]);
+      checked(
+        await container.exec(
+          [
+            'sh',
+            '-c',
+            'exec mysql --protocol=TCP --host=127.0.0.1 --port=3306 --user=root < /tmp/iridium-dba-grants.sql',
+          ],
+          { env: { MYSQL_PWD: passwords.root } },
+        ),
+        'shipped mysql DBA grant artifact',
       );
     },
     async stop() {

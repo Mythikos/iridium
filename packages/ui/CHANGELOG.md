@@ -1,5 +1,16 @@
 # @iridium/ui
 
+## 0.2.0
+
+### Patch Changes
+
+- @iridium/api-client@0.2.0
+  - @iridium/collab-client@0.2.0
+  - @iridium/contracts@0.2.0
+  - @iridium/editor@0.2.0
+  - @iridium/markdown@0.2.0
+  - @iridium/markdown-react@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes

@@ -7,8 +7,17 @@
  * `numUpdatedRows` — is compared inside `db/cas.ts` and never travels through these types.
  */
 import type { NoteId, SessionId, UserId, VaultId } from '@iridium/contracts';
-import type { SnapshotFormat, StateVector, V1Update, V2State } from '@iridium/crdt';
+import type {
+  NoteDoc,
+  SnapshotFormat,
+  StateVector,
+  TextDiff,
+  V1Update,
+  V2State,
+} from '@iridium/crdt';
+import type { NoteProjection } from '@iridium/markdown';
 
+import type { AuditEventInput } from '../../audit/chain.ts';
 import type { RevisionKind, UpdateOrigin } from '../../db/schema.ts';
 
 /**
@@ -143,10 +152,34 @@ export interface Captured {
 
 /** An explicit recoverable checkpoint, serialized with accepted updates in the writer FIFO. */
 export interface CheckpointRequest {
-  readonly kind: 'pre_restore';
+  readonly kind: 'pre_restore' | 'named';
   readonly label: string;
   readonly actor: UpdateActor;
+  readonly audit?: AuditEventInput;
 }
+
+/** A trusted synchronous edit on the already loaded document, serialized by the writer. */
+export interface RestoreRequest {
+  readonly document: NoteDoc;
+  readonly target: string;
+  readonly revisionId: number;
+  readonly actor: UpdateActor;
+  readonly audit: AuditEventInput;
+  readonly apply: (diff: TextDiff) => void;
+}
+
+/** No-op restores write no revision rows; changed restores always return both durable ends. */
+export type RestoreResult = {
+  readonly seq: number;
+  readonly contentHash: string;
+} & (
+  | { readonly changed: false }
+  | {
+      readonly changed: true;
+      readonly preRestoreRevisionId: number;
+      readonly restoreRevisionId: number;
+    }
+);
 
 /** The exact committed prefix and its durable immutable revision. */
 export interface CheckpointResult {
@@ -165,6 +198,7 @@ export interface SnapshotWrite {
 
 /** The text projection write of step 2. */
 export interface ProjectionInput {
+  readonly prepared?: NoteProjection;
   readonly revision: number;
   readonly markdown: string;
   readonly contentHash: Buffer;
@@ -183,6 +217,7 @@ export interface RevisionInsert {
   readonly snapshotSv: Uint8Array | null;
   readonly actor: UpdateActor;
   readonly createdAt: Date;
+  readonly restoredFromRevisionId?: number;
 }
 
 /** The newest revision's identity, for the checkpoint policy. */

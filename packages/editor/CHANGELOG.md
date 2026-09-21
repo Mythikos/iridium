@@ -1,5 +1,13 @@
 # @iridium/editor
 
+## 0.2.0
+
+### Patch Changes
+
+- @iridium/collab-client@0.2.0
+  - @iridium/contracts@0.2.0
+  - @iridium/crdt@0.2.0
+
 ## 0.1.0
 
 ### Patch Changes

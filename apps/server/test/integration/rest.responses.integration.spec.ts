@@ -1,5 +1,5 @@
-/** Real M1 HTTP responses, including declared refusal and validation branches. */
-import { M1_ROUTES, newId, VaultId } from '@iridium/contracts';
+/** Real HTTP responses, including declared refusal and validation branches. */
+import { API_ROUTES, newId, RevisionPage, TrashNodeResult, VaultId } from '@iridium/contracts';
 import type { RestClient, RestRequestInit, RestResponse } from '@iridium/testkit';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -182,6 +182,10 @@ describe('rest.responses.integration [area:contracts]', () => {
     const line = await reader.request('GET', markdownPath, { query: { lines: '1-1' } });
     expect(line.status).toBe(200);
     expect(line.body).toBe('# A linked note');
+    const terminal = await reader.request('GET', markdownPath, { query: { lines: '2-2' } });
+    expect(terminal.status).toBe(200);
+    expect(terminal.body).toBe('');
+    expect(terminal.headers.get('x-iridium-returned-lines')).toBe('2-2');
     const outside = await reader.request('GET', markdownPath, { query: { lines: '99-100' } });
     expect(outside.status).toBe(422);
     expect(outside.body).toMatchObject({
@@ -192,8 +196,8 @@ describe('rest.responses.integration [area:contracts]', () => {
     await follow('notes.get', metadata, 'getParticipants', 200);
   });
 
-  it('requires a session on every M1 operation declaring unauthenticated', async () => {
-    const routes = M1_ROUTES.filter((route) => route.errors.includes('unauthenticated'));
+  it('requires a session on every operation declaring unauthenticated', async () => {
+    const routes = API_ROUTES.filter((route) => route.errors.includes('unauthenticated'));
     expect(routes.length).toBeGreaterThan(20);
     await Promise.all(
       routes.map(async (route) => {
@@ -210,7 +214,7 @@ describe('rest.responses.integration [area:contracts]', () => {
   });
 
   it('rejects cross-site cookie mutations on every documented CSRF surface', async () => {
-    const routes = M1_ROUTES.filter((route) => route.errors.includes('csrf_rejected'));
+    const routes = API_ROUTES.filter((route) => route.errors.includes('csrf_rejected'));
     expect(routes.length).toBeGreaterThan(8);
     await Promise.all(
       routes.map(async (route) => {
@@ -349,6 +353,140 @@ describe('rest.responses.integration [area:contracts]', () => {
     await expectStatus(manager, 'POST', '/vaults', 201, {
       json: { name, members: [{ userId: member.id, role: 'editor' }] },
     });
+  });
+
+  it('validates tree, link, history and lifecycle inputs without changing committed content', async () => {
+    const { vault, note } = await fixture();
+    await Promise.all([
+      expectStatus(manager, 'GET', `/vaults/${vault}/nodes?limit=0`, 422),
+      expectStatus(manager, 'GET', `/vaults/${vault}/trash?limit=0`, 422),
+      expectStatus(manager, 'GET', `/nodes/${note}/inbound-links?limit=0`, 422),
+      expectStatus(manager, 'GET', '/notes/invalid/links', 422),
+      expectStatus(manager, 'GET', `/notes/${note}/backlinks?limit=0`, 422),
+      expectStatus(manager, 'GET', `/notes/${note}/rename-impact?name=`, 422),
+      expectStatus(manager, 'GET', `/notes/${note}/revisions?limit=0`, 422),
+      expectStatus(manager, 'GET', `/notes/${note}/revisions/0`, 422),
+      expectStatus(manager, 'POST', `/notes/${note}/revisions`, 422, { json: { label: '' } }),
+      expectStatus(manager, 'PATCH', `/nodes/${note}`, 422, {
+        json: { name: '' },
+        headers: { 'if-match': '"1"' },
+      }),
+      expectStatus(manager, 'POST', `/nodes/${note}/trash`, 422, {
+        json: { recursive: 'yes' },
+        headers: { 'if-match': '"1"' },
+      }),
+      expectStatus(manager, 'POST', `/nodes/${note}/restore`, 422, {
+        json: { newParentId: 'invalid' },
+        headers: { 'if-match': '"1"' },
+      }),
+      expectStatus(manager, 'DELETE', `/nodes/${note}?purge=false`, 422, {
+        headers: { 'if-match': '"1"' },
+      }),
+      expectStatus(manager, 'POST', `/vaults/${vault}/archive`, 422, {
+        json: { confirm: false },
+        headers: { 'if-match': '"1"' },
+      }),
+      expectStatus(manager, 'POST', `/vaults/${vault}/unarchive`, 422, {
+        json: { confirm: false },
+        headers: { 'if-match': '"1"' },
+      }),
+    ]);
+    expect((await manager.get(`/notes/${note}/markdown`)).body).toBe('# Contract\n');
+    expect((await manager.get(`/nodes/${note}`)).body).toMatchObject({
+      name: 'A note',
+      version: 1,
+    });
+  });
+
+  it('requires strong versions for every lifecycle mutation and rejects a stale unarchive', async () => {
+    const { vault, note } = await fixture();
+    await Promise.all([
+      expectStatus(manager, 'PATCH', `/nodes/${note}`, 428, { json: { name: 'Not applied' } }),
+      expectStatus(manager, 'POST', `/nodes/${note}/trash`, 428, { json: {} }),
+      expectStatus(manager, 'POST', `/nodes/${note}/restore`, 428, { json: {} }),
+      expectStatus(manager, 'DELETE', `/nodes/${note}?purge=true`, 428),
+      expectStatus(manager, 'POST', `/vaults/${vault}/archive`, 428, { json: { confirm: true } }),
+      expectStatus(manager, 'POST', `/vaults/${vault}/unarchive`, 428, { json: { confirm: true } }),
+    ]);
+    expect((await manager.get(`/nodes/${note}`)).body).toMatchObject({
+      name: 'A note',
+      version: 1,
+    });
+    await expectStatus(manager, 'POST', `/vaults/${vault}/archive`, 200, {
+      json: { confirm: true },
+      headers: { 'if-match': '"1"' },
+    });
+    await expectStatus(manager, 'POST', `/vaults/${vault}/unarchive`, 409, {
+      json: { confirm: true },
+      headers: { 'if-match': '"1"' },
+    });
+    expect((await manager.get(`/vaults/${vault}`)).body).toMatchObject({
+      archivedAt: expect.any(String),
+      version: 2,
+    });
+  });
+
+  it('requires history scope for trash and revisions even when the token can read the note', async () => {
+    const { vault, note } = await fixture();
+    await expectStatus(manager, 'PUT', `/vaults/${vault}/members/${member.id}`, 201, {
+      json: { role: 'viewer' },
+    });
+    const revisions = await manager.get(`/notes/${note}/revisions`);
+    expect(revisions.status).toBe(200);
+    const revision = RevisionPage.parse(revisions.body).items.at(0);
+    if (revision === undefined)
+      throw new Error('The created note must retain its initial revision.');
+    const token = await insertToken(
+      context.db,
+      {
+        ownerId: member.id,
+        scopes: ['vault:read', 'note:read'],
+        vaultIds: [VaultId.parse(vault)],
+        expiresAt: new Date(context.clock.now() + 60_000),
+      },
+      context.clock.now(),
+    );
+    const client = context.server.rest({ bearer: token.raw });
+    await expectStatus(client, 'GET', `/notes/${note}/markdown`, 200);
+    await expectStatus(client, 'GET', `/vaults/${vault}/nodes`, 200);
+    await Promise.all([
+      expectStatus(client, 'GET', `/vaults/${vault}/nodes?includeTrashed=true`, 403),
+      expectStatus(client, 'GET', `/vaults/${vault}/trash`, 403),
+      expectStatus(client, 'GET', `/notes/${note}/revisions`, 403),
+      expectStatus(client, 'GET', `/notes/${note}/revisions/${revision.id}`, 403),
+    ]);
+  });
+
+  it('refuses active-note link and revision routes while the note is trashed and restores access afterward', async () => {
+    const { note } = await fixture();
+    await expectStatus(manager, 'GET', `/notes/${note}/rename-impact?parentId=${note}`, 409);
+    const revisions = await manager.get(`/notes/${note}/revisions`);
+    expect(revisions.status).toBe(200);
+    const revision = RevisionPage.parse(revisions.body).items.at(0);
+    if (revision === undefined)
+      throw new Error('The created note must retain its initial revision.');
+    const trashed = await manager.post(`/nodes/${note}/trash`, {
+      json: {},
+      headers: { ...webHeaders(context.origin), 'if-match': '"1"' },
+    });
+    expect(trashed.status).toBe(200);
+    const version = TrashNodeResult.parse(trashed.body).trashEntry.version;
+    await Promise.all([
+      expectStatus(manager, 'GET', `/notes/${note}/links`, 404),
+      expectStatus(manager, 'GET', `/notes/${note}/backlinks`, 404),
+      expectStatus(manager, 'GET', `/notes/${note}/rename-impact?name=Renamed`, 404),
+      expectStatus(manager, 'GET', `/notes/${note}/revisions`, 404),
+      expectStatus(manager, 'GET', `/notes/${note}/revisions/${revision.id}`, 404),
+      expectStatus(manager, 'POST', `/notes/${note}/revisions/${revision.id}/restore`, 409, {
+        json: { confirm: true },
+      }),
+    ]);
+    await expectStatus(manager, 'POST', `/nodes/${note}/restore`, 200, {
+      json: {},
+      headers: { 'if-match': `"${String(version)}"` },
+    });
+    await expectStatus(manager, 'GET', `/notes/${note}/links`, 200);
+    expect((await manager.get(`/notes/${note}/markdown`)).body).toBe('# Contract\n');
   });
 
   it('serves conditional Markdown and participants, refuses bad ranges, and bounds fresh projections', async () => {

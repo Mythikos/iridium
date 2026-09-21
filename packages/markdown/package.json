@@ -1,6 +1,6 @@
 {
   "name": "@iridium/markdown",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "the isomorphic unified pipeline (normalizeSource, restoreSource, parseNote, toPreviewTree, project, detectObsidianSyntax, resolveLink, sanitize schema)",
   "files": [
@@ -12,7 +12,15 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./search": {
+      "types": "./dist/search/parse-query.d.ts",
+      "default": "./dist/search/parse-query.js"
+    },
+    "./schema": {
+      "types": "./dist/sanitize/schema.d.ts",
+      "default": "./dist/sanitize/schema.js"
+    }
   },
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
@@ -30,32 +38,34 @@
     "hast-util-sanitize": "catalog:",
     "highlight.js": "catalog:",
     "lowlight": "catalog:",
-    "mdast-util-from-markdown": "catalog:",
-    "mdast-util-gfm-footnote": "catalog:",
-    "mdast-util-gfm-strikethrough": "catalog:",
-    "mdast-util-gfm-table": "catalog:",
-    "mdast-util-gfm-task-list-item": "catalog:",
+    "markdown-it": "catalog:",
+    "mdast-util-gfm-autolink-literal": "catalog:",
     "mdast-util-to-hast": "catalog:",
     "mdast-util-to-string": "catalog:",
-    "micromark": "catalog:",
-    "micromark-extension-gfm-footnote": "catalog:",
-    "micromark-extension-gfm-strikethrough": "catalog:",
-    "micromark-extension-gfm-table": "catalog:",
-    "micromark-extension-gfm-task-list-item": "catalog:",
-    "rehype-highlight": "catalog:",
     "rehype-sanitize": "catalog:",
+    "rehype-stringify": "catalog:",
     "remark-breaks": "catalog:",
-    "remark-frontmatter": "catalog:",
-    "remark-parse": "catalog:",
     "remark-rehype": "catalog:",
     "unified": "catalog:",
     "unist-util-visit": "catalog:",
+    "vfile": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
     "@fast-check/vitest": "catalog:",
+    "@iridium/testkit-fixtures": "workspace:*",
     "@iridium/tsconfig": "workspace:*",
     "fast-check": "catalog:",
+    "mdast-util-gfm-footnote": "catalog:",
+    "mdast-util-gfm-strikethrough": "catalog:",
+    "mdast-util-gfm-table": "catalog:",
+    "mdast-util-gfm-task-list-item": "catalog:",
+    "micromark-extension-gfm-footnote": "catalog:",
+    "micromark-extension-gfm-strikethrough": "catalog:",
+    "micromark-extension-gfm-table": "catalog:",
+    "micromark-extension-gfm-task-list-item": "catalog:",
+    "remark-frontmatter": "catalog:",
+    "remark-parse": "catalog:",
     "vitest": "catalog:"
   }
 }

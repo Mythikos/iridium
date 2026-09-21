@@ -1,0 +1,230 @@
+{
+  "ancestors": {
+    "li": [
+      "ol",
+      "ul"
+    ],
+    "tbody": [
+      "table"
+    ],
+    "td": [
+      "table"
+    ],
+    "th": [
+      "table"
+    ],
+    "thead": [
+      "table"
+    ],
+    "tr": [
+      "table"
+    ]
+  },
+  "attributes": {
+    "*": [
+      "dataLine",
+      "dataOffset",
+      "dataEndOffset",
+      "dataLinkKind",
+      "dataNoteId",
+      "dataAttachmentId",
+      "dataFragment",
+      "dataCandidates"
+    ],
+    "a": [
+      "href",
+      "title",
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ],
+      [
+        "ariaDescribedBy",
+        "^user-content-[^\\s\"'<>&]+$"
+      ],
+      "ariaLabel",
+      "dataFootnoteRef",
+      "dataFootnoteBackref",
+      [
+        "className",
+        "data-footnote-backref"
+      ]
+    ],
+    "img": [
+      "src",
+      "alt",
+      "title"
+    ],
+    "input": [
+      [
+        "type",
+        "checkbox"
+      ],
+      [
+        "disabled",
+        true
+      ],
+      "checked"
+    ],
+    "code": [
+      [
+        "className",
+        "^language-[\\w+#.-]{1,32}$",
+        "hljs"
+      ]
+    ],
+    "span": [
+      [
+        "className",
+        "^hljs-[\\w-]{1,40}$"
+      ]
+    ],
+    "h1": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ]
+    ],
+    "h2": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ],
+      [
+        "className",
+        "sr-only"
+      ]
+    ],
+    "h3": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ]
+    ],
+    "h4": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ]
+    ],
+    "h5": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ]
+    ],
+    "h6": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ]
+    ],
+    "li": [
+      [
+        "id",
+        "^user-content-[^\\s\"'<>&]+$"
+      ],
+      [
+        "className",
+        "task-list-item"
+      ]
+    ],
+    "ul": [
+      [
+        "className",
+        "contains-task-list"
+      ]
+    ],
+    "ol": [
+      "start",
+      [
+        "className",
+        "contains-task-list"
+      ]
+    ],
+    "td": [
+      [
+        "align",
+        "left",
+        "center",
+        "right"
+      ]
+    ],
+    "th": [
+      [
+        "align",
+        "left",
+        "center",
+        "right"
+      ]
+    ],
+    "section": [
+      "dataFootnotes",
+      [
+        "className",
+        "footnotes"
+      ]
+    ]
+  },
+  "clobber": [
+    "id",
+    "name",
+    "ariaDescribedBy",
+    "ariaLabelledBy"
+  ],
+  "clobberPrefix": "",
+  "protocols": {
+    "href": [
+      "http",
+      "https",
+      "mailto"
+    ],
+    "src": [
+      "http",
+      "https"
+    ]
+  },
+  "required": {
+    "input": {
+      "type": "checkbox",
+      "disabled": true
+    }
+  },
+  "strip": [
+    "script"
+  ],
+  "tagNames": [
+    "a",
+    "blockquote",
+    "br",
+    "code",
+    "del",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "img",
+    "input",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "span",
+    "strong",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "th",
+    "thead",
+    "tr",
+    "ul"
+  ],
+  "allowComments": false,
+  "allowDoctypes": false
+}

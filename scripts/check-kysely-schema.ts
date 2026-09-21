@@ -73,7 +73,11 @@ export const step: Step = {
     try {
       const maint = createMaintDb(mysql.migratorUrl(IRIDIUM_SCHEMA));
       try {
-        const outcome = await migrateToLatest({ db: maint.db, target: maint.target });
+        const outcome = await migrateToLatest({
+          db: maint.db,
+          target: maint.target,
+          allowLongRunning: true,
+        });
         if (outcome.error !== undefined) throw outcome.error;
       } finally {
         await maint.db.destroy();

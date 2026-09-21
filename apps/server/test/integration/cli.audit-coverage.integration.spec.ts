@@ -94,6 +94,13 @@ const COVERED: readonly { readonly path: string; readonly observes: readonly Aud
   { path: 'sessions revoke-all', observes: ['session.revoked_all'] },
   { path: 'tokens revoke-all', observes: ['token.revoked_all'] },
   { path: 'doctor', observes: [] },
+  // The canonical cli.maintenance.integration suite invokes each shipped command and verifies these rows.
+  { path: 'reindex', observes: ['admin.job.triggered'] },
+  { path: 'jobs run', observes: ['admin.job.triggered'] },
+  { path: 'jobs cancel', observes: ['admin.job.cancelled'] },
+  { path: 'trash purge', observes: ['admin.job.triggered'] },
+  { path: 'audit archive', observes: ['admin.job.triggered'] },
+  { path: 'audit export', observes: ['admin.audit.exported'] },
 ];
 
 let context: AuthTestServer;

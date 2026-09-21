@@ -27,6 +27,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`notes` TO 'iridium_app'@'%';
 GRANT SELECT, UPDATE (`generation`) ON `iridium`.`collab_owner_fence` TO 'iridium_app'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`note_docs` TO 'iridium_app'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`note_projections` TO 'iridium_app'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`note_projection_terms` TO 'iridium_app'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`note_search` TO 'iridium_app'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`note_links` TO 'iridium_app'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON `iridium`.`attachments` TO 'iridium_app'@'%';

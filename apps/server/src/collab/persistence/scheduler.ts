@@ -36,6 +36,7 @@ export class WriterScheduler {
   readonly #running = new Set<Schedulable>();
   readonly #logger: SchedulerLogger;
   #idleWaiters: Array<() => void> = [];
+  readonly #turnWaiters = new Map<Schedulable, Array<() => void>>();
 
   constructor(slots: number, logger: SchedulerLogger) {
     this.#slots = Math.max(1, Math.floor(slots));
@@ -81,6 +82,16 @@ export class WriterScheduler {
     });
   }
 
+  /** Joins this writer's current turn after its caller has fenced future scheduling. */
+  async settle(writer: Schedulable): Promise<void> {
+    if (!this.#running.has(writer)) return;
+    await new Promise<void>((resolve) => {
+      const waiters = this.#turnWaiters.get(writer) ?? [];
+      waiters.push(resolve);
+      this.#turnWaiters.set(writer, waiters);
+    });
+  }
+
   #dispatch(): void {
     while (this.#running.size < this.#slots) {
       const next = this.#ring.shift();
@@ -103,6 +114,8 @@ export class WriterScheduler {
       );
     } finally {
       this.#running.delete(writer);
+      for (const resolve of this.#turnWaiters.get(writer) ?? []) resolve();
+      this.#turnWaiters.delete(writer);
       if (writer.hasWork()) this.ready(writer);
       else this.#dispatch();
     }

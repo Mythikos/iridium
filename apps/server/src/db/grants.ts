@@ -97,6 +97,7 @@ export const GRANT_MATRIX: readonly GrantRow[] = Object.freeze([
   },
   dml('note_docs'),
   dml('note_projections'),
+  dml('note_projection_terms'),
   dml('note_search'),
   dml('note_links'),
   dml('attachments'),
@@ -208,14 +209,39 @@ export const MYSQLDUMP_ARGV: readonly string[] = Object.freeze([
   'iridium',
 ]);
 /** The tables migration `0034_grants` covers: everything that exists when it runs. */
-export const GRANTS_0034_TABLES: readonly string[] = Object.freeze(
-  GRANT_MATRIX.map((row) => row.table).filter(
-    (table) =>
-      !table.startsWith('oauth_') &&
-      table !== 'session_revocation_commands' &&
-      table !== 'collab_owner_fence',
-  ),
-);
+export const GRANTS_0034_TABLES: readonly string[] = Object.freeze([
+  'users',
+  'user_credentials',
+  'password_setup_tokens',
+  'sessions',
+  'login_throttle',
+  'access_tokens',
+  'access_token_vaults',
+  'vaults',
+  'vault_members',
+  'nodes',
+  'trash_entries',
+  'notes',
+  'note_docs',
+  'note_projections',
+  'note_search',
+  'note_links',
+  'attachments',
+  'jobs',
+  'import_jobs',
+  'export_jobs',
+  'server_settings',
+  'schema_meta',
+  'desktop_releases',
+  'note_updates',
+  'note_revisions',
+  'audit_chain_heads',
+  'audit_events',
+  'audit_events_archive',
+  'access_log',
+  'kysely_migration',
+  'kysely_migration_lock',
+]);
 
 function quoteIdentifier(name: string): string {
   return `\`${name.replaceAll('`', '``')}\``;
@@ -375,7 +401,15 @@ export async function applyGrants<DB>(
   logger?: DbLogger,
 ): Promise<GrantApplication> {
   const wanted = new Set(tables);
-  const rows = GRANT_MATRIX.filter((row) => wanted.has(row.table));
+  // Historical migrations import this growing matrix. Only tables already installed at
+  // their boundary can receive grants; later tables have their own companion migration.
+  // Do not write successful provenance for a table that does not yet exist.
+  const installed = await sql<{ table_name: string }>`
+    SELECT TABLE_NAME AS table_name FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+  `.execute(db);
+  const existing = new Set(installed.rows.map((row) => row.table_name));
+  const rows = GRANT_MATRIX.filter((row) => wanted.has(row.table) && existing.has(row.table));
   if (!(await hasGrantOption(db))) {
     logger?.warn(
       { skipped: 'no_grant_option', tables: tables.length },
@@ -386,7 +420,10 @@ export async function applyGrants<DB>(
 
   const schema = await currentSchema(db);
 
-  const statements = renderGrants(schema, tables);
+  const statements = renderGrants(
+    schema,
+    rows.map((row) => row.table),
+  );
   for (const statement of statements) {
     // Sequential on purpose: the statements are issued in matrix order so a failure names the first
     // table that could not be granted, and concurrent GRANTs on one account contend on the grant

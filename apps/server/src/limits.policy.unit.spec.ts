@@ -21,6 +21,7 @@ import {
   VaultName,
   type LimitId,
 } from '@iridium/contracts';
+import { parseSync, Visitor } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 
 import { ManualClock } from '../test/support/manual-clock.ts';
@@ -147,7 +148,10 @@ const ENFORCEMENT = {
   ),
   UPDATE_LOG_RETENTION_DAYS: configured(
     'prune only strictly old snapshot-covered rows',
-    wire('jobs/plugin.ts', /retentionDays:\s*app\.iridiumConfig\.collab\.updateLogRetentionDays/),
+    wire(
+      'jobs/plugin.ts',
+      /pruneUpdates\(\s*appDb\(app\),\s*app\.clock\.date\(\),\s*app\.iridiumConfig\.collab\.updateLogRetentionDays\s*,/,
+    ),
   ),
   CHECKPOINT_MIN_INTERVAL_MIN: at(
     1,
@@ -211,7 +215,7 @@ const ENFORCEMENT = {
   PAT_MAX_ALLOWLIST_VAULTS: at(3, SERVER + 'auth/tokens', '422 validation_failed'),
   PAT_RATE_LIMIT_PER_HOUR_MIN: at(3, SERVER + 'auth/tokens', 'reject below policy floor'),
   PAT_RATE_LIMIT_PER_HOUR_MAX: at(3, SERVER + 'auth/tokens', 'reject above policy ceiling'),
-  AI_GUIDANCE_MAX_CHARS: at(1, CONTRACTS + 'rest/common.ts', '422 validation_failed'),
+  AI_GUIDANCE_MAX_CHARS: at(1, CONTRACTS + 'settings.ts', '422 validation_failed'),
   ACCESS_LOG_MAX_NOTE_IDS: at(3, SERVER + 'audit', 'truncate logged note ids'),
   OAUTH_CODE_TTL_SECONDS: at(3, SERVER + 'oauth', 'expired code refused'),
   OAUTH_CONSENT_REQUEST_TTL_SECONDS: at(3, SERVER + 'oauth', 'expired consent refused'),
@@ -243,11 +247,183 @@ const ENFORCEMENT = {
   FM_TAGS_MAX: at(2, 'packages/markdown/src', 'bound extracted tags'),
   FM_ALIAS_MAX_LEN: at(2, 'packages/markdown/src', 'bound extracted aliases'),
   FM_ALIASES_MAX: at(2, 'packages/markdown/src', 'bound extracted aliases'),
+  YAML_MAX_ALIAS_COUNT: at(2, 'packages/markdown/src', 'reject excessive YAML alias expansion'),
+  LINK_TARGET_MAX_CHARS: at(2, 'packages/markdown/src', 'reject oversized link targets'),
+  JOB_LOCK_TIMEOUT_MS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  JOB_HEARTBEAT_MS: at(2, 'apps/server/src/jobs', 'enforce maintenance lifetime and batch policy'),
+  JOB_MAX_ATTEMPTS: at(2, 'apps/server/src/jobs', 'enforce maintenance lifetime and batch policy'),
+  JOB_PROGRESS_INTERVAL_MS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  JOB_POLL_INTERVAL_MS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  JOB_BATCH_SIZE: at(2, 'apps/server/src/jobs', 'enforce maintenance lifetime and batch policy'),
+  JOB_LIST_MAX: at(2, 'packages/contracts/src/rest/jobs.ts', 'bound maintenance job inputs'),
+  JOB_LIST_DEFAULT: at(2, 'packages/contracts/src/rest/jobs.ts', 'bound maintenance job inputs'),
+  JOB_REINDEX_NOTE_MAX: at(
+    2,
+    'packages/contracts/src/rest/jobs.ts',
+    'bound maintenance job inputs',
+  ),
+  JOB_ARCHIVE_BATCH_SIZE: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  JOB_RETENTION_DAYS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  SESSION_ROW_RETENTION_DAYS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  ATTACHMENT_TEMP_RETENTION_MS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  REVISION_KEEP_ALL_HOURS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  REVISION_HOURLY_DAYS: at(
+    2,
+    'apps/server/src/jobs',
+    'enforce maintenance lifetime and batch policy',
+  ),
+  REVISION_THINNING_ROWS_PER_RUN: at(
+    2,
+    'apps/server/src/jobs/retention.ts',
+    'yield a bounded revision scan with durable continuation',
+  ),
+  SEARCH_QUERY_MAX_CHARS: at(2, 'packages/contracts/src/rest/search.ts', 'bound search input'),
+  SEARCH_LIMIT_MAX: at(2, 'packages/contracts/src/rest/search.ts', 'bound search pages'),
+  SEARCH_LIMIT_DEFAULT: at(2, 'packages/contracts/src/rest/search.ts', 'default search page'),
+  SEARCH_VAULTS_MAX: at(2, 'packages/contracts/src/rest/search.ts', 'bound explicit search vaults'),
+  SNIPPET_CHARS_MIN: at(
+    2,
+    'packages/contracts/src/rest/search.ts',
+    'minimum requested snippet length',
+  ),
+  SNIPPET_CHARS_MAX: at(
+    2,
+    'packages/contracts/src/rest/search.ts',
+    'maximum requested snippet length',
+  ),
+  SNIPPET_CACHE_MAX: at(2, 'apps/server/src/search', 'bound mapped snippet cache'),
+  SNIPPET_CACHE_TTL_MS: at(2, 'apps/server/src/search', 'expire mapped snippets'),
+  REVISION_LIST_MAX: at(2, 'packages/contracts/src/rest/revisions.ts', 'bound revision pages'),
+  REVISION_LIST_DEFAULT: at(2, 'packages/contracts/src/rest/revisions.ts', 'default revision page'),
+  REVISION_LABEL_MAX: at(2, 'packages/contracts/src/rest/revisions.ts', 'bound checkpoint labels'),
+  LINK_FRAGMENT_MAX_CHARS: at(2, 'packages/markdown/src', 'bound persisted link fragments'),
+  MARKDOWN_LINKS_MAX: at(2, 'packages/markdown/src', 'bound links extracted from one note'),
+  LINK_CANDIDATES_MAX: at(2, 'packages/markdown/src', 'bound ambiguous link suggestions'),
+  AFFECTED_LINK_SAMPLE_MAX: at(
+    2,
+    'apps/server/src/tree/rename-impact.ts',
+    'bound rename warning source samples in SQL',
+  ),
+  VAULT_INDEX_MAX_ENTRIES: at(
+    2,
+    'apps/server/src/projection',
+    'switch large vault link resolution to indexed bounded lookup',
+  ),
+  CODE_LANGUAGE_MAX_CHARS: at(2, 'packages/markdown/src', 'bound code language metadata'),
+  CODE_LANGUAGES_MAX: at(2, 'packages/markdown/src', 'bound distinct code languages'),
+  OBSIDIAN_FINDING_MAX_CHARS: at(2, 'packages/markdown/src', 'bound finding source excerpts'),
+  OBSIDIAN_FINDINGS_PER_CODE_MAX: at(2, 'packages/markdown/src', 'bound per-code finding samples'),
+  OBSIDIAN_FINDINGS_MAX: at(2, 'packages/markdown/src', 'bound total finding samples'),
+  OBSIDIAN_SAMPLE_MAX: at(
+    2,
+    'apps/server/src/projection/derived.ts',
+    'bound persisted detector summaries',
+  ),
+  HEADING_TITLE_MAX_CODEPOINTS: at(
+    2,
+    'packages/markdown/src',
+    'truncate complete heading graphemes',
+  ),
+  PROJECTION_QUEUE_MAX: at(
+    2,
+    'apps/server/src/projection/pool.ts',
+    'refuse excess queued projections',
+  ),
+  REINDEX_RATE_PER_SECOND: at(
+    2,
+    'apps/server/src/config/env.ts',
+    'throttle projection rebuild admission',
+    wire('collab/plugin.ts', /ratePerSecond:\s*config\.projection\.reindexRatePerSecond/),
+    wire('projection/reindex.ts', /this\.#deps\.ratePerSecond/),
+  ),
+  PROJECTION_WORKER_HEAP_MB: at(2, 'apps/server/src/projection/pool.ts', 'bound worker heap'),
+  PROJECTION_WORKER_STACK_MB: at(2, 'apps/server/src/projection/pool.ts', 'bound worker stack'),
+  PROJECTION_WORKER_IDLE_MS: at(2, 'apps/server/src/projection/pool.ts', 'release idle workers'),
+  ATTACHMENT_SNIFF_BYTES: at(2, 'apps/server/src/attachments', 'bound MIME signature prefix'),
+  ATTACHMENT_NAME_MAX_BYTES: at(2, 'apps/server/src/attachments', 'refuse oversized filenames'),
+  ATTACHMENT_PATH_MAX_CHARS: at(2, 'apps/server/src/attachments', 'bound stored attachment paths'),
+  ATTACHMENT_NAME_COLLISION_ATTEMPTS: at(
+    2,
+    'apps/server/src/attachments',
+    'bound collision suffix attempts',
+  ),
+  ATTACHMENT_UPLOAD_CONCURRENCY: at(2, 'apps/server/src/attachments', 'bound simultaneous uploads'),
+  ATTACHMENT_UPLOADS_PER_MINUTE: at(2, 'apps/server/src/attachments', 'refuse excess uploads'),
+  ATTACHMENT_MULTIPART_THRESHOLD_BYTES: at(
+    2,
+    'apps/server/src/attachments',
+    'switch to bounded S3 multipart streaming',
+  ),
+  ATTACHMENT_REFERENCE_SAMPLE_MAX: at(
+    2,
+    'apps/server/src/attachments',
+    'bound reference report examples',
+  ),
+  ATTACHMENT_DELETE_REFERENCE_SAMPLE_MAX: at(
+    2,
+    'apps/server/src/attachments',
+    'bound referenced-delete response',
+  ),
+  ATTACHMENT_SCAN_BATCH: at(
+    2,
+    'apps/server/src/attachments',
+    'bound retained-reference scan batches',
+  ),
+  ATTACHMENT_LIST_MAX: at(
+    2,
+    'packages/contracts/src/rest/attachments.ts',
+    'bound attachment pages',
+  ),
+  ATTACHMENT_LIST_DEFAULT: at(
+    2,
+    'packages/contracts/src/rest/attachments.ts',
+    'default attachment page size',
+  ),
+  NODE_PATH_MAX_CHARS: at(
+    2,
+    'packages/contracts/src/collab.ts',
+    'bound maximum-depth paths including Markdown suffix',
+  ),
+  TREE_CHANGES_MAX: at(2, 'packages/contracts/src/collab.ts', 'bound changes per vault frame'),
   UPLOAD_MAX_BYTES: at(
     2,
     SERVER + 'config/env.ts',
     '413 upload refused',
-    wire('attachments', /uploadMaxBytes/),
+    wire('rest/plugin.ts', /maxUploadBytes:\s*config\.transfer\.maxUploadBytes/),
+    wire('attachments/routes.ts', /stageAttachment\([\s\S]*?deps\.maxUploadBytes/),
+    wire('attachments/staging.ts', /sizeBytes\s*>\s*maxBytes/),
   ),
   IMPORT_MAX_BYTES: at(
     6,
@@ -272,10 +448,27 @@ const ENFORCEMENT = {
 
 /** Comments and quoted prose cannot satisfy a reference check. Offsets are irrelevant here. */
 function codeOnly(source: string): string {
-  return source.replace(
-    /\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`/g,
-    ' ',
-  );
+  const parsed = parseSync('policy-source.ts', source);
+  if (parsed.errors.length > 0)
+    throw new Error(`Policy source could not be parsed: ${parsed.errors[0]?.message}`);
+  const ranges: { start: number; end: number }[] = [...parsed.comments];
+  new Visitor({
+    Literal(node) {
+      if (typeof node.value === 'string' || 'regex' in node) ranges.push(node);
+    },
+    TemplateElement(node) {
+      ranges.push(node);
+    },
+  }).visit(parsed.program);
+  let cursor = 0;
+  const result: string[] = [];
+  for (const range of ranges.toSorted((a, b) => a.start - b.start)) {
+    if (range.start < cursor) continue;
+    result.push(source.slice(cursor, range.start), ' ');
+    cursor = range.end;
+  }
+  result.push(source.slice(cursor));
+  return result.join('');
 }
 function sourceFiles(owner: string): readonly string[] {
   const absolute = join(ROOT, owner);
@@ -406,6 +599,13 @@ describe('limits.policy.unit [hp:HP-5]', () => {
       ),
     ).toBe(false);
   });
+  it('keeps policy references after quoted regex characters while removing literal-only references', () => {
+    const source = String.raw`const pattern = /["\x27\x60]/; const active = LIMITS.MARKDOWN_BLOCKQUOTE_MAX_DEPTH;`;
+    expect(codeOnly(source)).toContain('LIMITS.MARKDOWN_BLOCKQUOTE_MAX_DEPTH');
+    expect(
+      codeOnly(String.raw`const pattern = /LIMITS.MARKDOWN_BLOCKQUOTE_MAX_DEPTH/;`),
+    ).not.toContain('LIMITS.MARKDOWN_BLOCKQUOTE_MAX_DEPTH');
+  });
   it('ratchets future limits at their owning milestone, rather than treating configuration defaults as enforcement', () => {
     expect(gaps(['MARKDOWN_SOURCE_MAX_BYTES'], ENFORCEMENT, 1, () => '')).toEqual([]);
     expect(gaps(['MARKDOWN_SOURCE_MAX_BYTES'], ENFORCEMENT, 2, () => '')).toHaveLength(1);
@@ -415,11 +615,12 @@ describe('limits.policy.unit [hp:HP-5]', () => {
     expect(LIMITS.MARKDOWN_SOURCE_MAX_BYTES).toBe(LIMITS.NOTE_HARD_MAX_UTF16);
   });
 
-  it('keeps policy ids separate from environment keys except the three documented public identity overrides', () => {
+  it('keeps policy ids separate from environment keys except documented public identity overrides', () => {
     const overlap = Object.keys(LIMITS)
       .filter((id) => ENV_SCHEMA_KEYS.includes(id))
       .toSorted();
     expect(overlap).toEqual([
+      'REINDEX_RATE_PER_SECOND',
       'SHUTDOWN_DRAIN_MS',
       'UPDATE_LOG_RETENTION_DAYS',
       'WS_MAX_PAYLOAD_BYTES',

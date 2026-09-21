@@ -9,7 +9,8 @@ import type { Connection, Document } from '@hocuspocus/server';
  * post-commit events of 04 §8.3 to `handle()`, which lands between the epoch reconciler and the ticket
  * store in subscription order. Every sweep is a bounded iteration over `hocuspocus.documents` and each
  * document's connections; a document's vault comes from the gateway's own name → vault index
- * (maintained by `afterLoadDocument` / `afterUnloadDocument`), so a sweep never queries the database.
+ * (maintained by `afterLoadDocument` / `afterUnloadDocument`). Boot reconciliation additionally reads
+ * durable lifecycle state for only these already-loaded entries; it never scans or loads stored notes.
  *
  * The participant table is built from `connection.context` — from what `onAuthenticate` proved —
  * and never from awareness; names and colours come from `users`, read once per connection at
@@ -18,9 +19,9 @@ import type { Connection, Document } from '@hocuspocus/server';
 import {
   encodeStateless,
   noteDocName,
+  NoteId,
   parseDocName,
   type AuthzEpoch,
-  type NoteId,
   type Permission,
   type Principal,
   type Role,
@@ -30,7 +31,7 @@ import {
   type UserId,
   type VaultId,
 } from '@iridium/contracts';
-import { getContent, insertChunked, type NoteDoc } from '@iridium/crdt';
+import { getContent, insertChunked, type NoteDoc, type TextDiff } from '@iridium/crdt';
 
 import type { Authorizer } from '../authz/authorize.ts';
 import type { AuthzEvent } from '../authz/bus.ts';
@@ -77,6 +78,8 @@ export interface ServerEdit {
   readonly document: NoteDoc;
   /** Emits independently bounded updates under the captured owner and trusted edit origin. */
   insertChunked(index: number, text: string): void;
+  /** Synchronous trusted prefix/suffix edit; the writer captures immediately before this call. */
+  applyDiff(diff: TextDiff): void;
   transact(fn: (document: NoteDoc) => void): Promise<void>;
   disconnect(): Promise<void>;
 }
@@ -90,6 +93,7 @@ export interface DirectConnectionLike {
 
 interface OwnedDirectConnection extends DirectConnectionLike {
   insertChunked(index: number, text: string): void;
+  applyDiff(diff: TextDiff): void;
 }
 
 /**
@@ -116,9 +120,8 @@ export interface GatewayOptions {
   readonly clock: Clock;
   readonly logger: GatewayLogger;
   readonly authorize: Authorizer['authorize'];
-  /** `dbApp`, for the note → vault resolution of `openServerEdit`. */
-  /** The note → vault resolution of `openServerEdit`. */
-  readonly reads: Pick<CollabReads, 'resolveNote'>;
+  /** Durable resolution for direct edits and reconciliation of already-loaded documents. */
+  readonly reads: Pick<CollabReads, 'resolveNote' | 'resolveVault'>;
   /** Compose ACL writability with the loaded note writer’s independent safety latches. */
   readonly applyWriterLatches: (connection: Connection<CollabHookContext>) => void;
   /** An in-memory command barrier, composed at the native synchronous readOnly apply boundary. */
@@ -171,6 +174,7 @@ function toWireParticipant(participant: Participant): {
 export class CollabGateway {
   readonly #options: GatewayOptions;
   readonly #closing = new ClosingSet();
+  readonly #trashGrace = new ClosingSet();
   readonly #vaultOf = new Map<string, VaultId>();
   readonly #participants = new Map<string, DocumentParticipants>();
   #server: GatewayServer | null = null;
@@ -222,7 +226,13 @@ export class CollabGateway {
   }
 
   isClosing(noteId: NoteId): boolean {
-    return this.#closing.has(noteId);
+    return this.closingReason(noteId) !== null;
+  }
+
+  /** A committed tombstone takes precedence over the transient structural fence during grace. */
+  closingReason(noteId: NoteId): 'note-closing' | 'note-trashed' | null {
+    if (this.#trashGrace.has(noteId)) return 'note-trashed';
+    return this.#closing.has(noteId) ? 'note-closing' : null;
   }
 
   clearClosing(noteId: NoteId): void {
@@ -328,6 +338,50 @@ export class CollabGateway {
 
   // ---- the sweeps --------------------------------------------------------------------------------
 
+  /**
+   * Reconcile retained documents after a missed post-COMMIT lifecycle notification (05, Trash).
+   * A fresh lazy-loading process has no entries and issues no SQL. In-process reuse checks each
+   * retained identity against current durable state; an unload/replacement during a read is ignored.
+   */
+  async sweepTrashedOnBoot(): Promise<void> {
+    const pending: Promise<void>[] = [];
+    const archived = new Set<VaultId>();
+    const retained = [...this.#documents()];
+    for (const [name, document] of retained) {
+      const parsed = parseDocName(name);
+      if (parsed === null) continue;
+      // eslint-disable-next-line no-await-in-loop -- bound database work to one retained identity at a time
+      const resolved = await (parsed.channel === 'note'
+        ? this.#options.reads.resolveNote(parsed.id)
+        : this.#options.reads.resolveVault(parsed.id));
+      if (this.#documents().get(name) !== document) continue;
+      if (resolved !== null && resolved.vaultStatus !== 'active') {
+        if (!archived.has(resolved.vault.id)) {
+          archived.add(resolved.vault.id);
+          pending.push(this.archiveVault(resolved.vault.id));
+        }
+      } else if (
+        parsed.channel === 'note' &&
+        resolved?.kind === 'note' &&
+        resolved.deletedAt !== null
+      ) {
+        pending.push(this.closeNote(NoteId.parse(parsed.id), 'note-trashed'));
+      } else if (
+        resolved === null ||
+        (resolved.kind === 'note' &&
+          (resolved.nodeKind !== 'note' || resolved.initializedAt === null))
+      ) {
+        for (const connection of this.#connectionsOf(document)) {
+          connection.readOnly = true;
+          connection.close(
+            closeEventFor(parsed.channel === 'note' ? 'note-not-found' : 'unauthorized'),
+          );
+        }
+      }
+    }
+    await Promise.all(pending);
+  }
+
   /** Every `note:*` and `vault:*` connection of a user, optionally narrowed to a session or a vault. */
   async revokeUser(
     userId: UserId,
@@ -421,15 +475,25 @@ export class CollabGateway {
   async closeNote(noteId: NoteId, reason: 'note-trashed' | 'note-closing'): Promise<void> {
     const document = this.#documents().get(noteDocName(noteId));
     if (document === undefined) return;
-    if (reason === 'note-trashed') {
-      document.broadcastStateless(
-        encodeStateless({ v: 1, t: 'closing', reason: 'note-trashed', graceMs: CLOSING_GRACE_MS }),
-      );
-      await this.#after(CLOSING_GRACE_MS);
-    }
-    for (const connection of this.#connectionsOf(document)) {
-      connection.readOnly = true;
-      connection.close(closeEventFor(reason));
+    if (reason === 'note-trashed') this.#trashGrace.mark(noteId);
+    try {
+      if (reason === 'note-trashed') {
+        document.broadcastStateless(
+          encodeStateless({
+            v: 1,
+            t: 'closing',
+            reason: 'note-trashed',
+            graceMs: CLOSING_GRACE_MS,
+          }),
+        );
+        await this.#after(CLOSING_GRACE_MS);
+      }
+      for (const connection of this.#connectionsOf(document)) {
+        connection.readOnly = true;
+        connection.close(closeEventFor(reason));
+      }
+    } finally {
+      if (reason === 'note-trashed') this.#trashGrace.clear(noteId);
     }
   }
 
@@ -504,6 +568,7 @@ export class CollabGateway {
     return {
       document,
       insertChunked: (index, text) => direct.insertChunked(index, text),
+      applyDiff: (diff) => direct.applyDiff(diff),
       transact: (fn) => direct.transact((loaded) => fn(loaded)),
       disconnect: () => direct.disconnect(),
     };
@@ -578,6 +643,21 @@ export class CollabGateway {
     }
     return {
       document: direct.document,
+      applyDiff: (diff) => {
+        const loaded = direct.document;
+        if (loaded === null) throw new Error('the direct connection is closed');
+        owner?.assertActive();
+        // The pinned DirectConnection.transact implementation calls document.transact synchronously
+        // with precisely this trusted origin. This explicit synchronous boundary cannot grow an
+        // await between the writer's capture and its deletion/chunked insertion (D05-21).
+        const origin = { source: 'local', context: editContext };
+        if (diff.deleteLength > 0)
+          loaded.transact(() => getContent(loaded).delete(diff.start, diff.deleteLength), origin);
+        if (diff.insert.length > 0)
+          insertChunked(getContent(loaded), diff.start, diff.insert, origin, () =>
+            owner?.assertActive(),
+          );
+      },
       insertChunked: (index, text) => {
         const loaded = direct.document;
         if (loaded === null) throw new Error('the direct connection is closed');

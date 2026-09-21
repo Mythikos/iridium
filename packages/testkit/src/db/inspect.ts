@@ -224,7 +224,8 @@ export function inspectGuardedIndexes(
       FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = ${schema}
        AND INDEX_NAME IN ('uq_oauth_consents_live', 'ix_tokens_consent', 'ix_tokens_client',
-                          'uq_sibling', 'ft_note_search', 'ix_proj_fm_tags', 'ix_proj_fm_aliases')
+                          'uq_sibling', 'ft_note_search', 'ix_proj_fm_tags', 'ix_proj_fm_aliases',
+                          'ix_projection_terms_lookup')
      GROUP BY INDEX_NAME
   `.execute(executor);
 }

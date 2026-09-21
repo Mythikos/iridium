@@ -51,6 +51,7 @@ export { assertLfOnly, assertNoAttributes, assertWithinCaps, type CapSubject } f
 export { initialNoteState, type InitialNoteState } from './initial-state.ts';
 export { insertChunked } from './insert-chunked.ts';
 export { prefixSuffixDiff, type TextDiff } from './prefix-suffix-diff.ts';
+export { relativePositionAt, resolveRelativePosition } from './positions.ts';
 export { scanHostileContent, type HostileContentScan } from './scan.ts';
 export { encodeSyncStep1, receiveSyncMessage, type SyncMessageResult } from './sync.ts';
 export { createUndoManager, type CreateUndoManagerOptions } from './undo.ts';

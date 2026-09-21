@@ -117,14 +117,22 @@ export interface HostileCorpus {
   readonly files: Readonly<Record<string, HostileExpectation>>;
 }
 
-/** The corpus manifest. One entry per `.md` file in `fixtures/hostile/`. */
+/** The corpus manifest defines membership; workspace metadata such as CHANGELOG.md is not input. */
 export function readHostileCorpus(): HostileCorpus {
   return JSON.parse(
     readFileSync(join(HOSTILE_CORPUS_PATH, 'expectations.json'), 'utf8'),
   ) as HostileCorpus;
 }
 
-/** The Markdown source of one hostile fixture, by its `expectations.json` key. */
+class UndeclaredHostileFixtureError extends Error {
+  constructor(name: string) {
+    super(`Hostile fixture ${name} is not declared in expectations.json; add its security expectations before reading it as corpus input.`);
+    this.name = 'UndeclaredHostileFixtureError';
+  }
+}
+
+/** The Markdown source of one hostile fixture, restricted to an `expectations.json` key. */
 export function readHostileFixture(name: string): string {
+  if (!Object.hasOwn(readHostileCorpus().files, name)) throw new UndeclaredHostileFixtureError(name);
   return readFileSync(join(HOSTILE_CORPUS_PATH, name), 'utf8');
 }

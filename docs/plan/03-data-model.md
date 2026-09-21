@@ -69,7 +69,7 @@ All foreign keys are `ON DELETE RESTRICT`. Nothing in Iridium is deleted implici
 
 | Path | Trigger | Order of `DELETE` statements (children first) |
 |---|---|---|
-| Note purge | trash expiry (`trash_purge` job) or `DELETE /nodes/:id?purge=true` | `note_links` (`from_note_id`) → `note_search` → `note_projections` → `note_revisions` → `note_updates` → `note_docs` → `notes` → `trash_entries` → `nodes`; then `UPDATE note_links SET resolved_node_id = NULL, status = 'broken' WHERE vault_id = ? AND resolved_node_id = ?` for links from other notes |
+| Note purge | trash expiry (`trash_purge` job) or `DELETE /nodes/:id?purge=true` | `note_links` (`from_note_id`) → `note_search` → `note_projection_terms` → `note_projections` → `note_revisions` → `note_updates` → `note_docs` → `notes` → `trash_entries` → `nodes`; then `UPDATE note_links SET resolved_node_id = NULL, status = 'broken' WHERE vault_id = ? AND resolved_node_id = ?` for links from other notes |
 | Category purge | same | descendants ordered by depth descending (deepest first), each note as above, each category `trash_entries` → `nodes` |
 | Aborted-import vault | `POST /imports/:jobId/abort` (the import's requester, `09-api-reference.md` §2.12) on a vault still in `status='importing'`, or `transfer_cleanup` when `import_jobs.expires_at` passes | vault status → `deleting`; every node as above; `attachments` rows of the vault; `vault_members`; `access_token_vaults`; `oauth_consent_vaults`; `vaults` |
 | Short-lived credential housekeeping | `session_ticket_sweep` job | `sessions` rows past `absolute_expires_at` or `revoked_at` by more than `SESSION_ROW_RETENTION_DAYS` (30); `password_setup_tokens` consumed or expired by more than 30 days; the three OAuth rows of §4A's retention table — `oauth_authorization_codes` 24 h past `expires_at`, `oauth_refresh_tokens` 30 days past the later of `absolute_expires_at` and `revoked_at`, and never-used dynamically registered `oauth_clients` after `OAUTH_UNUSED_CLIENT_TTL_DAYS` (7) |
@@ -115,13 +115,13 @@ GRANT RELOAD, PROCESS, REPLICATION CLIENT, REPLICATION SLAVE, BACKUP_ADMIN, SHOW
 
 The backup role holds three privileges beyond `A8`'s list (`SELECT, LOCK TABLES, RELOAD, PROCESS, REPLICATION CLIENT, SHOW VIEW, TRIGGER, EVENT`), each demanded by one flag of the dump command `iridium backup` actually runs (`11-operations-and-deployment.md` OPS-26): `REPLICATION SLAVE` is what lets `mysqlbinlog --read-from-remote-server` stream the closed binary logs of the point-in-time-recovery set (`RELOAD` only covers the `FLUSH BINARY LOGS` that closes them); `BACKUP_ADMIN` is required because `--single-transaction` combined with `--source-data` takes an instance backup lock (`LOCK INSTANCE FOR BACKUP`) on MySQL 8.0.21 and later, which is true on both required lines, 8.4.11 and 9.7.2; and `SHOW_ROUTINE` is what `--routines` needs from a role that deliberately has no global `SELECT`. The shipped command is therefore the specification of this grant set, which is why verification (e) below executes that exact command string rather than a shorter hand-written one (decision D03-21).
 
-Table-level grants for `iridium_app` are applied by migration `0034_grants` (and by a companion `NNNN_<table>_grants` migration for every table created later), because MySQL cannot restrict a database-level grant per table and grants on non-existent tables require `CREATE`. A missing `GRANT OPTION` or role account records a skipped grant application; the migration may still be recorded as applied. Forward migration `0054_grants_provenance` reapplies the complete current matrix and records each table in `schema_meta` under `acl.<table>` with `{applied, skipped?, fingerprint}`. The fingerprint binds the evidence to the canonical table grant. Unknown, stale or skipped evidence is a readiness warning, never proof that privileges exist. A rolled-back serving-role probe of the critical audit, revocation-command and owner-fence privileges takes precedence and fails readiness when a privilege is missing. The DBA applies `docs/ops/db-grants.sql`; restored privileges recover a failure to the honest warning when historical skip metadata remains. Earlier migration files and history are not rewritten.
+Table-level grants for `iridium_app` are applied by migration `0034_grants` (and by a companion `NNNN_<table>_grants` migration for every table created later), because MySQL cannot restrict a database-level grant per table and grants on non-existent tables require `CREATE`. A missing `GRANT OPTION` or role account records a skipped grant application; the migration may still be recorded as applied. Forward migration `0054_grants_provenance` reapplies the current matrix for tables already installed at its migration boundary and records each table in `schema_meta` under `acl.<table>` with `{applied, skipped?, fingerprint}`. The fingerprint binds the evidence to the canonical table grant. Unknown, stale or skipped evidence is a readiness warning, never proof that privileges exist. A rolled-back serving-role probe of the critical audit, revocation-command and owner-fence privileges takes precedence and fails readiness when a privilege is missing. The DBA applies `docs/ops/db-grants.sql`; restored privileges recover a failure to the honest warning when historical skip metadata remains. Earlier migration files and history are not rewritten. The shared grant executor intersects the requested matrix with installed base tables before applying grants or recording provenance; future tables receive no premature success record. Migration `0034` retains its original table scope, and each later table has its own companion grant migration.
 
 **One rendered source.** The matrix below is not written twice. `apps/server/src/db/grants.ts` exports `GRANT_MATRIX` (table → role → privilege list); `0034_grants`, every later `NNNN_<table>_grants` and `iridium migrate ensure-guards` execute it, and `pnpm gen` renders both `docs/ops/db-grants.sql` and the committed fixture `apps/server/test/fixtures/db-grants.snapshot.sql` that `db-grants.integration` compares against `SHOW GRANTS`. `pnpm gen && git diff --exit-code` (the `gen-drift` step of the `static` CI job) therefore fails on any drift between the code, the DBA script, the fixture and this table. `11-operations-and-deployment.md` prints the `iridium_app` column of the same matrix; the migrator and backup columns here are the schema-wide grants of `01_roles.sql` above.
 
 | Table(s) | `iridium_app` | `iridium_migrator` | `iridium_backup` |
 |---|---|---|---|
-| `users`, `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle`, `access_tokens`, `access_token_vaults`, `oauth_clients`, `oauth_consents`, `oauth_consent_vaults`, `oauth_authorization_codes`, `oauth_refresh_tokens`, `vaults`, `vault_members`, `nodes`, `trash_entries`, `notes`, `note_docs`, `note_projections`, `note_search`, `note_links`, `attachments`, `jobs`, `import_jobs`, `export_jobs`, `server_settings`, `schema_meta`, `desktop_releases` | `SELECT, INSERT, UPDATE, DELETE` | all (schema owner) | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
+| `users`, `user_credentials`, `password_setup_tokens`, `sessions`, `login_throttle`, `access_tokens`, `access_token_vaults`, `oauth_clients`, `oauth_consents`, `oauth_consent_vaults`, `oauth_authorization_codes`, `oauth_refresh_tokens`, `vaults`, `vault_members`, `nodes`, `trash_entries`, `notes`, `note_docs`, `note_projections`, `note_projection_terms`, `note_search`, `note_links`, `attachments`, `jobs`, `import_jobs`, `export_jobs`, `server_settings`, `schema_meta`, `desktop_releases` | `SELECT, INSERT, UPDATE, DELETE` | all (schema owner) | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `session_revocation_commands` | `SELECT, INSERT, UPDATE (result, delivered_at)`; request fields are immutable and completed command evidence is retained in M1 | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `collab_owner_fence` | `SELECT, UPDATE (generation)`; the application cannot insert or delete the singleton | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
 | `note_updates` | `SELECT, INSERT, DELETE` — no `UPDATE`: the log is append-only and rows leave only through `update_log_prune` (§8.4) | all | `SELECT, LOCK TABLES, TRIGGER, SHOW VIEW` |
@@ -628,7 +628,7 @@ sequenceDiagram
 4. `UPDATE nodes SET parent_id = ?, name = ?, version = version + 1, updated_by = ?, updated_at = ? WHERE id = ? AND version = ? AND deleted_at IS NULL AND vault_id = ?` and assert `numUpdatedRows === 1n` (CAS); `ER_DUP_ENTRY` on `uq_sibling` → `409 name_conflict`.
 5. `UPDATE vaults SET tree_version = tree_version + 1, updated_at = ? WHERE id = ?`.
 6. For a renamed note whose `note_projections.heading_title IS NULL`, `UPDATE note_search SET title = ? WHERE note_id = ?` (display title is `COALESCE(heading_title, nodes.name)`, so the search projection must follow the name).
-7. `AuditWriter.record(trx, …)` — this locks `audit_chain_heads` and is always the last lock taken. The global chain is declared once in `02-system-architecture.md` §"Lock order" and is normative (`A46`): `vaults → nodes → notes → note_docs → note_updates → note_projections → note_search → note_links → note_revisions → trash_entries → audit_chain_heads`, chain head always last. A structural transaction on a **live** node never locks `note_docs` at all; the two transactions that do take it while holding the vault lock are `NoteService.initialize` inside note creation (§8.8, no writer for that note can exist yet) and the purge of a trashed subtree (§1.4, whose documents are closed and whose writers are disposed), so neither can race the persistence writer.
+7. `AuditWriter.record(trx, …)` locks `audit_chain_heads` last. The full owner/vault/parent/derived order is normative in `02-system-architecture.md` section "Lock order" (`A46`). Structural mutations take vault-X; projection publication takes vault-S before any snapshot read; raw updates and explicit checkpoints omit that gate. Trash uses sorted unique-key parent/document locks and can capture live `note_docs`. Purge starts local writer fencing under a short admission lock, awaits disposal outside that lock, then revalidates the target under vault-X before deleting children.
 8. `COMMIT`, then side effects (`tree-changed` broadcast with `{treeVersion, changes[]}`, `CollabGateway.closeNote` for trashed notes, `AuthzBus` events). Side effects are idempotent; a crash between COMMIT and side effect is repaired because `onAuthenticate`/`onLoadDocument` refuse trashed notes and a boot-time sweep closes any loaded trashed document.
 
 ### 6.5 Name rules
@@ -653,7 +653,7 @@ Iridium uses exactly four concurrency mechanisms, and every table belongs to exa
 |---|---|---|
 | Row `version` compare-and-set | every mutable metadata row | `UPDATE … SET version = version + 1 WHERE id = ? AND version = ?`, assert `numUpdatedRows === 1n` |
 | Per-vault mutex + `tree_version` | structural changes to `nodes` | `SELECT … FROM vaults WHERE id = ? AND status = 'active' FOR UPDATE` first, `tree_version + 1` last (§6.4) |
-| Per-note row lock + `head_seq` CAS | note content (`note_docs`, `note_updates`) | `SELECT d.head_seq, n.deleted_at FROM note_docs d JOIN nodes n ON n.id = d.note_id WHERE d.note_id = ? FOR UPDATE` (`A19`; the join is what makes the trash check part of the same lock), then `UPDATE note_docs … WHERE note_id = ? AND head_seq = ?` (§8.4) |
+| Per-note row lock + `head_seq` CAS | note content (`note_docs`, `note_updates`) | `SELECT deleted_at FROM nodes WHERE id = ? FOR SHARE; SELECT node_id FROM notes WHERE node_id = ? FOR UPDATE; SELECT head_seq FROM note_docs WHERE note_id = ? FOR UPDATE` (`A19`; the join is what makes the trash check part of the same lock), then `UPDATE note_docs … WHERE note_id = ? AND head_seq = ?` (§8.4) |
 | Monotonic guard | rebuildable projections | `UPDATE … WHERE revision < ?` / `WHERE snapshot_through_seq < ?`; an out-of-order writer simply writes nothing (§9.2) |
 
 ### 7.1 `version` column inventory
@@ -846,7 +846,7 @@ CREATE TABLE note_revisions (                                 -- recoverable che
 | `size_chars` | compaction | UTF-16 units of the projected Markdown at the last compaction — the value the soft cap (1 000 000) is measured against. It lags the live document by at most `maxDebounce`; the authoritative live value lives in the loaded document. |
 | `oversize` | compaction | Set when `size_chars` exceeds the soft cap or the V2 snapshot exceeds 8 MB; while set, the note is read-only for every connection and the editor shows the `size-exceeded` banner. Cleared by the first compaction that finds the note back under the cap. |
 | `content_invalid` | compaction scan (`A22`) | Set when `ytext.toDelta()` contained anything but `{insert: string}` entries, or the projected Markdown contained `\r`. While set the note is read-only, the projection row carries `status='invalid_content'`, and `iridium doctor --repair-content` is the only way out (audited `note.content.repaired`). |
-| `last_edited_by`, `last_edited_at` | compaction | Taken from the most recent coalesced batch in the window. They are **not** written per update: the writer's guard locks exactly the two rows `A19` fixes — the note's `note_docs` row and, through the mandated `JOIN nodes`, the note's `nodes` row — and never `notes`, so touching `notes` on every commit would add a third lock to the hot durability path (`A46` lock order). They therefore lag by at most `maxDebounce`, which is exactly what tree listings and "recently updated" orderings need (decision D03-14). The writer carries the value forward in memory (`NoteWriter.lastEditor`) and the compaction transaction writes it in the single `UPDATE notes` of §8.6 step 4. |
+| `last_edited_by`, `last_edited_at` | compaction | Taken from the most recent coalesced batch in the window. They are **not** written per update: the writer already locks `notes` to prevent implicit FK lock inversions, but metadata remains a single compaction write to limit amplification (D03-14). They therefore lag by at most `maxDebounce`, which is exactly what tree listings and "recently updated" orderings need (decision D03-14). The writer carries the value forward in memory (`NoteWriter.lastEditor`) and the compaction transaction writes it in the single `UPDATE notes` of §8.6 step 4. |
 | `last_checkpoint_at` | compaction | Drives the checkpoint cadence (`vaults.auto_checkpoint_interval_min`). |
 | `updated_at` | compaction | Mirrors the content clock; `nodes.updated_at` tracks the *structural* clock. The two are deliberately separate so a rename does not look like an edit and an edit does not bump the tree. |
 
@@ -921,18 +921,18 @@ flowchart LR
 
 ### 8.6 Compaction
 
-Compaction is a job in the same per-note FIFO as the writes, enqueued by `onStoreDocument` and awaited while the Hocuspocus `saveMutex` is held, so `flushPendingStores()` and the post-store unload check are truthful (`A16`). At the head of the queue it captures `{stateV2, sv, throughSeq = lastCommittedSeq, markdown, sizeChars}` synchronously from the loaded document, then runs one transaction:
+Compaction is a job in the same per-note FIFO as the writes, enqueued by `onStoreDocument` and awaited while the Hocuspocus `saveMutex` is held, so `flushPendingStores()` and the post-store unload check are truthful (`A16`). At the head of the queue it captures `{stateV2, sv, throughSeq = lastCommittedSeq, markdown, sizeChars}` synchronously from the loaded document, prepares the pure Markdown projection outside SQL, then runs one transaction:
 
 | Step | Statement | Guard |
 |---|---|---|
-| 0 | `SELECT d.head_seq, n.deleted_at FROM note_docs d JOIN nodes n ON n.id = d.note_id WHERE d.note_id = ? FOR UPDATE` | the same guard shape as the write transaction. `deleted_at IS NOT NULL` → the transaction writes **nothing** and the job resolves (§8.6.1) |
+| 0 | `SELECT deleted_at FROM nodes WHERE id = ? FOR SHARE; SELECT node_id FROM notes WHERE node_id = ? FOR UPDATE; SELECT head_seq FROM note_docs WHERE note_id = ? FOR UPDATE` | the same guard shape as the write transaction. `deleted_at IS NOT NULL` → the transaction writes **nothing** and the job resolves (§8.6.1) |
 | 1 | `UPDATE note_docs SET snapshot = …, snapshot_sv = …, snapshot_format = 2, yjs_major = 13, snapshot_through_seq = :through, snapshot_size = …, snapshot_at = :now, updated_at = :now WHERE note_id = ? AND snapshot_through_seq < :through` | monotonic; `0n` = a newer snapshot won, skip the rest |
 | 2 | `note_projections` upsert + `note_search` + `note_links` replacement | `WHERE revision < :through` (§9.2) |
 | 3 | `INSERT INTO note_revisions …` when the checkpoint policy fires | `uq_revisions_note_seq_kind` makes it idempotent |
 | 4 | one `UPDATE notes SET size_chars = ?, oversize = ?, content_invalid = ?, last_edited_by = ?, last_edited_at = ?, last_checkpoint_at = ?, updated_at = ? WHERE node_id = ?` | single writer per note; exactly one `notes` row lock per compaction transaction (D03-14) |
 | 5 | `UPDATE note_docs SET projected_seq = :through WHERE note_id = ? AND projected_seq < :through` | written **last** so a crash leaves `projected_seq` behind, never ahead |
 
-After COMMIT the compactor schedules the derived projection work in the piscina pool and broadcasts `{t:'projected', seq}`.
+After COMMIT the compactor broadcasts `{t:'projected', seq}`. The piscina result was prepared before the transaction and its raw projection, search and link rows committed atomically. A full worker queue commits raw source with `status='pending'`; hourly reindex retries it.
 
 #### 8.6.1 How a compaction ends, and what each outcome still commits
 
@@ -1007,7 +1007,7 @@ CREATE TABLE note_projections (
   markdown          MEDIUMTEXT      NOT NULL,                 -- LF text; what REST /markdown, MCP get_note and export return
   content_hash      BINARY(32)      NOT NULL,
   heading_title     VARCHAR(255)    NULL,                     -- first H1 only; display title = COALESCE(heading_title, nodes.name)
-  frontmatter_raw   TEXT            NULL,
+  frontmatter_raw   MEDIUMTEXT      NULL,                     -- preserves the containing source's full byte budget
   frontmatter       JSON            NULL,                     -- yaml 2.9 core schema
   frontmatter_error VARCHAR(500)    NULL,
   fm_tags           JSON            NULL,                     -- normalised list
@@ -1022,9 +1022,18 @@ CREATE TABLE note_projections (
   pipeline_version  SMALLINT UNSIGNED NOT NULL,
   projected_at      DATETIME(6)     NOT NULL,
   KEY ix_proj_pipeline (pipeline_version),
-  INDEX ix_proj_fm_tags ((CAST(fm_tags AS CHAR(64) ARRAY))),
-  INDEX ix_proj_fm_aliases ((CAST(fm_aliases AS CHAR(255) ARRAY))),
   CONSTRAINT fk_proj_note FOREIGN KEY (note_id) REFERENCES notes(node_id)
+);
+
+CREATE TABLE note_projection_terms (                          -- published atomically with its projection
+  note_id    BINARY(16) NOT NULL,
+  vault_id   BINARY(16) NOT NULL,
+  kind       ENUM('tag','alias') NOT NULL,
+  term_hash  BINARY(32) NOT NULL,                              -- SHA-256 of the normalized lookup key
+  PRIMARY KEY (note_id, kind, term_hash),
+  KEY ix_projection_terms_lookup (vault_id, kind, term_hash, note_id),
+  CONSTRAINT fk_projection_term_projection FOREIGN KEY (note_id)
+    REFERENCES note_projections(note_id) ON DELETE RESTRICT
 );
 
 CREATE TABLE note_search (                                    -- FULLTEXT projection, deliberately narrow
@@ -1065,7 +1074,7 @@ CREATE TABLE note_links (                                     -- outgoing refere
 
 ### 9.2 The monotonic write contract
 
-All three tables are written by one function, `projection/write.ts`, in one transaction, in one order. No other code writes them.
+Projection publication runs through `projection/write.ts` and `projection/derived.ts`: source, term memberships, search and links share one transaction. Structural renames update filename-derived search titles and inbound resolution inside their own fenced transaction; purge removes dependent rows explicitly.
 
 ```sql
 BEGIN;
@@ -1076,9 +1085,10 @@ ON DUPLICATE KEY UPDATE
   markdown = IF(new.revision >= note_projections.revision, new.markdown, note_projections.markdown),
   …,
   revision = IF(new.revision >= note_projections.revision, new.revision, note_projections.revision);
--- 2. replace the narrow search row (same guard)
--- 3. DELETE FROM note_links WHERE from_note_id = ? ; then INSERT the new ordinals
--- 4. UPDATE note_docs SET projected_seq = :revision WHERE note_id = ? AND projected_seq < :revision;
+-- 2. replace note_projection_terms memberships for this note
+-- 3. upsert the narrow search row (same revision guard; equal-revision rebuild preserves updated_at)
+-- 4. DELETE FROM note_links WHERE from_note_id = ? ; then INSERT the new ordinals
+-- 5. UPDATE note_docs SET projected_seq = :revision WHERE note_id = ? AND projected_seq < :revision;
 COMMIT;
 ```
 
@@ -1116,18 +1126,18 @@ MCP and REST surface the degraded cases as documented errors rather than pretend
 | `markdown` | The committed Markdown at `revision`, LF-normalised, BOM-free. `MEDIUMTEXT` (16 777 215 bytes) with the same headroom argument as `note_revisions.markdown` (§8.7). This is the single byte-source for REST `/markdown`, MCP `get_note`, export entries, snippet location and the diff view. |
 | `content_hash` | `SHA-256(markdown)`. Part of the REST `ETag` (`"<revision>:<hash>"`), the export manifest and `restore --verify`. |
 | `heading_title` | The text of the **first H1 only**, flattened to plain text and truncated to 255 characters at a grapheme-cluster boundary (decision D03-13); `NULL` when the note has none. Nothing stores a computed display title: readers compute `COALESCE(heading_title, nodes.name)` (`A38`), which is why a rename needs no projection rebuild. |
-| `frontmatter_raw` | The frontmatter block exactly as it appears in the source (`TEXT`, 65 535 bytes; a longer block yields `frontmatter_error = 'frontmatter too large'` and a `NULL` `frontmatter`). It is stored for display and diagnostics and is **never** re-serialised — `gray-matter` and `remark-stringify` are banned by lint (`A42`). |
+| `frontmatter_raw` | The frontmatter block exactly as it appears in the source (`MEDIUMTEXT`, with the containing source's byte budget). M2 widens the original `TEXT` column because legal combined Unicode tag/alias maxima exceed 65 535 bytes. It is stored for display and diagnostics and is **never** re-serialised — `gray-matter` and `remark-stringify` are banned by lint (`A42`). |
 | `frontmatter` | The parsed YAML core-schema value (`yaml 2.9.1`, `parseDocument(raw, {maxAliasCount:100, uniqueKeys:true})`). Parse failure leaves `frontmatter` `NULL` and fills `frontmatter_error` with the parser message, truncated to 500 characters; the note is still fully readable. |
-| `fm_tags` | Normalised JSON array of strings: `tags`/`tag` keys, string or list form, split on commas, `#` stripped, NFC-normalised, lower-cased for indexing, de-duplicated, **each entry longer than 64 characters is dropped** and reported as the `tag_invalid` finding (decision D03-12). The drop is mandatory: a multi-valued index over `CHAR(64)` rejects longer values at insert time, and the raw value remains available in `frontmatter`/`frontmatter_raw`. |
+| `fm_tags` | Normalised JSON array: `tags`/`tag` keys, string or list form, split on commas, `#` stripped, NFC-normalised, lower-cased and de-duplicated; at most 200 entries of 64 Unicode code points. Over-limit values produce `tag_invalid` findings and remain in raw frontmatter. The JSON array is authoritative; derived lookup keys live in `note_projection_terms`. |
 | `fm_aliases` | Same normalisation with a 255-character bound (the quick switcher matches aliases); longer entries are dropped with the same finding. |
 | `headings` | `[{depth, text, slug, line, offset}]` with `github-slugger` slugs (the rendered ids carry the `user-content-` prefix the sanitizer requires). Drives the outline, the preview scroll sync, `get_note(include_outline)` and `get_note(heading)` extraction. |
 | `tasks` | `[{line, offset, checked}]` for GFM task list items — the data a post-MVP task view needs, and already used by the compatibility report. |
 | `code_langs` | Distinct fenced-code languages, used by the Obsidian compatibility badge (`dataview`, `mermaid`, `query` blocks are rendered as plain text in MVP) and by the import report. |
-| `obsidian_findings` | The per-note output of `detectObsidianSyntax()` (same code vocabulary as the import report, `A45`), so the badge and the "unsupported constructs" list work for notes created after the import too. |
+| `obsidian_findings` | `{counts, sample}` with complete detector counts and the first 20 findings in document order (08 section 6). The full bounded detector result remains available to the import pipeline; the persisted summary never rewrites source. |
 | `word_count`, `line_count` | Cheap display/paging values; `line_count` bounds `get_note(start_line, end_line)` paging. |
 | `pipeline_version` | The `PIPELINE_VERSION` constant of `@iridium/markdown` that produced the row. `ix_proj_pipeline` makes "which notes are behind the current pipeline" an index scan, which is exactly the work list of `iridium reindex --pipeline-version`. |
 
-The two multi-valued indexes exist from day one even though `tag:` search is reserved for post-MVP (`A39`), because adding them later to a populated table is an expensive rebuild and because the vault-wide "notes with this tag" query is needed by the link/alias resolver. Queries use `WHERE :tag MEMBER OF (fm_tags)` or `JSON_OVERLAPS(fm_tags, CAST(:tags AS JSON))` with a `vault_id` restriction joined from `notes`.
+Migration 0018 originally created two multi-valued indexes. M2's maximum-metadata proof showed that MySQL's MVI record budget cannot hold the published counts and Unicode lengths. Migration 0056 atomically drops those indexes and widens `frontmatter_raw`; 0057 creates `note_projection_terms`, 0058 applies its grants, and 0059 backfills existing JSON arrays in frozen 500-note keyset pages with atomic per-note replacement. Each DDL file contains one atomic statement; interrupted backfill is safe to repeat. The table rebuild and backfill require explicit `--allow-long-running`. M1 never read these indexes and wrote NULL derived metadata, as the immutable v0.1.0 projection writer confirms; retaining the underlying JSON columns preserves its writes and the expand/contract rollback surface. Lookup restricts `(vault_id, kind, term_hash)` through `ix_projection_terms_lookup` and postchecks original JSON values using the same NFC/lowercase fold, so hash collisions and database collation cannot change classification. Projection, terms, search and links publish in one transaction. `tag:` remains reserved for post-MVP (`A39`).
 
 ### 9.4 `note_search` — narrow by design
 
@@ -1505,7 +1515,7 @@ UPDATE audit_chain_heads SET last_id = LAST_INSERT_ID(), last_hash = :hash WHERE
 |---|---|
 | Why a locked head row | A per-row `prev_hash` computed from "the last row I can see" forks under concurrency: two transactions read the same predecessor and both claim it. The head row is the serialisation point, and it is cheap because audited mutations are low-rate |
 | Why one chain per vault plus one server chain | Concurrent work in different vaults never contends, and a vault manager can be shown a verifiable chain for their own vault without access to server-wide events |
-| Lock order | The global chain declared in `02-system-architecture.md` §"Lock order" (`A46`), with `audit_chain_heads` always last. The persistence writer and the compactor never join a structural transaction and never lock `audit_chain_heads`; their guard takes the note's `note_docs` and `nodes` rows (`A19`), and no structural transaction on a live note locks `note_docs`, so the content path can never deadlock against the audit path. `lock-order.integration.test.ts` proves it under concurrent load |
+| Lock order | Follow the owner fence → optional vault gate → explicit node/note/document parents → derived children order in `02-system-architecture.md`. Projection publication holds vault-S before snapshot reads; raw updates and explicit checkpoints omit it. Structural changes hold vault-X, and purge awaits writer disposal outside that lock before revalidating. Audit heads are last. `lock-order.integration` and `projection.target-lifecycle.integration` exercise actual InnoDB contention; ordering is a tested protocol, not a claim that foreign-key locks cannot deadlock |
 | Canonicalisation | RFC 8785 (JSON Canonicalization Scheme): keys sorted by UTF-16 code unit, no insignificant whitespace, shortest round-trip number forms. Binary ids are lowercase canonical UUID strings, timestamps are `YYYY-MM-DDTHH:MM:SS.ffffffZ`, absent fields are omitted rather than serialised as `null`. Implemented in `audit/canonical.ts` with a fixed vector suite plus a property test asserting that re-canonicalising a parsed payload is a fixed point |
 | Why `prev_id` is inside the payload and `id` is not | `id` is assigned by `AUTO_INCREMENT` after the pre-image is computed, so it cannot be covered; including the predecessor's id instead binds each row to a position in its chain, so a deletion or a re-ordering is detectable even if an attacker could forge `id` values |
 | `key_version` | Selects the HMAC key. `iridium keys rotate audit` installs a new version and writes `system.key.rotated` as the first row under it; verification picks the key by the row's own `key_version`, so every historical key must stay in the encrypted secrets bundle of the backup set (`A47`) |
@@ -1814,7 +1824,17 @@ M1 adds forward migrations after that immutable M0 set:
 | 0051 | `session_revocation_commands_grants` | Narrow command-table grants (§2) |
 | 0052 | `collab_owner_fence` | Singleton owner generation, seeded before serving (§13.6) |
 | 0053 | `collab_owner_fence_grants` | SELECT and column-scoped UPDATE of the owner generation (§2) |
-| 0054 | `grants_provenance` | Reapply the complete grant matrix and persist table-specific applied/skipped evidence and fingerprints in `schema_meta` (§2), without rewriting earlier migrations |
+| 0054 | `grants_provenance` | Reapply the grant matrix for installed tables and persist table-specific applied/skipped evidence and fingerprints in `schema_meta` (§2), without rewriting earlier migrations |
+| 0055 | `min_client_version` | Seed the compatibility floor without lowering an existing deployment value |
+
+M2 adds forward migrations after the immutable M1 set:
+
+| ID | Name | Contents |
+|---|---|---|
+| 0056 | `projection_alias_lookup` | One atomic ALTER drops the unused historical metadata MVIs and widens raw frontmatter to `MEDIUMTEXT`; marked long-running |
+| 0057 | `projection_terms` | One replay-safe CREATE for bounded indexed tag/alias memberships |
+| 0058 | `projection_terms_grants` | Application DML grants and provenance for the installed `note_projection_terms` table |
+| 0059 | `projection_terms_backfill` | Frozen bounded keyset backfill with per-note atomic replacement; restart-safe and marked long-running |
 
 Every one of the fourteen statements runs unchanged on MySQL 8.4.11 and 9.7.2 under the dialect rule of §1.1: the only features they use are `ENUM`, `JSON`, a `VIRTUAL` generated column with a unique key over it, and `INSTANT` `ADD COLUMN` at the end of a partitioned table. `credential_type`'s `'oauth'` value is **not** among them — `audit_events` is created by `0026` with the value already in its `ENUM` (§12.1), because the whole authorization server ships in the same release and an `ALTER` to a table created eight migrations earlier in the same set would be ceremony, not safety.
 
@@ -1930,7 +1950,8 @@ Every edge, the column that implements it, and what enforces it:
 | `notes` → `note_docs` | `note_docs.note_id` (also PK) | `fk_docs_note`, RESTRICT | Strictly 1:1 after `NoteService.initialize()` commits |
 | `notes` → `note_updates` | `(note_id, seq)` | `fk_updates_note`, RESTRICT | Dense from 1 up to `head_seq`, minus pruned prefix rows |
 | `notes` → `note_revisions` | `note_id` | `fk_revisions_note`, RESTRICT | ≥ 1 always (the `create`/`import` row is never thinned) |
-| `notes` → `note_projections` | `note_id` (also PK) | `fk_proj_note`, RESTRICT | 1:1 in practice; 0 only while a reindex has truncated the table |
+| `notes` → `note_projections` | `note_id` (also PK) | `fk_proj_note`, RESTRICT | 1:1 after initialization; rebuilds upsert without truncating the serving table |
+| `note_projections` → `note_projection_terms` | `note_id` | `fk_projection_term_projection`, RESTRICT | 0..300 distinct tag/alias memberships, explicitly deleted before a projection |
 | `notes` → `note_search` | `note_id` (also PK) | `fk_search_note`, RESTRICT | Same as above |
 | `notes` → `note_links` | `from_note_id` | `fk_links_note`, RESTRICT | 0..n; `resolved_node_id` / `resolved_attachment_id` are deliberately **unconstrained** (§1.4) |
 | `vaults` → `attachments` | `vault_id` | `fk_att_vault`, RESTRICT | Content deduped per vault |
@@ -2101,9 +2122,9 @@ Decisions this section had to make because the skeleton does not cover them (or,
 | D03-09 | `resolvePolicy(key)` merges the `EnvSchema` baseline with the `server_settings` row field by field, taking whichever value is **stricter**, with the direction (`min`/`max`/logical AND) declared per field in the zod schema; a missing row means "use the baseline" | `A26` says "env values are floors" without defining the direction for each field; a TTL and a minimum password length are strict in opposite directions, and an administrator must never be able to loosen what the operator pinned |
 | D03-10 | Retention constants the skeleton left open: `SESSION_ROW_RETENTION_DAYS` 30 (and consumed/expired setup links after 30 days), `JOB_RETENTION_DAYS` 30, `ACCESS_LOG_PARTITION_LEAD_MONTHS` 3 | Every other retention window in the plan is explicit; leaving these implicit would let three tables grow without bound. All three are fields of the `retention` settings group — `retention.sessionRowDays`, `retention.jobDays`, `retention.accessLogPartitionLeadMonths` (§13.1) — so an operator can change them through `PUT /admin/settings` without a migration, which is only true because the group's shape names them explicitly |
 | D03-11 | The FULLTEXT index on `note_search (title, body_text)` is named `ft_note_search` | The skeleton names the same object twice (`ft_note_search` in the DDL, `ft_title_body` in `A39`); one object needs one name, and the DDL form matches the `ft_<table>` naming convention |
-| D03-12 | `fm_tags` entries longer than 64 characters and `fm_aliases` entries longer than 255 characters are **dropped from the projection** and reported with the existing `tag_invalid` finding; the raw values stay in `frontmatter`/`frontmatter_raw` | A multi-valued index over `CAST(… AS CHAR(64) ARRAY)` rejects longer values at insert time, so the alternative is a failed projection for a note with one long tag. The source text is never modified, which keeps `F1` true |
+| D03-12 | `fm_tags` entries longer than 64 characters and `fm_aliases` entries longer than 255 characters are **dropped from the projection** and reported with the existing `tag_invalid` finding; the raw values stay in `frontmatter`/`frontmatter_raw` | The bounds are the published metadata contract. M2 replaces both metadata multi-valued indexes with `note_projection_terms` after proving their per-record budget rejects legal maximum metadata; lookup hashes narrow candidates and JSON values are postchecked. The source text is never modified, which keeps `F1` true |
 | D03-13 | `note_projections.heading_title` and `note_search.title` hold the first H1 flattened to plain text and truncated to 255 characters at a grapheme-cluster boundary | The columns are `VARCHAR(255)` and headings are unbounded; truncating mid-grapheme would corrupt display and mid-surrogate would corrupt the column |
-| D03-14 | `notes.last_edited_by`, `last_edited_at`, `size_chars`, `oversize`, `content_invalid`, `last_checkpoint_at` and `updated_at` are written by the compaction transaction in one `UPDATE notes`, never by the per-commit write transaction; the writer carries the last editor forward in memory (`NoteWriter.lastEditor`) | `A46` fixes the lock order and keeps the persistence writer out of every structural transaction; its guard locks exactly the two rows `A19` mandates (`note_docs` joined to `nodes`), so writing `notes` per commit would add a third row lock to the hot durability path for values whose freshness only needs to match the projection |
+| D03-14 | `notes.last_edited_by`, `last_edited_at`, `size_chars`, `oversize`, `content_invalid`, `last_checkpoint_at` and `updated_at` are written by compaction in one `UPDATE notes`; the raw writer carries the last editor in memory | All content transactions explicitly lock the `nodes` and `notes` parents before `note_docs` to account for implicit foreign-key locks. The per-append writer leaves derived metadata to compaction because its freshness follows the published projection, not each log append |
 | D03-15 | One invariant register (`I-01` … `I-26`) implemented once in `apps/server/src/db/invariants.ts` and consumed by `iridium doctor`, `iridium restore --verify` and the three model property suites | `A47` and `C.5` name overlapping invariant sets for different tools; a single implementation is the only way the checker and the tests cannot drift |
 | D03-16 | `iridium_app`'s DML is narrowed below `A8`'s blanket "DML on all tables" on four tables — `access_log` `SELECT, INSERT`; `note_updates` no `UPDATE`; `note_revisions` `UPDATE (id)` only (a column-scoped grant); `audit_chain_heads` no `DELETE` — and the whole matrix is rendered from one source, `apps/server/src/db/grants.ts`, into the migrations, `docs/ops/db-grants.sql` and the `db-grants.snapshot.sql` fixture | This is `A8`'s least-privilege intent applied per write path: every removed privilege is one the application has no code path for, and each closes a real tamper route — deleting a chain head and re-inserting a genesis row would restart a chain that `verify-chain` accepts, and `UPDATE` on the log or on a revision's text would rewrite history the durability and restore guarantees rest on. `UPDATE (id)` rather than no `UPDATE` at all is what keeps the idempotent `ON DUPLICATE KEY UPDATE id = id` checkpoint insert legal; switching that statement to `INSERT IGNORE` was rejected because it would also swallow foreign-key, `NOT NULL` and truncation errors. One rendered source is what stops this section, `11-operations-and-deployment.md` and the test fixture from drifting into three mutually failing matrices |
 | D03-17 | Unpublishing a desktop release is a **soft withdrawal** (`withdrawn_at`, `withdrawn_by`, set under a `withdrawn_at IS NULL` predicate) that regenerates `latest*.yml` without the version and keeps the row and the artefacts; `admin.release.withdrawn` is added to the closed audit vocabulary | `09-api-reference.md` D09-8 adds `DELETE /admin/releases/:channel/:version`, and a row delete would contradict both the "four hard-delete paths" enumeration of §1.4 and the release record itself, while breaking clients mid-download. A flag keeps the feed correct for updaters and the history correct for auditors, and the audit vocabulary needs a value for the action or the event cannot be written at all |

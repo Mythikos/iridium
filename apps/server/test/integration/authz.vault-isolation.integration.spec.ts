@@ -1,183 +1,299 @@
-/**
- * `authz.vault-isolation.integration` — knowing an identifier grants nothing
- * (10-testing-and-quality.md, "Authorization"; 04-auth-and-access-control.md §5.4; skeleton F13).
- *
- * `outsider` holds a valid session and no membership anywhere. Every route of the milestone that
- * takes a vault, node or note id is driven twice: once with the **real** ids of a vault they are not
- * a member of, and once with syntactically valid random ids that name nothing. Both must answer
- * `404 not_found`, and the two answers must be indistinguishable — a `403` on the real id would tell
- * the caller the row exists, which is the whole of what this row is about.
- *
- * **The enumeration is the manifest's, not a list here.** The routes are taken from `M1_ROUTES` by
- * their `vaultFrom` member, and the case table is `satisfies Record<K, Case>` over the same ids, so a
- * route that gains an id parameter without a case does not compile.
- *
- * A mutating route is driven too, with its CSRF headers, because the refusal must come from the route
- * policy rather than from the guard in front of it.
- */
-import { M1_ROUTES, newId } from '@iridium/contracts';
-import type { RestClient } from '@iridium/testkit';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+/** Foreign and missing identifiers are indistinguishable across every M2 resource surface (D10-39). */
+import { appendFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
+import { API_ROUTES, ProblemDetails, SearchPage } from '@iridium/contracts';
+import { restClient, type RestClient, type RestResponse } from '@iridium/testkit';
+import { afterAll, beforeAll, beforeEach, describe, expect, inject, it } from 'vitest';
+
+import { idBytes } from '../../src/auth/ids.ts';
+import { startAuthServer, type AuthTestServer } from '../support/auth-app.ts';
 import {
-  startAuthServer,
-  webClient,
-  webHeaders,
-  type AuthTestServer,
-} from '../support/auth-app.ts';
+  HISTORY_CASES,
+  SESSION_RESOURCE_CASES,
+  absentAuthorizationTarget,
+  authorizationRowCounts,
+  expectAuthorizationInventory,
+  isResourceIdRoute,
+  permissionCaseEntries,
+  seedAuthorization,
+  seedRestoredHistory,
+  type AuthorizationCase,
+  type AuthorizationFixture,
+  type AuthorizationTarget,
+} from '../support/authz-content-fixture.ts';
 import { registerRecordingOpenApiMatcher } from '../support/openapi-coverage.ts';
-import { documentedApiRoutes, servedApiRoutes } from '../support/route-sources.ts';
-import { seedUser, signInWeb, type SeededUser } from '../support/seed.ts';
 
-/** The id-bearing operations M1 registers. */
-type IdBearingOperation =
-  | 'vaults.get'
-  | 'members.list'
-  | 'members.put'
-  | 'members.delete'
-  | 'nodes.create'
-  | 'notes.get'
-  | 'notes.getMarkdown'
-  | 'notes.participants';
-
-/** The ids one drive addresses: either the real rows, or ids that name nothing. */
-interface Target {
-  readonly vaultId: string;
-  readonly rootNodeId: string;
-  readonly noteId: string;
-  readonly userId: string;
-}
-
-interface Case {
-  request(client: RestClient, target: Target): Promise<{ status: number }>;
-}
-
-const CASES = {
-  'vaults.get': { request: (client, t) => client.get(`/vaults/${t.vaultId}`) },
-  'members.list': { request: (client, t) => client.get(`/vaults/${t.vaultId}/members`) },
-  'members.put': {
-    request: (client, t) =>
-      client.put(`/vaults/${t.vaultId}/members/${t.userId}`, { json: { role: 'editor' } }),
-  },
-  'members.delete': {
-    request: (client, t) =>
-      client.del(`/vaults/${t.vaultId}/members/${t.userId}`, { headers: { 'if-match': '"1"' } }),
-  },
-  'nodes.create': {
-    request: (client, t) =>
-      client.post(`/vaults/${t.vaultId}/nodes`, {
-        json: { kind: 'note', parentId: t.rootNodeId, name: 'Outsider Attempt' },
-      }),
-  },
-  'notes.get': { request: (client, t) => client.get(`/notes/${t.noteId}`) },
-  'notes.getMarkdown': { request: (client, t) => client.get(`/notes/${t.noteId}/markdown`) },
-  'notes.participants': { request: (client, t) => client.get(`/notes/${t.noteId}/participants`) },
-} as const satisfies Record<IdBearingOperation, Case>;
+const RESOURCE_CASES = permissionCaseEntries().filter((entry) => isResourceIdRoute(entry.route));
+const TIMING_PAIRS = 11;
+const REPORT_DIRECTORY = resolve('reports', 'authz');
 
 let context: AuthTestServer;
-let outsiderClient: RestClient;
-let memberClient: RestClient;
-let real: Target;
+let fixture: AuthorizationFixture;
 
-/** Ids that are well-formed and name nothing. */
-function absent(): Target {
-  return { vaultId: newId(), rootNodeId: newId(), noteId: newId(), userId: newId() };
-}
-
-// Registered at collection time; see `support/openapi-coverage.ts` for why it cannot go in a hook.
 registerRecordingOpenApiMatcher();
 
 beforeAll(async () => {
-  context = await startAuthServer();
+  context = await startAuthServer({ extraEnv: { JOBS_ENABLED: 'false' } });
+  await mkdir(REPORT_DIRECTORY, { recursive: true });
 });
 
 beforeEach(async () => {
-  const admin: SeededUser = await seedUser(context, {
-    email: 'isolation-admin@example.test',
-    isServerAdmin: true,
-  });
-  const outsider = await seedUser(context, { email: 'isolation-outsider@example.test' });
-  const adminClient = webClient(context, await signInWeb(context, admin));
-  outsiderClient = webClient(context, await signInWeb(context, outsider));
-  memberClient = adminClient;
-
-  const vault = await adminClient.post<{ id: string; rootNodeId: string }>('/vaults', {
-    json: { name: 'Isolation Vault' },
-    headers: webHeaders(context.origin),
-  });
-  if (vault.status !== 201) throw new Error(`POST /vaults answered ${String(vault.status)}`);
-
-  const note = await adminClient.post<{ id: string }>(`/vaults/${vault.body.id}/nodes`, {
-    json: { kind: 'note', parentId: vault.body.rootNodeId, name: 'Secret', markdown: '# s\n' },
-    headers: webHeaders(context.origin),
-  });
-  if (note.status !== 201) throw new Error(`POST nodes answered ${String(note.status)}`);
-
-  real = {
-    vaultId: vault.body.id,
-    rootNodeId: vault.body.rootNodeId,
-    noteId: note.body.id,
-    userId: outsider.id,
-  };
+  fixture = await seedAuthorization(context);
 });
 
 afterAll(async () => {
   await context.stop();
 });
 
+function median(samples: readonly number[]): number {
+  const result = samples.toSorted((left, right) => left - right)[Math.floor(samples.length / 2)];
+  if (result === undefined) throw new Error('A timing comparison needs nonempty samples.');
+  return result;
+}
+
+function comparableHeaders(response: RestResponse): Readonly<Record<string, string>> {
+  // Request IDs, time, CSP entropy and the per-principal counter vary independently of resource IDs.
+  // The nonce format and exact counter decrement are separately asserted below, never ignored.
+  return Object.fromEntries(
+    [...response.headers.entries()]
+      .filter(([name]) => name !== 'date' && name !== 'x-request-id')
+      .map(([name, value]) => [
+        name,
+        name === 'content-security-policy'
+          ? value.replace(/'nonce-[a-f\d]{32}'/g, "'nonce-<request>'")
+          : name === 'x-ratelimit-remaining'
+            ? '<request counter>'
+            : value,
+      ]),
+  );
+}
+
+function expectHiddenPair(real: RestResponse, absent: RestResponse, expected: 403 | 404): void {
+  expect(real.status).toBe(expected);
+  expect(absent.status).toBe(expected);
+  const { requestId: realRequestId, ...realProblem } = ProblemDetails.parse(real.body);
+  const { requestId: absentRequestId, ...absentProblem } = ProblemDetails.parse(absent.body);
+  expect(realRequestId).not.toBe(absentRequestId);
+  expect(JSON.stringify(realProblem)).toBe(JSON.stringify(absentProblem));
+  expect(realProblem.code).toBe(expected === 404 ? 'not_found' : 'forbidden');
+  expectEquivalentHeaders(real, absent);
+}
+
+function expectEquivalentHeaders(real: RestResponse, absent: RestResponse): void {
+  const realNonce = real.headers
+    .get('content-security-policy')
+    ?.match(/'nonce-([a-f\d]{32})'/)?.[1];
+  const absentNonce = absent.headers
+    .get('content-security-policy')
+    ?.match(/'nonce-([a-f\d]{32})'/)?.[1];
+  expect(realNonce).toMatch(/^[a-f\d]{32}$/);
+  expect(absentNonce).toMatch(/^[a-f\d]{32}$/);
+  expect(realNonce).not.toBe(absentNonce);
+  expect(
+    Math.abs(
+      Number(real.headers.get('x-ratelimit-remaining')) -
+        Number(absent.headers.get('x-ratelimit-remaining')),
+    ),
+  ).toBe(1);
+  expect(comparableHeaders(real)).toEqual(comparableHeaders(absent));
+  expect(real.headers.get('etag')).toBeNull();
+  expect(absent.headers.get('etag')).toBeNull();
+  expect(real.headers.get('last-modified')).toBeNull();
+  expect(absent.headers.get('last-modified')).toBeNull();
+  expect(real.headers.get('retry-after')).toBe(absent.headers.get('retry-after'));
+}
+
+function expectEmptySearchPair(real: RestResponse, absent: RestResponse): void {
+  expect(real.status).toBe(200);
+  expect(absent.status).toBe(200);
+  expect(SearchPage.parse(real.body).results).toEqual([]);
+  expect(SearchPage.parse(absent.body).results).toEqual([]);
+  expect(real.body).toEqual(absent.body);
+  expectEquivalentHeaders(real, absent);
+}
+
+const EXPECT_PAIR = {
+  200: expectEmptySearchPair,
+  403: (real: RestResponse, absent: RestResponse) => expectHiddenPair(real, absent, 403),
+  404: (real: RestResponse, absent: RestResponse) => expectHiddenPair(real, absent, 404),
+};
+
+async function expectDenialLog(
+  response: RestResponse,
+  operationId: string,
+  expected: 403 | 404,
+): Promise<void> {
+  const problem = ProblemDetails.parse(response.body);
+  await expect
+    .poll(async () =>
+      context.db
+        .selectFrom('access_log')
+        .select(['user_id', 'surface', 'action', 'status', 'vault_id', 'note_ids'])
+        .where('request_id', '=', idBytes(problem.requestId))
+        .execute(),
+    )
+    .toEqual([
+      {
+        user_id: idBytes(fixture.outsider.id),
+        surface: 'rest',
+        action: operationId,
+        status: expected === 404 ? 'not_found' : 'denied',
+        vault_id: null,
+        note_ids: null,
+      },
+    ]);
+}
+
+async function timedRequest(
+  testCase: AuthorizationCase,
+  target: AuthorizationTarget,
+  client: RestClient,
+): Promise<{ readonly response: RestResponse; readonly elapsed: number }> {
+  const started = performance.now();
+  const response = await testCase.request(client, target);
+  return { response, elapsed: performance.now() - started };
+}
+
+async function proveIsolation(
+  operationId: string,
+  testCase: AuthorizationCase,
+  expected: 200 | 403 | 404,
+  surface = operationId,
+): Promise<void> {
+  const unknown = absentAuthorizationTarget();
+  // Exclude the OpenAPI matcher from measured network latency; validate each response after timing.
+  const measuredClient = restClient({
+    origin: fixture.outsiderClient.origin,
+    jar: fixture.outsiderClient.jar,
+    originHeader: context.origin,
+    client: 'web',
+  });
+  const counts = await authorizationRowCounts(context);
+  const real = await testCase.request(fixture.outsiderClient, fixture.target);
+  const absent = await testCase.request(fixture.outsiderClient, unknown);
+  EXPECT_PAIR[expected](real, absent);
+  await expect(real).toMatchOpenApi(operationId, expected);
+  await expect(absent).toMatchOpenApi(operationId, expected);
+  if (expected !== 200)
+    await Promise.all([
+      expectDenialLog(real, operationId, expected),
+      expectDenialLog(absent, operationId, expected),
+    ]);
+  const realLatencies: number[] = [];
+  const absentLatencies: number[] = [];
+  for (let index = 0; index < TIMING_PAIRS; index += 1) {
+    // eslint-disable-next-line no-await-in-loop -- paired sequential requests alternate order to avoid queue contention and warm-cache bias
+    const first = await timedRequest(
+      testCase,
+      index % 2 === 0 ? fixture.target : unknown,
+      measuredClient,
+    );
+    // eslint-disable-next-line no-await-in-loop -- the second sample follows the first with no concurrent request load
+    const second = await timedRequest(
+      testCase,
+      index % 2 === 0 ? unknown : fixture.target,
+      measuredClient,
+    );
+    const onReal = index % 2 === 0 ? first : second;
+    const onAbsent = index % 2 === 0 ? second : first;
+    EXPECT_PAIR[expected](onReal.response, onAbsent.response);
+    // eslint-disable-next-line no-await-in-loop -- verify the just-measured pair before taking the next network samples
+    await Promise.all([
+      expect(onReal.response).toMatchOpenApi(operationId, expected),
+      expect(onAbsent.response).toMatchOpenApi(operationId, expected),
+    ]);
+    realLatencies.push(onReal.elapsed);
+    absentLatencies.push(onAbsent.elapsed);
+  }
+  const realMedianMs = median(realLatencies);
+  const absentMedianMs = median(absentLatencies);
+  const ratio = Math.max(realMedianMs, absentMedianMs) / Math.min(realMedianMs, absentMedianMs);
+  await appendFile(
+    resolve(REPORT_DIRECTORY, 'vault-isolation.jsonl'),
+    `${JSON.stringify({ image: inject('iridiumMysql').image, surface, operationId, expected, realLatencies, absentLatencies, realMedianMs, absentMedianMs, ratio })}\n`,
+  );
+  expect(
+    ratio,
+    `${operationId}: real ${realMedianMs} ms, missing ${absentMedianMs} ms`,
+  ).toBeLessThanOrEqual(2);
+  expect(await authorizationRowCounts(context)).toStrictEqual(counts);
+}
+
 describe('authz.vault-isolation.integration [spec:viewer-enforcement]', () => {
-  it('drives a route set both sources agree on (D10-26)', () => {
-    // The live instance and the committed document fail in opposite directions — the instance grows
-    // a route nobody documented, the document keeps one nobody registered — and either alone is
-    // satisfied by an incomplete table. So the two are compared before any member below is exercised.
-    expect(servedApiRoutes(context.app)).toStrictEqual(documentedApiRoutes());
+  it('binds every resource case to the real policies, registrations and checked-in OpenAPI', () => {
+    expectAuthorizationInventory(context.app);
+    expect(
+      [
+        ...RESOURCE_CASES.map((entry) => entry.operationId),
+        ...Object.keys(SESSION_RESOURCE_CASES),
+      ].toSorted(),
+    ).toEqual(
+      API_ROUTES.filter(isResourceIdRoute)
+        .map((entry) => entry.operationId)
+        .toSorted(),
+    );
   });
 
-  it('drives every id-bearing route of the milestone', () => {
-    const idBearing = M1_ROUTES.filter(
-      (row) => typeof row.auth === 'object' && 'vaultFrom' in row.auth,
-    ).map((row) => row.operationId);
-    expect(idBearing.toSorted()).toStrictEqual(Object.keys(CASES).toSorted());
-  });
-
-  it.each(Object.entries(CASES))(
-    '%s answers 404 for a non-member, on a real id and on one that names nothing',
-    async (operationId: string, testCase: Case) => {
-      const onReal = await testCase.request(outsiderClient, real);
-      const onAbsent = await testCase.request(outsiderClient, absent());
-
-      expect(onReal.status, `${operationId} leaked the existence of a real row`).toBe(404);
-      expect(onAbsent.status, `${operationId} answered an unknown id with something else`).toBe(
-        404,
-      );
-      // The point of the row: the two are the same answer, so an id is not an oracle.
-      expect(onReal.status).toBe(onAbsent.status);
+  it.each(RESOURCE_CASES)(
+    '$operationId hides foreign and missing IDs with identical bodies, headers and bounded timing',
+    async ({ operationId, route, testCase }) => {
+      expect(isResourceIdRoute(route)).toBe(true);
+      // The server-admin policy runs before a job lookup. Both identifiers must therefore return 403.
+      const expected = typeof route.auth === 'object' && 'serverAdmin' in route.auth ? 403 : 404;
+      await proveIsolation(operationId, testCase, expected);
     },
   );
 
-  it('answers the same for a member, so the fixture proves the routes work at all', async () => {
-    // Without this, a route that answered 404 to *everyone* would satisfy every case above.
-    const vault = await memberClient.get(`/vaults/${real.vaultId}`);
-    expect(vault.status).toBe(200);
-    const note = await memberClient.get(`/notes/${real.noteId}`);
-    expect(note.status).toBe(200);
-    await expect(note).toMatchOpenApi('notes.get', 200);
+  it.each(Object.entries(SESSION_RESOURCE_CASES))(
+    '%s filters foreign and missing query IDs to the same empty collection',
+    async (operationId, testCase) => {
+      expect(API_ROUTES.find((route) => route.operationId === operationId)?.auth).toMatchObject({
+        session: true,
+      });
+      await proveIsolation(operationId, testCase, 200);
+    },
+  );
+
+  describe('foreign-vault revision history', () => {
+    beforeEach(async () => {
+      await seedRestoredHistory(context, fixture);
+    });
+
+    it.each(Object.entries(HISTORY_CASES))(
+      '%s hides retained history without rows or live revocation',
+      async (surface, testCase) => {
+        const retained = await context.db
+          .selectFrom('note_revisions')
+          .select('kind')
+          .where('note_id', '=', idBytes(fixture.target.noteId))
+          .execute();
+        expect(retained.map((row) => row.kind)).toEqual(
+          expect.arrayContaining(['named', 'restore']),
+        );
+        const events: unknown[] = [];
+        const unsubscribe = context.app.authz.bus.subscribe((event) => events.push(event));
+        try {
+          await proveIsolation(testCase.operationId, testCase, 404, surface);
+          expect(events).toEqual([]);
+        } finally {
+          unsubscribe();
+        }
+      },
+    );
   });
 
-  it('shows the outsider an empty vault listing rather than a refusal', async () => {
-    // `GET /vaults` is not id-bearing: the accessible set is built in SQL (§5.7), so a principal with
-    // no membership sees an empty page and never a `403`.
-    const listing = await outsiderClient.get<{ items: unknown[] }>('/vaults');
-    expect(listing.status).toBe(200);
-    await expect(listing).toMatchOpenApi('vaults.list', 200);
-    expect(listing.body.items).toStrictEqual([]);
-  });
-
-  it('refuses an outsider the administrative surface with `forbidden`, not `not_found`', async () => {
-    // `/admin/*` is server-scoped: there is no row to hide, and the honest answer to "may I
-    // administer this server" is no (04 §5.4).
-    const refused = await outsiderClient.get('/admin/users');
-    expect(refused.status).toBe(403);
-    await expect(refused).toMatchOpenApi('admin.users.list', 403);
+  it('has readable real content for its member, while cross-vault listings reveal no foreign content', async () => {
+    const member = await fixture.adminClient.get(`/notes/${fixture.target.noteId}`);
+    expect(member.status).toBe(200);
+    const vaults = await fixture.outsiderClient.get<{ items: unknown[] }>('/vaults');
+    expect(vaults.status).toBe(200);
+    expect(vaults.body.items).toEqual([]);
+    const search = await fixture.outsiderClient.get('/search', {
+      query: { q: 'needle' },
+    });
+    expect(search.status).toBe(200);
+    expect(SearchPage.parse(search.body).results).toEqual([]);
   });
 });

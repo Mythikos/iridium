@@ -7,22 +7,16 @@
  * `revision < headRevision` knows the text is up to `COMPACTION_MAX_DEBOUNCE_MS` behind the editors
  * and shows the "index updating" hint rather than pretending the projection is current.
  *
- * **Why this lives beside the routes and not in `notes/`.** `apps/server/src/notes/` is the note
- * *kernel* — initialisation, lifecycle, repair and the one committed-Markdown accessor the MCP tools
- * will share. What this module owns is the REST rendering of a note: the `NoteMeta` assembly, the
- * line slice and the retained-revision read, none of which any other surface consumes. The kernel's
- * `markdownOf()` is called, never re-implemented.
- *
- * Every derived projection member is `null` or empty at M1 and `projectionStatus` is what says so:
- * the M1 compactor writes `markdown`, `content_hash`, `revision`, `status` and `pipeline_version`,
- * and the headings, frontmatter, tags, tasks and counts arrive with M2 (12-milestones.md §5.2).
+ * ContentReadCore owns authorization and the shared committed Markdown/revision reads. This module
+ * assembles the REST metadata DTO from the same committed projection, including headings,
+ * frontmatter, tags, tasks and counts. A failed projection leaves its derived members null or empty;
+ * projectionStatus identifies that state while the canonical raw source remains readable.
  */
 import type { NoteMeta, OriginalEol, ProjectionStatus } from '@iridium/contracts';
 import type { Kysely } from 'kysely';
 
 import { idBytes, userIdFromBytes, vaultIdFromBytes } from '../auth/ids.ts';
 import type { Database } from '../db/index.ts';
-import { ProblemError } from '../security/problem.ts';
 import { nodeIdFromBytes, noteIdFromBytes } from '../tree/ids.ts';
 import { derivePath } from '../tree/paths.ts';
 
@@ -73,6 +67,24 @@ export async function readNoteMeta(db: Kysely<Database>, noteId: string): Promis
       eb.ref('note_projections.line_count').as('line_count'),
       eb.ref('note_projections.word_count').as('word_count'),
       eb.ref('note_projections.frontmatter_error').as('frontmatter_error'),
+      eb.ref('note_projections.frontmatter').as('frontmatter'),
+      eb.ref('note_projections.fm_tags').as('fm_tags'),
+      eb.ref('note_projections.fm_aliases').as('fm_aliases'),
+      eb.ref('note_projections.headings').as('headings'),
+      eb.ref('note_projections.tasks').as('tasks'),
+      eb.ref('note_projections.code_langs').as('code_langs'),
+      eb
+        .selectFrom('note_links')
+        .select((links) => links.fn.countAll<number>().as('count'))
+        .whereRef('note_links.from_note_id', '=', 'nodes.id')
+        .as('links_count'),
+      eb
+        .selectFrom('note_links as incoming')
+        .innerJoin('nodes as source', 'source.id', 'incoming.from_note_id')
+        .select((links) => links.fn.countAll<number>().as('count'))
+        .whereRef('incoming.resolved_node_id', '=', 'nodes.id')
+        .where('source.deleted_at', 'is', null)
+        .as('backlinks_count'),
     ])
     .where('nodes.id', '=', idBytes(noteId))
     .where('nodes.kind', '=', 'note')
@@ -99,8 +111,8 @@ export async function readNoteMeta(db: Kysely<Database>, noteId: string): Promis
     oversize: row.oversize,
     contentInvalid: row.content_invalid,
     projectionStatus: status,
-    fmTags: [],
-    fmAliases: [],
+    fmTags: row.fm_tags ?? [],
+    fmAliases: row.fm_aliases ?? [],
     lastEditedBy:
       row.last_edited_by === null
         ? null
@@ -114,16 +126,15 @@ export async function readNoteMeta(db: Kysely<Database>, noteId: string): Promis
     wordCount: row.word_count,
     originalEol: eol,
     hadBom: row.had_bom,
-    // The parsed frontmatter object, its tags and aliases, the headings, the tasks, the code
-    // languages and the link counts are M2's projection work; `projectionStatus` is what tells a
-    // client that an absent value is a milestone and not a parse failure.
-    frontmatter: null,
+    // Parsed metadata belongs to the published projection; status distinguishes a refusal
+    // or parse failure while the durable Markdown remains readable.
+    frontmatter: isRecord(row.frontmatter) ? row.frontmatter : null,
     frontmatterError: row.frontmatter_error,
-    headings: [],
-    tasks: [],
-    codeLangs: [],
-    linksCount: 0,
-    backlinksCount: 0,
+    headings: row.headings ?? [],
+    tasks: row.tasks ?? [],
+    codeLangs: row.code_langs ?? [],
+    linksCount: row.links_count ?? 0,
+    backlinksCount: row.backlinks_count ?? 0,
     pipelineVersion: row.pipeline_version ?? 0,
     projectedAt: row.projected_at === null ? null : row.projected_at.toISOString(),
     createdAt: row.created_at.toISOString(),
@@ -131,14 +142,8 @@ export async function readNoteMeta(db: Kysely<Database>, noteId: string): Promis
   };
 }
 
-/** `nodes.name` for the `Content-Disposition` filename of a Markdown read. */
-export async function readNoteName(db: Kysely<Database>, noteId: string): Promise<string | null> {
-  const row = await db
-    .selectFrom('nodes')
-    .select('name')
-    .where('nodes.id', '=', idBytes(noteId))
-    .executeTakeFirst();
-  return row?.name ?? null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -164,46 +169,5 @@ export async function readRetainedRevision(
     markdown: row.markdown,
     revision: row.seq,
     contentHash: row.content_hash.toString('hex'),
-  };
-}
-
-/** A 1-based inclusive line slice of the LF-normalised source, as `?lines=` names one. */
-export interface LineSlice {
-  readonly text: string;
-  readonly start: number;
-  readonly end: number;
-  readonly lineCount: number;
-}
-
-/**
- * The slice `?lines=<start>-<end>` names.
- *
- * @throws ProblemError `422 validation_failed` when the range is inverted or starts past the end of
- * the note; a range that merely *ends* past it is clamped, because "give me from line 400 on" is an
- * ordinary request and refusing it would make paging a note require knowing its length first.
- */
-export function sliceLines(markdown: string, range: string): LineSlice {
-  const lines = markdown.split('\n');
-  const [rawStart, rawEnd] = range.split('-');
-  const start = Number(rawStart);
-  const end = Number(rawEnd);
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) {
-    throw new ProblemError('validation_failed', {
-      detail: 'lines must be a 1-based inclusive range such as 120-260.',
-      errors: [{ path: 'query.lines', message: 'lines_invalid', code: 'lines_invalid' }],
-    });
-  }
-  if (start > lines.length) {
-    throw new ProblemError('validation_failed', {
-      detail: `lines starts at ${String(start)} and the note has ${String(lines.length)} line(s).`,
-      errors: [{ path: 'query.lines', message: 'lines_out_of_range', code: 'lines_out_of_range' }],
-    });
-  }
-  const last = Math.min(end, lines.length);
-  return {
-    text: lines.slice(start - 1, last).join('\n'),
-    start,
-    end: last,
-    lineCount: lines.length,
   };
 }

@@ -132,6 +132,9 @@
       "search.snippets.integration",
       "search.staleness-hint.integration",
       "attachments.security.integration",
+      "attachments.policy.unit",
+      "attachments.storage.unit",
+      "attachments.s3.integration",
       "attachments.unreferenced-report.integration",
       "authz.rest-viewer.integration",
       "authz.vault-isolation.integration",
@@ -149,6 +152,14 @@
       "problem-details.contract",
       "schemathesis.light.contract",
       "lock-order.integration",
+      "tree.purge-fence.integration",
+      "projection.target-lifecycle.integration",
+      "migrations.long-running.integration",
+      "migrations.admission.guard",
+      "testkit.dba-grants.unit",
+      "detector.pathological.unit",
+      "markdown.sanitize-schema.unit",
+      "preview.data-attributes.unit",
       "jobs.scheduler.integration",
       "tree.paths.integration",
       "collab.vault-channel.integration"
@@ -156,6 +167,7 @@
     "M3": [
       "bridge.no-token-leak.unit",
       "bridge.stdout-discipline.unit",
+      "settings-store.contract",
       "mcp.no-write-imports.unit",
       "mcp.dual-era.contract",
       "mcp.tools-schema.contract",
@@ -211,6 +223,10 @@
       "preview.worker-timeout.component",
       "tree.keyboard.component",
       "tree.dnd.component",
+      "editor.formatting.prop",
+      "editor.paste-guard.unit",
+      "preview.worker-only.unit",
+      "vault-isolation.e2e",
       "rename-impact.dialog.component",
       "tabs.preview-and-pinned.component",
       "switcher.quick-open.component",
@@ -278,6 +294,8 @@
       "export.manifest.integration",
       "export.stream.integration",
       "content.read-parity.integration",
+      "export.revocation.integration",
+      "export.sanitized-paths.unit",
       "export.access-control.integration",
       "import-report.e2e",
       "export-roundtrip.e2e",
@@ -564,6 +582,7 @@
       "layer": "L3",
       "sinceMilestone": "M2",
       "tests": [
+        "projection.hostile.integration",
         "transfer.fixtures.integration",
         "export.manifest.integration"
       ]
@@ -1178,8 +1197,8 @@
     },
     {
       "name": "guards.mutation-lane.guard",
-      "asserts": "M0 — @typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
-      "how": "parses every workspace manifest"
+      "asserts": "M0; amended M2 — @typescript/typescript6 appears only in tooling/mutation/package.json, tooling/api-codegen/package.json and spikes/s11-markdown/package.json, the three exact leaf packages A2 names",
+      "how": "parses every workspace manifest; adversarial product and unreviewed-spike carriers fail"
     },
     {
       "name": "docs.spikes.spec",
@@ -2286,7 +2305,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/attachments.dedupe.integration.spec.ts",
       "tag": null,
-      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob",
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
       "inventories": [
         "Server suite by area (Attachments)",
         "Superseded spellings (canonical)",
@@ -2305,16 +2324,52 @@
         "the Location convention"
       ]
     },
+    "attachments.policy.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": null,
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
+      "inventories": [
+        "Server suite by area (Attachments)",
+        "the Location convention"
+      ]
+    },
+    "attachments.s3.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/attachments.s3.integration.spec.ts",
+      "tag": null,
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
+      "inventories": [
+        "Server suite by area (Attachments)",
+        "the Location convention"
+      ]
+    },
     "attachments.security.integration": {
       "layer": "L3",
       "sinceMilestone": "M2",
       "project": "integration",
       "file": "apps/server/test/integration/attachments.security.integration.spec.ts",
       "tag": null,
-      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob",
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
       "inventories": [
         "Server suite by area (Attachments)",
         "Superseded spellings (canonical)",
+        "the Location convention"
+      ]
+    },
+    "attachments.storage.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": null,
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
+      "inventories": [
+        "Server suite by area (Attachments)",
         "the Location convention"
       ]
     },
@@ -2324,7 +2379,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/attachments.unreferenced-report.integration.spec.ts",
       "tag": null,
-      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob",
+      "asserts": "MIME sniffing overrides the declared type; Content-Disposition: attachment, X-Content-Type-Options: nosniff, Content-Security-Policy: sandbox, Cache-Control: private; SVG and HTML are never served inline; size cap 50 MiB returns 413; identical bytes in one vault dedupe to one row; a Range request returns 206 with the right slice and an unsatisfiable range returns 416; deletion with referencing notes needs force; the unreferenced report never lists a referenced blob; unit proofs cover portable names, whole-stream UTF-8 validation, retained-source matching, upload admission and atomic filesystem publication",
       "inventories": [
         "Server suite by area (Attachments)",
         "Superseded spellings (canonical)",
@@ -4481,6 +4536,17 @@
         "Guard tests"
       ]
     },
+    "detector.pathological.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:markdown]",
+      "asserts": "Repeated Obsidian constructs retain complete counts while bounding samples and detector runtime.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission"
+      ]
+    },
     "disconnect-pause.e2e": {
       "layer": "L6",
       "sinceMilestone": "M4",
@@ -4544,7 +4610,7 @@
     },
     "editor.formatting.prop": {
       "layer": "L4",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
@@ -4566,7 +4632,7 @@
     },
     "editor.paste-guard.unit": {
       "layer": "L1",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "unit",
       "file": null,
       "tag": "[hp:HP-4]",
@@ -4684,7 +4750,7 @@
     },
     "export.revocation.integration": {
       "layer": "L3",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "integration",
       "file": "apps/server/test/integration/export.revocation.integration.spec.ts",
       "tag": "[hp:HP-3]",
@@ -4696,7 +4762,7 @@
     },
     "export.sanitized-paths.unit": {
       "layer": "L1",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M6",
       "project": "unit",
       "file": null,
       "tag": "[spec:portability-and-safety]",
@@ -4778,7 +4844,7 @@
       "project": "guard",
       "file": null,
       "tag": null,
-      "asserts": "M0 — @typescript/typescript6 appears only in tooling/mutation/package.json and tooling/api-codegen/package.json, the two leaf packages A2 names",
+      "asserts": "M0; amended M2 — @typescript/typescript6 appears only in tooling/mutation/package.json, tooling/api-codegen/package.json and spikes/s11-markdown/package.json, the three exact leaf packages A2 names",
       "inventories": [
         "Guard tests"
       ]
@@ -5392,6 +5458,17 @@
         "Superseded spellings (canonical)"
       ]
     },
+    "markdown.sanitize-schema.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:markdown]",
+      "asserts": "The final sanitize schema rejects active elements, properties and URL protocols while preserving required safe preview output.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission"
+      ]
+    },
     "markdown.sanitize.prop": {
       "layer": "L4",
       "sinceMilestone": "M2",
@@ -5758,6 +5835,17 @@
         "the Location convention"
       ]
     },
+    "migrations.admission.guard": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "guard",
+      "file": null,
+      "tag": "[area:ops]",
+      "asserts": "Every migration is bundled and the explicit admission metadata equals the source-file long-running markers.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission"
+      ]
+    },
     "migrations.integration": {
       "layer": "L3",
       "sinceMilestone": "M0",
@@ -5768,6 +5856,18 @@
       "inventories": [
         "Server suite by area (Ops)",
         "Superseded spellings (canonical)",
+        "the Location convention"
+      ]
+    },
+    "migrations.long-running.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/migrations.long-running.integration.spec.ts",
+      "tag": "[area:ops]",
+      "asserts": "CLI and boot refuse marked work before schema or migration-ledger changes, explicit operator admission completes it, partial targets inspect only their selected path, and current-schema replay needs no override.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission",
         "the Location convention"
       ]
     },
@@ -5851,6 +5951,17 @@
       "asserts": "M2 — the closing set is left clean when a trash fails: a trash transaction made to throw by a failing withVaultLock leaves the closing set empty, so gateway.isClosing(noteId) is false and a fresh onAuthenticate on note:<id> succeeds instead of being refused note-closing. The committed path is asserted by tree.structural-concurrency.integration; this file owns the rollback, which is the case a live-server test cannot reach without a fault point",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search"
+      ]
+    },
+    "notes.lifecycle.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "apps/server/src/notes/lifecycle.unit.spec.ts",
+      "tag": "[area:notes]",
+      "asserts": "M2 — Overlapping trash and purge operations retain independent closing marks until every owner releases its mark.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
       ]
     },
     "notes.repair-content.integration": {
@@ -6370,6 +6481,17 @@
         "the Location convention"
       ]
     },
+    "preview.data-attributes.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:markdown]",
+      "asserts": "Exactly the eight declared renderer position/navigation hints are admitted by the sanitize schema.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission"
+      ]
+    },
     "preview.inertness.component": {
       "layer": "L2",
       "sinceMilestone": "M4",
@@ -6384,7 +6506,7 @@
     },
     "preview.worker-only.unit": {
       "layer": "L1",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "unit",
       "file": null,
       "tag": "[hp:HP-4]",
@@ -6462,6 +6584,18 @@
       "asserts": "the WHERE revision < ? guard rejects an out-of-order write (injected by running two compactions concurrently), and the out-of-order re-run case passes on both required images with the row-alias upsert form — the VALUES() function is deprecated on 8.4 and 9.7 alike and is banned by db.dialect-floor.guard, so the rewrite is proven behaviourally here and not only token-checked there; heading_title and note_search.title update on rename; a pathological note lands in status='too_complex' with raw Markdown still served; iridium reindex --pipeline-version is resumable and throttled",
       "inventories": [
         "Server suite by area (Projections)",
+        "the Location convention"
+      ]
+    },
+    "projection.target-lifecycle.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/projection.target-lifecycle.integration.spec.ts",
+      "tag": "[area:projection]",
+      "asserts": "Actual InnoDB S/X wait observations prove resolver publication before purge and purge before reindex; raw updates still acknowledge under vault-X and neither order leaves a dangling resolved link.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission",
         "the Location convention"
       ]
     },
@@ -6553,7 +6687,7 @@
     },
     "rename-impact.dialog.component": {
       "layer": "L2",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "component",
       "file": null,
       "tag": "[area:links]",
@@ -6565,7 +6699,7 @@
     },
     "rename-impact.e2e": {
       "layer": "L6",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "chromium",
       "file": "apps/e2e/web/rename-impact.e2e.spec.ts",
       "tag": "[area:links]",
@@ -6793,7 +6927,7 @@
       "project": "integration",
       "file": "apps/server/test/integration/search.ranking.integration.spec.ts",
       "tag": "[area:search]",
-      "asserts": "the documented ranking inputs (FULLTEXT score, title match, recency) are applied in the documented order and ties break deterministically",
+      "asserts": "FULLTEXT scores include title/body matches; results order by score descending, then note id ascending, exactly as 09's keyset contract. Recency is returned as metadata and does not reorder ties. Pagination neither drops nor repeats results.",
       "inventories": [
         "Inventory completeness — Collaboration, content read model and search",
         "the Location convention"
@@ -6971,7 +7105,7 @@
     },
     "settings-store.contract": {
       "layer": "L8",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M3",
       "project": "contract",
       "file": "apps/server/test/contract/settings-store.contract.spec.ts",
       "tag": "[area:seams]",
@@ -7108,6 +7242,17 @@
       "asserts": "M0 — Named SQL probes preserve caller transactions, parameter binding, callback overloads, native errors/results and operation-only logs; unsafe identifiers and non-product grant scripts are refused before I/O.",
       "inventories": [
         "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.dba-grants.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:testkit]",
+      "asserts": "Immutable upgrade restores admit the generated DBA grant artifact and reject foreign schemas, foreign roles, executable comments, and non-grant statements.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission"
       ]
     },
     "testkit.fault-registry.unit": {
@@ -7489,6 +7634,18 @@
         "the Location convention"
       ]
     },
+    "tree.purge-fence.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/tree.purge-fence.integration.spec.ts",
+      "tag": "[area:tree]",
+      "asserts": "Concurrent create/restore can finish while purge waits for disposal; admission fences a missed-broadcast retry queue synchronously, final validation refuses a restored target, and owned closing marks balance.",
+      "inventories": [
+        "Inventory completeness — M2 lifecycle and migration admission",
+        "the Location convention"
+      ]
+    },
     "tree.rename-impact.integration": {
       "layer": "L3",
       "sinceMilestone": "M2",
@@ -7598,7 +7755,7 @@
     },
     "vault-isolation.e2e": {
       "layer": "L6",
-      "sinceMilestone": "M2",
+      "sinceMilestone": "M4",
       "project": "chromium",
       "file": "apps/e2e/web/vault-isolation.e2e.spec.ts",
       "tag": null,

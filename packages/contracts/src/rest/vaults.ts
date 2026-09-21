@@ -3,7 +3,7 @@
  * sees differently, the administrator-only create, and the full read.
  *
  * `PATCH /vaults/:vaultId`, `archive` and `unarchive` are M2 (12-milestones.md section 6.2), so their
- * bodies are not declared here: a DTO with no route is dead code, and `M1_ROUTES` is what says which
+ * bodies are not declared here: a DTO with no route is dead code, and `API_ROUTES` is what says which
  * routes exist.
  */
 
@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { Role } from '../authz.ts';
 import { UserId } from '../ids.ts';
+import { VAULT_SETTING_FIELDS } from '../settings.ts';
 import { QueryBoolean, VaultName, VaultSettingsPatch, VaultSummary } from './common.ts';
 
 /** `GET /vaults` — archived vaults are included by default; `importing` and `deleting` never are. */
@@ -65,3 +66,36 @@ export const CreateVaultBody: z.ZodType<CreateVaultBody> = z
     members: z.array(VaultMemberGrant).max(500).optional(),
   })
   .meta({ id: 'CreateVaultBody' });
+
+/** Name, description and every per-vault setting (09-api-reference.md §2.5). */
+export interface PatchVaultBody extends VaultSettingsPatch {
+  readonly name?: string | undefined;
+  readonly description?: string | null | undefined;
+}
+
+/** Empty patches are refused before a transaction opens. */
+export const PatchVaultBody: z.ZodType<PatchVaultBody> = z
+  .strictObject({
+    name: VaultName.optional(),
+    description: z.string().max(500).nullable().optional(),
+    markdownFlavor: VAULT_SETTING_FIELDS.markdownFlavor.optional(),
+    softBreaks: VAULT_SETTING_FIELDS.softBreaks.optional(),
+    attachmentFolder: VAULT_SETTING_FIELDS.attachmentFolder.optional(),
+    loadExternalImages: VAULT_SETTING_FIELDS.loadExternalImages.optional(),
+    mcpEnabled: VAULT_SETTING_FIELDS.mcpEnabled.optional(),
+    aiGuidance: VAULT_SETTING_FIELDS.aiGuidance.optional(),
+    trashRetentionDays: VAULT_SETTING_FIELDS.trashRetentionDays.optional(),
+    autoCheckpointIntervalMin: VAULT_SETTING_FIELDS.autoCheckpointIntervalMin.optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    error: 'At least one field is required.',
+    params: { code: 'no_changes' },
+  })
+  .meta({ id: 'PatchVaultBody' });
+
+/** Archival is an explicit action, protected by If-Match and recent authentication. */
+export const ConfirmVaultBody: z.ZodType<{ readonly confirm: true }> = z
+  .strictObject({
+    confirm: z.literal(true),
+  })
+  .meta({ id: 'ConfirmVaultBody' });

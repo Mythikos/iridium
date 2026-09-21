@@ -52,6 +52,13 @@ describe('testkit.limits-overrides.unit [area:testkit]', () => {
     expect(limitsEnv({ maxLoadedDocs: undefined })).toStrictEqual({});
   });
 
+  it('passes the reindex throttle through the real environment override vocabulary', () => {
+    expect(limitsEnv({ reindexRatePerSecond: 17 })).toStrictEqual({
+      REINDEX_RATE_PER_SECOND: '17',
+    });
+    expect(collabBootLimits({ reindexRatePerSecond: 17 })).toBeUndefined();
+  });
+
   it('hands the collaboration subset to buildApp for a per-boot override', () => {
     // `seams/collab-server.md` §2: `CollabLimitOverrides` takes numbers, and the environment is per
     // process while `buildApp({ limits })` is per boot.

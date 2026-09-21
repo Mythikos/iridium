@@ -5,10 +5,8 @@
  * carries the `NoteSummary` block so a tree can show the title, the staleness dot
  * (`revision < headRevision`) and the oversize and invalid badges without a second request.
  *
- * Every derived projection field is empty or `null` at M1 and that is what `projectionStatus` is for:
- * the M1 compactor writes `markdown`, `content_hash`, `revision`, `status` and `pipeline_version`,
- * and the headings, frontmatter, tags, tasks and counts arrive with M2's projection work
- * (12-milestones.md §5.2, `projection`). A client reads the status rather than inferring absence.
+ * Projection fields describe the committed pipeline result. A client reads `projectionStatus`
+ * rather than interpreting a missing heading or an empty tag list as a projection failure.
  */
 import type { Node, NoteSummary, UserRef } from '@iridium/contracts';
 
@@ -45,6 +43,8 @@ export interface NoteSummaryRow {
   readonly content_hash: Buffer | null;
   readonly heading_title: string | null;
   readonly projection_status: ProjectionStatus | null;
+  readonly fm_tags?: readonly string[] | null;
+  readonly fm_aliases?: readonly string[] | null;
 }
 
 /** An actor as `UserRef` renders one. */
@@ -94,8 +94,8 @@ export function toNoteSummary(name: string, row: NoteSummaryRow): NoteSummary {
     oversize: row.oversize,
     contentInvalid: row.content_invalid,
     projectionStatus: row.projection_status ?? 'pending',
-    fmTags: [],
-    fmAliases: [],
+    fmTags: row.fm_tags ?? [],
+    fmAliases: row.fm_aliases ?? [],
     lastEditedBy:
       row.last_edited_by === null
         ? null

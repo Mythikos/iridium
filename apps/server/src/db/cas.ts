@@ -118,7 +118,6 @@ export function monotonicGuardApplied(result: MatchedRows): boolean {
  * ends up accepting a mutation with no validator at all.
  *
  * @throws ProblemError `428 precondition_required`.
- * @internal Exercised by the unit contract; not part of the production module API.
  */
 export function requireIfMatch(value: number | undefined, what: string): number {
   if (value !== undefined) return value;

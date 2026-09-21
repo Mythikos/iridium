@@ -63,8 +63,12 @@ interface Scene {
   ): ReturnType<typeof fakeConnection> & { readonly sessionId: SessionId };
 }
 
+function unexpectedLifecycleRead(): never {
+  throw new Error('A fresh boot must not scan stored notes.');
+}
+
 function scene(
-  options: Partial<Pick<GatewayOptions, 'applyWriterLatches' | 'captureOwner'>> = {},
+  options: Partial<Pick<GatewayOptions, 'applyWriterLatches' | 'captureOwner' | 'reads'>> = {},
 ): Scene {
   const world = new FakeWorld();
   const logger = recordingLogger();
@@ -179,6 +183,59 @@ describe('collab.gateway.unit [area:collab]', () => {
   });
 
   describe('the sweeps', () => {
+    it('performs no durable reads when a fresh process has no loaded documents', async () => {
+      const s = scene({
+        reads: { resolveNote: unexpectedLifecycleRead, resolveVault: unexpectedLifecycleRead },
+      });
+      await expect(s.gateway.sweepTrashedOnBoot()).resolves.toBeUndefined();
+    });
+
+    it('does not close a replacement document after a delayed stale-state read', async () => {
+      const s = scene();
+      const name = noteDocName(s.noteId);
+      s.open(s.ada, name);
+      const row = s.world.notes.get(s.noteId);
+      if (row === undefined) throw new Error('The retained note must exist.');
+      row.deletedAt = s.world.clock.date();
+      const resolution = await s.world.reads.resolveNote(s.noteId);
+      const gate = Promise.withResolvers<typeof resolution>();
+      s.world.reads.resolveNote = () => gate.promise;
+      const sweeping = s.gateway.sweepTrashedOnBoot();
+      s.server.documents.set(name, fakeDocumentOf(name));
+      const replacement = s.open(s.bob, name);
+      gate.resolve(resolution);
+      await sweeping;
+      expect(closeReasons(replacement.socket)).toEqual([]);
+      expect(replacement.connection.readOnly).toBe(false);
+    });
+
+    it('reconciles retained trash and inactive vault channels while preserving live documents', async () => {
+      const s = scene();
+      const trashed = s.open(s.ada, noteDocName(s.noteId));
+      const inactiveVault = s.world.vault({ status: 'archived' });
+      const inactiveNote = s.world.note(inactiveVault);
+      const inactive = s.open(s.bob, noteDocName(inactiveNote));
+      const channel = s.open(s.bob, vaultDocName(inactiveVault));
+      s.gateway.registerDocument(noteDocName(inactiveNote), inactiveVault);
+      s.gateway.registerDocument(vaultDocName(inactiveVault), inactiveVault);
+      const liveId = s.world.note(s.vaultId);
+      const live = s.open(s.bob, noteDocName(liveId));
+      const row = s.world.notes.get(s.noteId);
+      if (row === undefined) throw new Error('The retained note must have a durable fixture row.');
+      row.deletedAt = s.world.clock.date();
+      const sweeping = s.gateway.sweepTrashedOnBoot();
+      await expect
+        .poll(() => noteMessages(trashed.socket).some((message) => message.t === 'closing'))
+        .toBe(true);
+      await s.world.clock.advance(CLOSING_GRACE_MS);
+      await sweeping;
+      expect(closeReasons(trashed.socket)).toEqual(['note-trashed']);
+      expect(closeReasons(inactive.socket)).toEqual(['vault-archived']);
+      expect(closeReasons(channel.socket)).toEqual(['vault-archived']);
+      expect(closeReasons(live.socket)).toEqual([]);
+      expect(live.connection.readOnly).toBe(false);
+    });
+
     it('revokes a user across documents, narrowed by session, vault or exception', async () => {
       const s = scene();
       const otherVault = s.world.vault();

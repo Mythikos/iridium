@@ -10,7 +10,7 @@ import { classifyDatabaseFailure, toProblem } from '../../src/db/failure.ts';
 import { createDatabaseLayer } from '../../src/db/index.ts';
 import { createMaintDb, migrateToLatest } from '../../src/db/migrator.ts';
 import { toProblemDetails } from '../../src/security/problem.ts';
-import { startIridiumMysql, type IridiumMysql } from '../db-mysql-container.ts';
+import { selectedMysqlLane, startIridiumMysql, type IridiumMysql } from '../db-mysql-container.ts';
 
 let mysql: IridiumMysql;
 let blocker: ReturnType<typeof createMaintDb>;
@@ -18,7 +18,7 @@ let blocker: ReturnType<typeof createMaintDb>;
 beforeAll(async () => {
   mysql = await startIridiumMysql();
   blocker = createMaintDb(mysql.migratorUrl());
-  await migrateToLatest({ db: blocker.db, target: blocker.target });
+  await migrateToLatest({ db: blocker.db, target: blocker.target, allowLongRunning: true });
 }, 600_000);
 
 afterAll(async () => {
@@ -40,6 +40,7 @@ describe('db.lock-timeout.integration [area:db]', () => {
         poolApp: 1,
         poolPersist: 1,
         queryTimeoutMs,
+        allowUntestedMysql: selectedMysqlLane().allowUntestedMysql,
       });
       const target = pool === 'app' ? layer.dbApp : layer.dbPersist;
       try {

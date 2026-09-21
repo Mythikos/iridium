@@ -37,7 +37,19 @@ export type DeliberateCorruption =
   | { readonly kind: 'apply-dba-grants'; readonly statements: readonly string[] }
   | { readonly kind: 'remove-grant-provenance' }
   | { readonly kind: 'contend-install-row' }
-  | { readonly kind: 'transport-insert'; readonly value: number };
+  | { readonly kind: 'transport-insert'; readonly value: number }
+  | { readonly kind: 'access-log-catch-all'; readonly present: boolean }
+  | {
+      readonly kind: 'access-log-overflow-row';
+      readonly occurredAt: Date;
+      readonly userId: Uint8Array;
+    }
+  | {
+      readonly kind: 'note-head-sequence';
+      readonly noteId: Uint8Array;
+      readonly headSeq: number;
+      readonly projectedSeq?: number;
+    };
 
 const SCHEMA_PRIVILEGES: ReadonlySet<string> = new Set([
   'SELECT',
@@ -147,6 +159,33 @@ export async function corruptDeliberately(
       );
     case 'transport-insert':
       return sql`INSERT INTO note_updates VALUES (${operation.value})`.execute(executor);
+    case 'access-log-catch-all':
+      return operation.present
+        ? sql`ALTER TABLE access_log ADD PARTITION (PARTITION p_overflow VALUES LESS THAN (MAXVALUE))`.execute(
+            executor,
+          )
+        : sql`ALTER TABLE access_log DROP PARTITION p_overflow`.execute(executor);
+    case 'access-log-overflow-row':
+      if (operation.userId.byteLength !== 16 || !Number.isFinite(operation.occurredAt.getTime()))
+        throw new Error('Expected a binary user id and valid occurrence time.');
+      // Explicit partition selection refuses a timestamp already covered by an ordinary month.
+      return sql`INSERT INTO access_log PARTITION (p_overflow)
+        (occurred_at, token_id, user_id, surface, action, status, latency_ms)
+        VALUES (${operation.occurredAt}, NULL, ${Buffer.from(operation.userId)},
+          'oauth', 'oauth.authorize', 'ok', 0)`.execute(executor);
+    case 'note-head-sequence': {
+      if (
+        operation.noteId.byteLength !== 16 ||
+        !Number.isSafeInteger(operation.headSeq) ||
+        operation.headSeq < 0 ||
+        (operation.projectedSeq !== undefined &&
+          (!Number.isSafeInteger(operation.projectedSeq) || operation.projectedSeq < 0))
+      )
+        throw new Error('Expected a binary note id and safe nonnegative sequence values.');
+      return sql`UPDATE note_docs SET head_seq = ${operation.headSeq}
+        ${operation.projectedSeq === undefined ? sql`` : sql`, projected_seq = ${operation.projectedSeq}`}
+        WHERE note_id = ${Buffer.from(operation.noteId)}`.execute(executor);
+    }
   }
   throw new Error('Unsupported deliberate database operation.');
 }

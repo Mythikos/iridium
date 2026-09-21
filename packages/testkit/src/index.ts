@@ -88,6 +88,12 @@ export {
   inspectTransportValue,
   inspectVisibleConnectionCount,
 } from './db/inspect.ts';
+export {
+  inspectArchiveSession,
+  inspectAccessLogPartitions,
+  inspectQueryPlan,
+  inspectVaultLockWaits,
+} from './db/maintenance-observations.ts';
 
 // --- environment ------------------------------------------------------------
 export type { TestEnv, TestEnvMysql, TestEnvOptions } from './env/start-test-env.ts';
@@ -391,3 +397,37 @@ export {
   type SchemathesisOptions,
   type SchemathesisResult,
 } from './contract/schemathesis.ts';
+export {
+  attachmentClient,
+  type AttachmentClient,
+  type AttachmentUploadInput,
+} from './clients/attachment-client.ts';
+export { startS3, type TestS3 } from './env/s3.ts';
+export {
+  seedStructure,
+  type StructureSeedOptions,
+  type StructureNode,
+} from './fixtures/structure.ts';
+export type {
+  StructureSeed,
+  StructureFixtureNote,
+  StructureSeedRequest,
+  StructureNodeWriter,
+  StructureNodeInput,
+} from './seed/structure.ts';
+export { STRUCTURE_NODE_COUNT, STRUCTURE_PNG_BYTES } from './seed/structure.ts';
+export {
+  generateSearchCorpus,
+  SEARCH_CORPUS_SIZE,
+  SEARCH_CORPUS_QUERIES,
+  type SearchCorpusNote,
+} from './fixtures/search-corpus.ts';
+export { searchClient, type SearchClient } from './clients/search-client.ts';
+export {
+  readMarkdownGoldenFixtures,
+  readMarkdownHostileFixtures,
+  readMarkdownPathologicalFixtures,
+  MarkdownFixtureFormatError,
+  type MarkdownFixture,
+  type PathologicalMarkdownFixture,
+} from './fixtures/markdown-pipeline.ts';

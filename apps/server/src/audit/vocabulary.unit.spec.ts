@@ -86,6 +86,8 @@ const CASES = {
   'admin.user.password_reset': ['server', 'session', 'success', 'user'],
   'admin.settings.changed': ['server', 'session', 'success', 'settings'],
   'admin.job.triggered': ['server', 'session', 'success', 'job'],
+  'admin.job.cancelled': ['server', 'cli', 'success', 'job'],
+  'admin.audit.exported': ['server', 'cli', 'success', 'audit'],
   'admin.backup.verified': ['server', 'cli', 'success', 'backup'],
   'admin.release.published': ['server', 'cli', 'success', 'release'],
   'admin.release.withdrawn': ['server', 'cli', 'success', 'release'],
@@ -202,7 +204,10 @@ describe('audit.vocabulary.unit [area:audit]', () => {
           if (query.sql.includes('from `audit_chain_heads`')) {
             return { rows: [{ last_id: state.lastId, last_hash: state.lastHash }] };
           }
-          if (query.sql.includes('from `audit_events`'))
+          if (
+            query.sql.includes('from `audit_events`') ||
+            query.sql.includes('FROM audit_events WHERE')
+          )
             return { rows: state.row === null ? [] : [state.row] };
           throw new Error('Unexpected SQL in audit vocabulary fixture: ' + query.sql);
         },

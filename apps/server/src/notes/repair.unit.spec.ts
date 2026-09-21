@@ -13,6 +13,7 @@ import {
 } from '@iridium/crdt';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { ServerEdit } from '../collab/gateway.ts';
 import { localOrigin } from '../collab/persistence/testing/fake-document.ts';
 import { createHarness, settle } from '../collab/persistence/testing/harness.ts';
 import type { StoredNote } from '../collab/persistence/testing/memory-store.ts';
@@ -45,6 +46,7 @@ async function scene() {
     insertChunked: vi.fn<(index: number, text: string) => void>((index, text) => {
       insertChunked(getContent(note.document), index, text, localOrigin('repair'));
     }),
+    applyDiff: vi.fn<ServerEdit['applyDiff']>(),
     disconnect: vi.fn<() => Promise<void>>(() => Promise.resolve()),
   };
   const deps = {
@@ -138,9 +140,9 @@ describe('notes.repair.unit [area:collab]', () => {
       const vector = stateVector(s.note.document);
       const entered = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
-      const original = s.harness.store.runCompaction.bind(s.harness.store);
+      const original = s.harness.store.runCheckpoint.bind(s.harness.store);
       const transaction = vi
-        .spyOn(s.harness.store, 'runCompaction')
+        .spyOn(s.harness.store, 'runCheckpoint')
         .mockImplementationOnce(async (noteId, work) => {
           entered.resolve();
           await release.promise;

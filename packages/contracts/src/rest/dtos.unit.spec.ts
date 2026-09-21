@@ -250,7 +250,7 @@ describe('rest.dtos.unit [area:contracts]', () => {
       },
     );
 
-    it('limits the create request to notes while retaining category node representations', () => {
+    it('creates categories and notes while accepting Markdown only for notes', () => {
       const body = {
         kind: 'note',
         parentId: '018f3a2e-7b1c-7d3e-9a4b-2c5d6e7f8091',
@@ -259,9 +259,14 @@ describe('rest.dtos.unit [area:contracts]', () => {
       };
       expect(CreateNodeBody.parse(body)).toStrictEqual(body);
       expect(CreateNodeBody.safeParse({ ...body, kind: 'category' }).success).toBe(false);
+      const category = { kind: 'category', parentId: body.parentId, name: 'Folder' };
+      expect(CreateNodeBody.parse(category)).toStrictEqual(category);
+      expect(
+        CreateNodeBody.parse({ kind: 'note', parentId: body.parentId, name: 'Empty note' }),
+      ).toStrictEqual({ kind: 'note', parentId: body.parentId, name: 'Empty note' });
       expect(jsonSchemaOf('CreateNodeBody', CreateNodeBody).properties?.['kind']).toMatchObject({
         type: 'string',
-        const: 'note',
+        enum: ['category', 'note'],
       });
       expect(NodeKind.parse('category')).toBe('category');
       expect(jsonSchemaOf('NodeKind', NodeKind).enum).toStrictEqual(['category', 'note']);

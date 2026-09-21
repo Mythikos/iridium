@@ -198,7 +198,7 @@ describe('migrations.parity.integration [area:ops]', () => {
   beforeAll(async () => {
     mysql = await startIridiumMysql();
     maint = createMaintDb(mysql.migratorUrl());
-    await migrateToLatest({ db: maint.db, target: maint.target });
+    await migrateToLatest({ db: maint.db, target: maint.target, allowLongRunning: true });
     app = createDb(parseDatabaseUrl(mysql.rootUrl()), 2);
     actual = await fingerprint(app.db, IRIDIUM_SCHEMA);
     if (process.env['IRIDIUM_TEST_WRITE_SCHEMA_FINGERPRINT'] === '1') {
@@ -227,7 +227,7 @@ describe('migrations.parity.integration [area:ops]', () => {
   it('produces the committed foreign keys, every one of them RESTRICT', () => {
     expect(actual.foreignKeys).toEqual(expectedFingerprint.foreignKeys);
     for (const key of actual.foreignKeys) {
-      expect(key.endsWith('|NO ACTION|NO ACTION') || key.endsWith('|RESTRICT|RESTRICT')).toBe(true);
+      expect(key).toMatch(/\|(NO ACTION|RESTRICT)\|(NO ACTION|RESTRICT)$/);
     }
   });
 

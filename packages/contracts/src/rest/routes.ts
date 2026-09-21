@@ -1,5 +1,6 @@
+import type { z } from 'zod';
 /**
- * `M1_ROUTES` — the M1 route set as data (12-milestones.md section 5.2, `apps/server/src/rest`;
+ * `API_ROUTES` — the implemented M1/M2 route set as data (12-milestones.md §§5.2/6.2;
  * 09-api-reference.md sections 2.18 and 6).
  *
  * One table, three consumers, and that is the point. The `rest` plugin registers exactly these rows
@@ -15,10 +16,8 @@
  * every schema is the one its domain module exports.
  */
 
-import type { z } from 'zod';
-
 import type { RouteAuth } from '../authz.ts';
-import type { ErrorCode } from '../errors.ts';
+import type { ErrorCode, ProblemVariant } from '../errors.ts';
 import {
   AdminUserCreated,
   AdminUserPasswordReset,
@@ -27,6 +26,7 @@ import {
   DisableUserBody,
   ListAdminUsersQuery,
 } from './admin-users.ts';
+import { M2_ATTACHMENT_ROUTES } from './attachment-routes.ts';
 import {
   CollabTicketsCreated,
   CreateCollabTicketsBody,
@@ -46,6 +46,8 @@ import {
   User,
   Vault,
 } from './common.ts';
+import { M2_JOB_ROUTES } from './job-routes.ts';
+import { M2_LINK_ROUTES } from './link-routes.ts';
 import { ChangePasswordBody, SessionList, UpdateMeBody } from './me.ts';
 import { MemberList, PutMemberBody } from './members.ts';
 import { Meta } from './meta.ts';
@@ -59,6 +61,11 @@ import {
   VaultIdParams,
   VaultMemberParams,
 } from './params.ts';
+import { M2_REVISION_ROUTES } from './revision-routes.ts';
+import { REST_ROUTE_POLICIES } from './route-policies.ts';
+import type { ApiOperationId } from './route-policies.ts';
+import { M2_SEARCH_ROUTES } from './search-routes.ts';
+import { M2_TREE_ROUTES } from './tree-routes.ts';
 import { CreateVaultBody, ListVaultsQuery, VaultSummaryList } from './vaults.ts';
 
 /** The HTTP methods the REST surface uses. */
@@ -73,6 +80,10 @@ export type RouteTag =
   | 'members'
   | 'nodes'
   | 'notes'
+  | 'attachments'
+  | 'search'
+  | 'revisions'
+  | 'jobs'
   | 'admin'
   | 'ops';
 
@@ -93,6 +104,7 @@ export type ResponseBody =
   | { readonly kind: 'json'; readonly schema: z.ZodType }
   | { readonly kind: 'empty' }
   | { readonly kind: 'markdown' }
+  | { readonly kind: 'binary'; readonly contentTypes: readonly string[] }
   /** A non-JSON text body: the Swagger UI page, the Prometheus exposition format. */
   | { readonly kind: 'text'; readonly contentType: string }
   /**
@@ -107,7 +119,11 @@ export type ResponseBody =
  * `W/"<version>:<revision>"`, for cache validation only, which is why a client takes the `If-Match`
  * value from the body instead (section 1.2).
  */
-export type ResponseEtag = 'strong-version' | 'strong-revision-hash' | 'weak-version-revision';
+export type ResponseEtag =
+  | 'strong-version'
+  | 'strong-revision-hash'
+  | 'weak-version-revision'
+  | 'strong-hash';
 
 /** A response-to-operation relationship, with OpenAPI runtime expressions for known values. */
 export interface RouteResponseLink {
@@ -139,7 +155,7 @@ export interface RouteRequest {
 /** One route of the milestone. */
 export interface RouteSpec {
   /** `<domain>.<verb>`, stable for the life of the route (section 6). */
-  readonly operationId: string;
+  readonly operationId: ApiOperationId;
   readonly method: RouteMethod;
   /** The path as Fastify registers it, relative to `mount`, with `:params`. */
   readonly path: string;
@@ -152,6 +168,7 @@ export interface RouteSpec {
   readonly responses: readonly RouteResponse[];
   /** The route-specific `ProblemDetails` codes, beyond `GLOBAL_ERROR_CODES`. */
   readonly errors: readonly ErrorCode[];
+  readonly problemVariants?: readonly ProblemVariant[];
   readonly ifMatch?: 'required' | 'conditional' | undefined;
   readonly rateLimit?: RateLimitBucket | undefined;
   /** One line of prose: what the route is for, and any narrowing this milestone applies. */
@@ -178,7 +195,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['auth.createSession'],
     request: { body: CreateSessionBody, headers: ClientHeaders },
     responses: [{ status: 201, body: { kind: 'json', schema: SessionCreated } }],
     errors: ['invalid_credentials', 'csrf_rejected', 'validation_failed', 'rate_limited'],
@@ -192,7 +209,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { session: true },
+    auth: REST_ROUTE_POLICIES['auth.deleteCurrentSession'],
     request: { headers: ClientHeaders },
     responses: [{ status: 204, body: { kind: 'empty' } }],
     errors: ['unauthenticated', 'csrf_rejected'],
@@ -205,7 +222,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { session: true },
+    auth: REST_ROUTE_POLICIES['auth.reauthenticate'],
     request: { body: ReauthenticateBody, headers: ClientHeaders },
     responses: [{ status: 200, body: { kind: 'json', schema: Reauthenticated } }],
     errors: ['unauthenticated', 'invalid_credentials', 'csrf_rejected', 'rate_limited'],
@@ -219,7 +236,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['auth.setPassword'],
     request: { body: SetPasswordBody, headers: ClientHeaders },
     responses: [{ status: 204, body: { kind: 'empty' } }],
     errors: ['invalid_link', 'csrf_rejected', 'validation_failed', 'rate_limited'],
@@ -233,7 +250,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { session: true },
+    auth: REST_ROUTE_POLICIES['auth.createCollabTickets'],
     request: { body: CreateCollabTicketsBody, headers: ClientHeaders },
     responses: [{ status: 201, body: { kind: 'json', schema: CollabTicketsCreated } }],
     errors: ['unauthenticated', 'csrf_rejected', 'validation_failed', 'rate_limited'],
@@ -247,7 +264,7 @@ const AUTH_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'auth',
-    auth: { session: true, principalKinds: ['user', 'token'] },
+    auth: REST_ROUTE_POLICIES['auth.me'],
     request: {},
     responses: [{ status: 200, body: { kind: 'json', schema: Me } }],
     errors: ['unauthenticated', 'token_expired'],
@@ -263,7 +280,7 @@ const META_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'meta',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['meta.get'],
     request: {},
     responses: [{ status: 200, body: { kind: 'json', schema: Meta } }],
     errors: [],
@@ -276,7 +293,7 @@ const META_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'meta',
-    auth: { serverAdmin: true },
+    auth: REST_ROUTE_POLICIES['meta.openapi'],
     request: {},
     responses: [
       {
@@ -295,7 +312,7 @@ const META_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'meta',
-    auth: { serverAdmin: true },
+    auth: REST_ROUTE_POLICIES['meta.docs'],
     request: {},
     responses: [{ status: 200, body: { kind: 'text', contentType: 'text/html' } }],
     errors: ['unauthenticated', 'forbidden'],
@@ -311,7 +328,7 @@ const ME_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'me',
-    auth: { self: true },
+    auth: REST_ROUTE_POLICIES['me.sessions.list'],
     request: {},
     responses: [{ status: 200, body: { kind: 'json', schema: SessionList } }],
     errors: ['unauthenticated', 'token_scope_insufficient'],
@@ -324,7 +341,7 @@ const ME_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'me',
-    auth: { self: true },
+    auth: REST_ROUTE_POLICIES['me.sessions.revoke'],
     request: { params: SessionIdParams, headers: ClientHeaders },
     responses: [{ status: 204, body: { kind: 'empty' } }],
     errors: ['unauthenticated', 'csrf_rejected', 'not_found'],
@@ -337,7 +354,7 @@ const ME_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'me',
-    auth: { self: true },
+    auth: REST_ROUTE_POLICIES['me.update'],
     request: { body: UpdateMeBody, headers: IfMatchHeaders },
     responses: [{ status: 200, body: { kind: 'json', schema: User }, etag: 'strong-version' }],
     errors: [
@@ -357,7 +374,7 @@ const ME_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'me',
-    auth: { self: true, stepUp: true },
+    auth: REST_ROUTE_POLICIES['me.changePassword'],
     request: { body: ChangePasswordBody, headers: ClientHeaders },
     responses: [{ status: 204, body: { kind: 'empty' } }],
     errors: [
@@ -380,7 +397,7 @@ const VAULT_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'vaults',
-    auth: { session: true, principalKinds: ['user', 'token'] },
+    auth: REST_ROUTE_POLICIES['vaults.list'],
     request: { query: ListVaultsQuery },
     responses: [
       {
@@ -405,7 +422,7 @@ const VAULT_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'vaults',
-    auth: { serverAdmin: true, permission: 'server:vaults:create' },
+    auth: REST_ROUTE_POLICIES['vaults.create'],
     request: { body: CreateVaultBody, headers: ClientHeaders },
     responses: [
       {
@@ -442,11 +459,7 @@ const VAULT_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'vaults',
-    auth: {
-      permission: 'vault:read',
-      vaultFrom: 'params.vaultId',
-      principalKinds: ['user', 'token'],
-    },
+    auth: REST_ROUTE_POLICIES['vaults.get'],
     request: { params: VaultIdParams },
     responses: [
       {
@@ -476,7 +489,7 @@ const MEMBER_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'members',
-    auth: { permission: 'vault:read', vaultFrom: 'params.vaultId' },
+    auth: REST_ROUTE_POLICIES['members.list'],
     request: { params: VaultIdParams },
     responses: [{ status: 200, body: { kind: 'json', schema: MemberList } }],
     errors: ['unauthenticated', 'not_found'],
@@ -489,7 +502,7 @@ const MEMBER_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'members',
-    auth: { permission: 'vault:manage_members', vaultFrom: 'params.vaultId' },
+    auth: REST_ROUTE_POLICIES['members.put'],
     request: { params: VaultMemberParams, body: PutMemberBody, headers: ClientHeaders },
     responses: [
       { status: 200, body: { kind: 'json', schema: Member } },
@@ -515,7 +528,7 @@ const MEMBER_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'members',
-    auth: { permission: 'vault:manage_members', vaultFrom: 'params.vaultId' },
+    auth: REST_ROUTE_POLICIES['members.delete'],
     request: { params: VaultMemberParams, headers: IfMatchHeaders },
     responses: [{ status: 204, body: { kind: 'empty' } }],
     errors: [
@@ -541,7 +554,7 @@ const NODE_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'nodes',
-    auth: { permission: 'node:create', vaultFrom: 'params.vaultId' },
+    auth: REST_ROUTE_POLICIES['nodes.create'],
     request: { params: VaultIdParams, body: CreateNodeBody, headers: ClientHeaders },
     responses: [
       {
@@ -576,11 +589,7 @@ const NOTE_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'notes',
-    auth: {
-      permission: 'note:read',
-      vaultFrom: 'note:params.noteId',
-      principalKinds: ['user', 'token'],
-    },
+    auth: REST_ROUTE_POLICIES['notes.get'],
     request: { params: NoteIdParams },
     responses: [
       {
@@ -610,11 +619,7 @@ const NOTE_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'notes',
-    auth: {
-      permission: 'note:read',
-      vaultFrom: 'note:params.noteId',
-      principalKinds: ['user', 'token'],
-    },
+    auth: REST_ROUTE_POLICIES['notes.getMarkdown'],
     request: { params: NoteIdParams, query: GetMarkdownQuery },
     responses: [
       { status: 200, body: { kind: 'markdown' }, etag: 'strong-revision-hash' },
@@ -640,7 +645,7 @@ const NOTE_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'notes',
-    auth: { permission: 'note:read', vaultFrom: 'note:params.noteId' },
+    auth: REST_ROUTE_POLICIES['notes.participants'],
     request: { params: NoteIdParams },
     responses: [{ status: 200, body: { kind: 'json', schema: NoteParticipants } }],
     errors: ['unauthenticated', 'not_found'],
@@ -657,7 +662,7 @@ const ADMIN_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'admin',
-    auth: { serverAdmin: true, permission: 'server:users' },
+    auth: REST_ROUTE_POLICIES['admin.users.list'],
     request: { query: ListAdminUsersQuery },
     responses: [{ status: 200, body: { kind: 'json', schema: AdminUserPage } }],
     errors: ['unauthenticated', 'forbidden', 'validation_failed'],
@@ -670,7 +675,7 @@ const ADMIN_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'admin',
-    auth: { serverAdmin: true, permission: 'server:users', stepUp: true },
+    auth: REST_ROUTE_POLICIES['admin.users.create'],
     request: { body: CreateAdminUserBody, headers: ClientHeaders },
     responses: [
       {
@@ -696,7 +701,7 @@ const ADMIN_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'admin',
-    auth: { serverAdmin: true, permission: 'server:users', stepUp: true },
+    auth: REST_ROUTE_POLICIES['admin.users.resetPassword'],
     request: { params: UserIdParams, headers: ClientHeaders },
     responses: [{ status: 201, body: { kind: 'json', schema: AdminUserPasswordReset } }],
     errors: [
@@ -716,7 +721,7 @@ const ADMIN_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'admin',
-    auth: { serverAdmin: true, permission: 'server:users', stepUp: true },
+    auth: REST_ROUTE_POLICIES['admin.users.disable'],
     request: { params: UserIdParams, body: DisableUserBody, headers: ClientHeaders },
     responses: [{ status: 200, body: { kind: 'json', schema: User } }],
     errors: [
@@ -736,7 +741,7 @@ const ADMIN_ROUTES: readonly RouteSpec[] = [
     mount: '/api/v1',
     plugin: 'rest',
     tag: 'admin',
-    auth: { serverAdmin: true, permission: 'server:users', stepUp: true },
+    auth: REST_ROUTE_POLICIES['admin.users.enable'],
     request: { params: UserIdParams, headers: ClientHeaders },
     responses: [{ status: 200, body: { kind: 'json', schema: User } }],
     errors: [
@@ -765,7 +770,7 @@ const OPS_ROUTES: readonly RouteSpec[] = [
     mount: '',
     plugin: 'ops',
     tag: 'ops',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['ops.healthz'],
     request: {},
     responses: [{ status: 200, body: { kind: 'json', schema: HealthzBody } }],
     errors: ['unavailable'],
@@ -778,7 +783,7 @@ const OPS_ROUTES: readonly RouteSpec[] = [
     mount: '',
     plugin: 'ops',
     tag: 'ops',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['ops.readyz'],
     request: {},
     responses: [
       { status: 200, body: { kind: 'json', schema: ReadyzBody } },
@@ -795,7 +800,7 @@ const OPS_ROUTES: readonly RouteSpec[] = [
     mount: '',
     plugin: 'ops',
     tag: 'ops',
-    auth: { public: true },
+    auth: REST_ROUTE_POLICIES['ops.metrics'],
     request: {},
     responses: [
       { status: 200, body: { kind: 'text', contentType: 'text/plain' } },
@@ -808,17 +813,27 @@ const OPS_ROUTES: readonly RouteSpec[] = [
 ];
 
 /** Every route this milestone registers, in the order the domains are documented. */
-export const M1_ROUTES: readonly RouteSpec[] = [
+const DECLARED_ROUTES: readonly RouteSpec[] = [
   ...AUTH_ROUTES,
   ...META_ROUTES,
   ...ME_ROUTES,
   ...VAULT_ROUTES,
   ...MEMBER_ROUTES,
   ...NODE_ROUTES,
+  ...M2_TREE_ROUTES,
   ...NOTE_ROUTES,
+  ...M2_ATTACHMENT_ROUTES,
+  ...M2_SEARCH_ROUTES,
+  ...M2_JOB_ROUTES,
+  ...M2_REVISION_ROUTES,
+  ...M2_LINK_ROUTES,
   ...ADMIN_ROUTES,
   ...OPS_ROUTES,
 ];
+
+/** Every implemented operation, with uniform optional metadata and closed identifiers. */
+export const API_ROUTES: readonly (RouteSpec & { readonly operationId: ApiOperationId })[] =
+  DECLARED_ROUTES;
 
 /** The key the boot assertion and the route index compare on: `<METHOD> <mount><path>`. */
 export function routeKey(route: RouteSpec): string {
@@ -827,12 +842,12 @@ export function routeKey(route: RouteSpec): string {
 
 /** The row for one operation id, or `undefined` when this milestone does not register it. */
 export function routeByOperationId(operationId: string): RouteSpec | undefined {
-  return M1_ROUTES.find((route) => route.operationId === operationId);
+  return API_ROUTES.find((route) => route.operationId === operationId);
 }
 
 /** Every `(operationId, status)` pair the document describes, which is what the coverage check walks. */
 export function routeCoveragePairs(): readonly (readonly [string, number])[] {
-  return M1_ROUTES.flatMap((route) =>
+  return API_ROUTES.flatMap((route) =>
     route.responses.map((response) => [route.operationId, response.status] as const),
   );
 }

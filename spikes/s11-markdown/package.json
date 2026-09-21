@@ -1,0 +1,22 @@
+{
+  "name": "@iridium/spike-s11-markdown",
+  "version": "0.2.0",
+  "private": true,
+  "description": "S11 isolated Markdown worker cost and parser packaging experiment; no product depends on this leaf",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c ../../oxlint.config.ts .",
+    "spike": "node measure.mjs --label=local-repeat --verify-bundle"
+  },
+  "devDependencies": {
+    "@iridium/contracts": "workspace:*",
+    "@iridium/markdown": "workspace:*",
+    "@iridium/ui": "workspace:*",
+    "@playwright/test": "catalog:",
+    "diff": "catalog:",
+    "markdown-it": "catalog:",
+    "piscina": "catalog:",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vite": "catalog:"
+  }
+}

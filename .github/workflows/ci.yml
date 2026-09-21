@@ -25,7 +25,7 @@ on:
         type: choice
         required: true
         default: none
-        options: [none, M1]
+        options: [none, M1, M2]
 
 concurrency:
   # Keep an explicitly requested exit rehearsal's evidence when main advances. Ordinary pushes
@@ -54,6 +54,8 @@ jobs:
       web: ${{ steps.scope.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
 
       - name: Resolve the due E2E scope
@@ -273,8 +275,8 @@ jobs:
       - name: Integration, contract, mcp and property projects
         env:
           # Only an explicit exit rehearsal rewrites the fixture, and its source is always 8.4.
-          # db-grants.integration writes it after restoring the unmodified backup-role dump.
-          IRIDIUM_FIXTURE_WRITE_UPGRADE: ${{ github.event_name == 'workflow_dispatch' && inputs.milestone_exit == 'M1' && matrix.mysql == 'mysql:8.4.11' && '1' || '0' }}
+          # The milestone's fixture suite writes it after restoring the unmodified backup-role dump.
+          IRIDIUM_FIXTURE_WRITE_UPGRADE: ${{ github.event_name == 'workflow_dispatch' && inputs.milestone_exit != 'none' && matrix.mysql == 'mysql:8.4.11' && '1' || '0' }}
         run: >-
           pnpm exec vitest --run --passWithNoTests --config vitest.config.ts
           --project integration --project contract --project mcp --project property
@@ -282,12 +284,12 @@ jobs:
           --coverage
           --outputFile.blob=.vitest-reports/integration-${{ steps.image.outputs.slug }}.json
 
-      - name: Upload the M1 upgrade fixture
-        if: github.event_name == 'workflow_dispatch' && inputs.milestone_exit == 'M1' && matrix.mysql == 'mysql:8.4.11'
+      - name: Upload the milestone upgrade fixture
+        if: github.event_name == 'workflow_dispatch' && inputs.milestone_exit != 'none' && matrix.mysql == 'mysql:8.4.11'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: upgrade-fixture-v0.1.0
-          path: apps/server/test/fixtures/upgrade/v0.1.0/
+          name: upgrade-fixture-${{ inputs.milestone_exit }}
+          path: apps/server/test/fixtures/upgrade/${{ inputs.milestone_exit == 'M2' && 'v0.2.0' || 'v0.1.0' }}/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 90
@@ -551,7 +553,7 @@ jobs:
           MILESTONE_EXIT: ${{ inputs.milestone_exit }}
         run: |
           set -euo pipefail
-          if [ "$MILESTONE_EXIT" = 'M1' ]; then
+          if [ -n "$MILESTONE_EXIT" ] && [ "$MILESTONE_EXIT" != 'none' ]; then
             echo 'A milestone exit requires the full mutation scope.'
             echo 'changed=true' >> "$GITHUB_OUTPUT"
             exit 0
@@ -570,10 +572,11 @@ jobs:
           mutate="$mutate"'|apps/server/src/collab/(limits|owner-lease)\.ts'
           mutate="$mutate"'|apps/server/src/mcp/(cursor|verifier|rate-limit)\.ts'
           mutate="$mutate"'|apps/server/src/tree/(names|moves|paths|rename-impact)\.ts'
-          mutate="$mutate"'|packages/contracts/src/(tokens|paths|authz|ids|limits)\.ts'
+          mutate="$mutate"'|packages/contracts/src/(tokens|paths|authz|ids|limits|markdown-limits)\.ts'
           mutate="$mutate"'|packages/crdt/src/.*\.ts'
           mutate="$mutate"'|packages/markdown/src/sanitize/.*\.ts'
-          mutate="$mutate"'|packages/markdown/src/(normalize|restore|links)\.ts'
+          mutate="$mutate"'|packages/markdown/src/(normalize|restore)\.ts'
+          mutate="$mutate"'|packages/markdown/src/links/.*\.ts'
           mutate="$mutate"'|packages/collab-client/src/save-state\.ts)$'
           changed="$(git diff --name-only "$base" HEAD | grep -E "$mutate" | grep -v '\.spec\.ts$' || true)"
           if [ -n "$changed" ]; then
@@ -589,9 +592,9 @@ jobs:
         if: steps.scope.outputs.changed == 'true'
 
       - name: Restore the Stryker incremental file
-        # Explicit M1 rehearsals use a fresh full-scope campaign with zero reused mutants.
+        # Explicit milestone rehearsals use a fresh full-scope campaign with zero reused mutants.
         # Ordinary changed-scope pushes can still reuse the validated incremental file.
-        if: steps.scope.outputs.changed == 'true' && inputs.milestone_exit != 'M1'
+        if: steps.scope.outputs.changed == 'true' && (inputs.milestone_exit == '' || inputs.milestone_exit == 'none')
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tooling/mutation/reports/stryker-incremental.json

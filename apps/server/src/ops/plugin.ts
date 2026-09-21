@@ -18,8 +18,7 @@
  * `application/problem+json` (D09-11).
  */
 import { X509Certificate } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
 import { routeByOperationId } from '@iridium/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -39,7 +38,7 @@ import { ShutdownDrain, type DrainHook } from './shutdown.ts';
 import { applyTestRoutes } from './test-routes.ts';
 
 /**
- * The documentation members of one operations route, taken from its `M1_ROUTES` row.
+ * The documentation members of one operations route, taken from its `API_ROUTES` row.
  *
  * The three rows carry `plugin: 'ops'` precisely so the boot assertion, the route index and the
  * OpenAPI coverage check all see them (`@iridium/contracts/rest/routes.ts`), and an operation with
@@ -283,23 +282,12 @@ export function applyOpsPlugin(app: FastifyInstance, options: OpsPluginOptions):
 
   // ---- the three readiness checks this plugin owns ----------------------------------------------
   readiness.register('attachment_store', async () => {
-    if (config.storage.driver !== 'fs') {
-      return {
-        status: 'warn',
-        detail: 'the s3 driver probe arrives with the attachment service (M6)',
-      };
-    }
-    const dir = config.storage.dir;
-    const probe = join(dir, `.iridium-probe-${String(process.pid)}`);
     const startedAt = clock.monotonic();
-    await mkdir(dir, { recursive: true });
-    await writeFile(probe, 'iridium', 'utf8');
-    await readFile(probe, 'utf8');
-    await rm(probe, { force: true });
+    await app.attachmentStorage.healthcheck();
     const elapsed = elapsedMs(clock, startedAt);
     return elapsed > ATTACHMENT_PROBE_WARN_MS
       ? { status: 'warn', detail: `probe took ${String(elapsed)}ms` }
-      : { status: 'ok', detail: `${dir} (${String(elapsed)}ms)` };
+      : { status: 'ok', detail: `${config.storage.driver} (${String(elapsed)}ms)` };
   });
 
   readiness.register('tls_cert', async () => {

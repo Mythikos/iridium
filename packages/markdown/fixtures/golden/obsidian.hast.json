@@ -1,0 +1,216 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 1,
+        "dataOffset": 0,
+        "dataEndOffset": 58
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "[[Projects/Plan#Scope|the plan]] and ![[Diagram.png|300]].",
+          "position": {
+            "start": {
+              "line": 1,
+              "column": 1,
+              "offset": 0
+            },
+            "end": {
+              "line": 1,
+              "column": 59,
+              "offset": 58
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 1,
+          "column": 59,
+          "offset": 58
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "blockquote",
+      "properties": {
+        "dataLine": 3,
+        "dataOffset": 60,
+        "dataEndOffset": 81
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "\n"
+        },
+        {
+          "type": "element",
+          "tagName": "p",
+          "properties": {
+            "dataLine": 3,
+            "dataOffset": 62,
+            "dataEndOffset": 81
+          },
+          "children": [
+            {
+              "type": "text",
+              "value": "[!warning]- Read me",
+              "position": {
+                "start": {
+                  "line": 3,
+                  "column": 3,
+                  "offset": 62
+                },
+                "end": {
+                  "line": 3,
+                  "column": 22,
+                  "offset": 81
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 3,
+              "column": 3,
+              "offset": 62
+            },
+            "end": {
+              "line": 3,
+              "column": 22,
+              "offset": 81
+            }
+          }
+        },
+        {
+          "type": "text",
+          "value": "\n"
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 3,
+          "column": 1,
+          "offset": 60
+        },
+        "end": {
+          "line": 3,
+          "column": 22,
+          "offset": 81
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 5,
+        "dataOffset": 83,
+        "dataEndOffset": 132
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "#inbox ==important== %%visible comment%% $E=mc^2$",
+          "position": {
+            "start": {
+              "line": 5,
+              "column": 1,
+              "offset": 83
+            },
+            "end": {
+              "line": 5,
+              "column": 50,
+              "offset": 132
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 5,
+          "column": 1,
+          "offset": 83
+        },
+        "end": {
+          "line": 5,
+          "column": 50,
+          "offset": 132
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 7,
+        "dataOffset": 134,
+        "dataEndOffset": 158
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "Claim^[source] ^block-id",
+          "position": {
+            "start": {
+              "line": 7,
+              "column": 1,
+              "offset": 134
+            },
+            "end": {
+              "line": 7,
+              "column": 25,
+              "offset": 158
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 7,
+          "column": 1,
+          "offset": 134
+        },
+        "end": {
+          "line": 7,
+          "column": 25,
+          "offset": 158
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 8,
+      "column": 1,
+      "offset": 159
+    }
+  }
+}

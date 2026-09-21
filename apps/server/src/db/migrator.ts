@@ -27,7 +27,11 @@ import { createPool, type Pool } from 'mysql2';
 import { createConnection, type RowDataPacket } from 'mysql2/promise';
 
 import { readGrantProvenance } from './grants.ts';
-import { bundledMigrationProvider, MIGRATION_NAMES } from './migrations.ts';
+import {
+  bundledMigrationProvider,
+  LONG_RUNNING_MIGRATIONS,
+  MIGRATION_NAMES,
+} from './migrations.ts';
 import {
   DB_CONNECT_TIMEOUT_MS_DEFAULT,
   DB_POOL_SIZE,
@@ -63,6 +67,23 @@ export class MigrationDirectionRefusedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'MigrationDirectionRefusedError';
+  }
+}
+
+/** Rebuilds and full backfills require an explicit operator decision before any migration runs. */
+export class MigrationLongRunningRefusedError extends Error {
+  readonly code = 'migrate.long_running_refused';
+  readonly exitCode = 3;
+  readonly migrations: readonly string[];
+
+  constructor(migrations: readonly string[]) {
+    super(
+      `operator action required: ${migrations.map((name) => `${name} [long-running]`).join(', ')}. ` +
+        'Run iridium migrate up --allow-long-running during an approved maintenance window. ' +
+        'No migration was applied; boot never authorizes long-running work.',
+    );
+    this.name = 'MigrationLongRunningRefusedError';
+    this.migrations = migrations;
   }
 }
 
@@ -131,6 +152,8 @@ export interface MigrationStatus {
   readonly applied: readonly string[];
   /** Bundled names not yet applied, in apply order. */
   readonly pending: readonly string[];
+  /** Pending migrations that require `--allow-long-running`; boot never opts in. */
+  readonly pendingLongRunning: readonly string[];
   /** Recorded names the binary does not know: the schema is ahead of the code. */
   readonly unknown: readonly string[];
   /** `current` only when nothing is pending and nothing is unknown. */
@@ -161,7 +184,13 @@ export async function migrationStatus(db: Kysely<Database>): Promise<MigrationSt
   }
   const status: MigrationStatus['status'] =
     pending.length > 0 ? 'pending' : unknown.length > 0 ? 'newer_schema' : 'current';
-  return { applied, pending, unknown, status };
+  return {
+    applied,
+    pending,
+    pendingLongRunning: pending.filter((name) => LONG_RUNNING_MIGRATIONS.has(name)),
+    unknown,
+    status,
+  };
 }
 
 export interface MigrationRunOptions {
@@ -170,6 +199,8 @@ export interface MigrationRunOptions {
   /** Where the advisory-lock connection is opened. */
   readonly target: MysqlConnectionTarget;
   readonly logger?: DbLogger;
+  /** CLI operator or disposable fixture opt-in; deliberately absent from the boot path. */
+  readonly allowLongRunning?: boolean;
 }
 
 export interface MigrationRunOutcome {
@@ -227,7 +258,33 @@ async function run(
 
 /** `iridium migrate up`: apply everything pending. */
 export async function migrateToLatest(options: MigrationRunOptions): Promise<MigrationRunOutcome> {
-  return run(options, 'up', (migrator) => migrator.migrateToLatest());
+  return run(options, 'up', async (migrator) => {
+    await assertLongRunningAdmission(migrator, options.allowLongRunning);
+    return migrator.migrateToLatest();
+  });
+}
+
+/** Check the entire selected path under the advisory lock, before Kysely executes its first step. */
+async function assertLongRunningAdmission(
+  migrator: Migrator,
+  allowed: boolean | undefined,
+  name?: string,
+): Promise<void> {
+  if (allowed === true) return;
+  const rows = await migrator.getMigrations();
+  const target = name === undefined ? rows.length - 1 : rows.findIndex((row) => row.name === name);
+  // Let Kysely diagnose an unknown target without reporting unrelated pending work instead.
+  if (target === -1) return;
+  const head = rows.findLastIndex((row) => row.executedAt !== undefined);
+  const selected = rows.filter((row, index) =>
+    target < head
+      ? index > target && row.executedAt !== undefined
+      : index <= target && row.executedAt === undefined,
+  );
+  const longRunning = selected.filter((row) => LONG_RUNNING_MIGRATIONS.has(row.name));
+  if (longRunning.length > 0) {
+    throw new MigrationLongRunningRefusedError(longRunning.map((row) => row.name));
+  }
 }
 
 /**
@@ -265,6 +322,7 @@ export async function migrateTo(
 ): Promise<MigrationRunOutcome> {
   return run(options, `to ${name}`, async (migrator) => {
     if (nodeEnv === 'production') await assertForward(migrator, name);
+    await assertLongRunningAdmission(migrator, options.allowLongRunning, name);
     return migrator.migrateTo(name);
   });
 }

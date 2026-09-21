@@ -766,7 +766,7 @@ describe('collab.writer.unit [area:collab]', () => {
         await release.promise;
         return load(noteId);
       });
-      const transaction = vi.spyOn(harness.store, 'runCompaction');
+      const transaction = vi.spyOn(harness.store, 'runCheckpoint');
       const checkpoint = note.writer.enqueueCheckpoint(request);
       const rejected = checkpoint.catch((error: unknown) => error);
       await entered.promise;
@@ -811,8 +811,8 @@ describe('collab.writer.unit [area:collab]', () => {
       async (failure) => {
         const harness = createHarness();
         const note = await open(harness, 'seed');
-        const original = harness.store.runCompaction.bind(harness.store);
-        vi.spyOn(harness.store, 'runCompaction').mockImplementationOnce((noteId, work) =>
+        const original = harness.store.runCheckpoint.bind(harness.store);
+        vi.spyOn(harness.store, 'runCheckpoint').mockImplementationOnce((noteId, work) =>
           original(noteId, (tx) =>
             work({
               ...tx,
@@ -854,8 +854,8 @@ describe('collab.writer.unit [area:collab]', () => {
     it('rolls back a checkpoint when trash or ownership loss occurs between capture and its locked write', async () => {
       const harness = createHarness();
       const trashed = await open(harness, 'trashed');
-      const original = harness.store.runCompaction.bind(harness.store);
-      vi.spyOn(harness.store, 'runCompaction').mockImplementationOnce((noteId, work) => {
+      const original = harness.store.runCheckpoint.bind(harness.store);
+      vi.spyOn(harness.store, 'runCheckpoint').mockImplementationOnce((noteId, work) => {
         harness.store.trash(noteId, harness.clock.date());
         return original(noteId, work);
       });
@@ -864,7 +864,7 @@ describe('collab.writer.unit [area:collab]', () => {
       });
       expect(trashed.writer.state).toBe('trashed');
       const fenced = await open(harness, 'fenced');
-      vi.spyOn(harness.store, 'runCompaction').mockImplementationOnce((noteId, work) =>
+      vi.spyOn(harness.store, 'runCheckpoint').mockImplementationOnce((noteId, work) =>
         original(noteId, (tx) =>
           work({
             ...tx,
@@ -890,8 +890,8 @@ describe('collab.writer.unit [area:collab]', () => {
     it('does not authorize a repair result when ownership ends just after the checkpoint commits', async () => {
       const harness = createHarness();
       const note = await open(harness, 'seed');
-      const original = harness.store.runCompaction.bind(harness.store);
-      vi.spyOn(harness.store, 'runCompaction').mockImplementationOnce(async (noteId, work) => {
+      const original = harness.store.runCheckpoint.bind(harness.store);
+      vi.spyOn(harness.store, 'runCheckpoint').mockImplementationOnce(async (noteId, work) => {
         const result = await original(noteId, work);
         note.writer.fence();
         return result;
@@ -1465,7 +1465,7 @@ describe('collab.writer.unit: recovery boundaries', () => {
     expect(harness.store.note(note.noteId)?.headSeq).toBe(2);
   });
 
-  it('fences an old lifetime, lets its in-flight transaction settle, and never acknowledges or resumes its queue', async () => {
+  it('fences an old lifetime before its blocked head lock returns and never appends or acknowledges its queue', async () => {
     const harness = createHarness();
     const note = await open(harness);
     const gate = harness.store.holdWrites();
@@ -1485,12 +1485,69 @@ describe('collab.writer.unit: recovery boundaries', () => {
     expect(harness.persistence.writers()).toEqual([]);
     expect(note.writer.state).toBe('disposed');
     expect(types(note.document.broadcasts)).not.toContain('persisted');
-    expect(harness.store.note(note.noteId)?.headSeq).toBe(2);
+    expect(harness.store.note(note.noteId)?.headSeq).toBe(1);
     const reopened = await harness.openNote({ noteId: note.noteId, vaultId: note.vaultId });
-    expect(projectMarkdown(reopened.document)).toBe('in-flight');
+    expect(projectMarkdown(reopened.document)).toBe('');
     expect(projectMarkdown(note.document)).toBe('in-flight-still-local');
     expect(reopened.writer).not.toBe(note.writer);
     await expect(note.writer.drainAccepted()).rejects.toBeInstanceOf(CollabOwnershipLost);
+  });
+
+  it('allows an already guarded write to settle after fencing without acknowledging the former lifetime', async () => {
+    const harness = createHarness();
+    const note = await open(harness);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const original = harness.store.runWrite.bind(harness.store);
+    vi.spyOn(harness.store, 'runWrite').mockImplementationOnce((noteId, work) =>
+      original(noteId, (tx) =>
+        work({
+          ...tx,
+          casHead: async (from, to, now) => {
+            const applied = await tx.casHead(from, to, now);
+            entered.resolve();
+            await release.promise;
+            return applied;
+          },
+        }),
+      ),
+    );
+    type(note.document, note.editor, 'already guarded');
+    await entered.promise;
+    const fenced = harness.persistence.fenceAll();
+    release.resolve();
+    await fenced;
+    expect(harness.store.note(note.noteId)?.headSeq).toBe(2);
+    expect(types(note.document.broadcasts)).not.toContain('persisted');
+    const reopened = await harness.openNote({ noteId: note.noteId, vaultId: note.vaultId });
+    expect(projectMarkdown(reopened.document)).toBe('already guarded');
+  });
+
+  it('rechecks the local lifetime after a publication head lock and rolls back a fenced compaction', async () => {
+    const harness = createHarness();
+    const note = await open(harness, 'seed');
+    type(note.document, note.editor, 'changed');
+    await note.writer.drain();
+    const before = harness.store.note(note.noteId);
+    if (before === undefined) throw new Error('Expected the durable note.');
+    const original = harness.store.runCompaction.bind(harness.store);
+    vi.spyOn(harness.store, 'runCompaction').mockImplementationOnce((noteId, vaultId, work) =>
+      original(noteId, vaultId, (tx) =>
+        work({
+          ...tx,
+          lockHead: async () => {
+            const head = await tx.lockHead();
+            note.writer.fence();
+            return head;
+          },
+        }),
+      ),
+    );
+    await expect(note.writer.enqueueCompaction('flush')).rejects.toBeInstanceOf(
+      CollabOwnershipLost,
+    );
+    await harness.persistence.scheduler.idle();
+    expect(harness.store.note(note.noteId)).toEqual(before);
   });
 
   it('clears a repaired content latch without announcing recovery through an active principal barrier', async () => {

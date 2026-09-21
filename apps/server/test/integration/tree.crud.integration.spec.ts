@@ -210,7 +210,7 @@ describe('tree.crud.integration [area:tree]', () => {
     expect(await treeVersion(vault.id)).toBe(before);
   });
 
-  it('rejects category creation at the request boundary without changing the tree', async () => {
+  it('creates a category without a note document and rejects Markdown on categories', async () => {
     const vault = await freshVault('Tree Category');
     const before = await treeVersion(vault.id);
     const beforeNodes = await context.db
@@ -229,7 +229,7 @@ describe('tree.crud.integration [area:tree]', () => {
     expect(refused.status).toBe(422);
     await expect(refused).toMatchOpenApi('nodes.create', 422);
     expect(refused.body.errors).toEqual([
-      expect.objectContaining({ path: 'body/kind', code: 'invalid_value' }),
+      expect.objectContaining({ path: 'body/markdown', code: 'custom' }),
     ]);
     expect(await treeVersion(vault.id)).toBe(before);
     expect(await createdAudits(vault.id)).toBe(0);
@@ -240,6 +240,23 @@ describe('tree.crud.integration [area:tree]', () => {
       .orderBy('id')
       .execute();
     expect(afterNodes).toStrictEqual(beforeNodes);
+    const created = await adminClient.post<{ id: string; kind: string }>(
+      `/vaults/${vault.id}/nodes`,
+      {
+        json: { kind: 'category', parentId: vault.rootNodeId, name: 'Category' },
+        headers: webHeaders(context.origin),
+      },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.kind).toBe('category');
+    expect(
+      await context.db
+        .selectFrom('note_docs')
+        .selectAll()
+        .where('note_id', '=', idBytes(created.body.id))
+        .execute(),
+    ).toEqual([]);
+    expect(await treeVersion(vault.id)).toBe(before + 1);
   });
 
   it('refuses an unknown parent as `not_found`', async () => {

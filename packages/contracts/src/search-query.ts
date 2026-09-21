@@ -1,7 +1,7 @@
 /**
  * The parsed shape of a search query (09-api-reference.md section 2.10; skeleton A39).
  *
- * The grammar itself is parsed by `@iridium/markdown/search/parseQuery.ts`, which is where the
+ * The grammar itself is parsed by `@iridium/markdown/search`, which is where the
  * translation into an InnoDB boolean-mode string lives. This module owns only the *shape* that
  * crosses the wire: the search response echoes the parse so a client can show what it understood,
  * and both sides read that shape from here.
@@ -36,6 +36,22 @@ export const ReservedSearchOperator: EnumOf<typeof RESERVED_SEARCH_OPERATORS> =
 
 /** The `errors[].code` a reserved operator is refused with. */
 export const OPERATOR_RESERVED_CODE = 'operator_reserved';
+
+/** Expected grammar refusals surfaced under validation_failed errors[].code. */
+export const SEARCH_QUERY_ERROR_CODES = [
+  'operator_reserved',
+  'unterminated_quote',
+  'missing_operator_value',
+  'duplicate_operator',
+  'empty_query',
+] as const;
+
+/** The parser and all read transports share this closed refusal vocabulary. */
+export type SearchQueryErrorCode = (typeof SEARCH_QUERY_ERROR_CODES)[number];
+
+/** Boundary validator for a query-parser refusal. */
+export const SearchQueryErrorCode: EnumOf<typeof SEARCH_QUERY_ERROR_CODES> =
+  z.enum(SEARCH_QUERY_ERROR_CODES);
 
 /**
  * What a query parsed to, as echoed under `query` in the search response: bare tokens, quoted

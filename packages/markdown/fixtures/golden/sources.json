@@ -1,0 +1,17 @@
+[
+  { "id": "headings", "source": "# A *heading* with `code`\n\n## Repeated\n\n## Repeated\n\n[outline](#Repeated)\n" },
+  { "id": "tables", "source": "| Left | Center | Right |\n| :--- | :----: | ----: |\n| alpha | beta | gamma |\n" },
+  { "id": "tasks", "source": "- [ ] open\n- [x] done\n- [X] also done\n- [/] partial\n" },
+  { "id": "footnotes", "source": "Footnote[^note], and again[^note].\n\n[^note]: **the source**\n\n    A second paragraph.\n" },
+  { "id": "autolinks", "source": "www.example.com, https://example.com/a?b=c&d=e and author@example.com.\n\n~literal~ and ~~deleted~~\n" },
+  { "id": "frontmatter", "source": "---\ntags: ['#Projects', draft, DRAFT]\naliases: [\"First name\", Second]\ndate: 2026-09-20\nyes: no\n---\n# Content\n\nSearchable prose.\n" },
+  { "id": "frontmatter-invalid", "source": "---\ntags: [draft\n---\n# Search survives\n\nOrdinary body.\n" },
+  { "id": "nested-lists", "source": "1. Ordered\n   - Nested **bold**\n   - Another item\n\n> quoted\n>\n> another paragraph\n" },
+  { "id": "code-fences", "source": "```ts\nconst answer: number = 42;\n```\n\n```not-a-language\n<script>alert(1)</script>\n```\n\n```mermaid\ngraph LR; A-->B;\n```\n" },
+  { "id": "images", "source": "![logo|200](attachments/logo.png \"Logo\")\n\n![external](https://example.com/a.png)\n" },
+  { "id": "references", "source": "A [reference][target] and ![alt][image].\n\n[target]: ../Plan.md#Scope \"Plan\"\n[image]: attachments/photo.png\n[unused]: /Other.md\n" },
+  { "id": "breaks", "source": "soft\nbreak\n\nhard  \nbreak\\\nagain\n\n---\n" },
+  { "id": "literal-html", "source": "<script>alert('no')</script>\n\nInline <b onclick=\"attack()\">raw HTML</b> stays text.\n" },
+  { "id": "obsidian", "source": "[[Projects/Plan#Scope|the plan]] and ![[Diagram.png|300]].\n\n> [!warning]- Read me\n\n#inbox ==important== %%visible comment%% $E=mc^2$\n\nClaim^[source] ^block-id\n" },
+  { "id": "mapping", "source": "**ter**m and `inline   code`.\n\nA wrapped\nphrase with &amp; and &#169;.\n\n![image alt](photo.png)\n\n    indented code\n" }
+]

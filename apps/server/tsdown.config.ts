@@ -80,4 +80,22 @@ export default defineConfig([
     entry: { healthcheck: 'src/ops/healthcheck.ts' },
     clean: false,
   },
+  {
+    ...shared,
+    name: 'projection-worker',
+    entry: { 'projection.worker': 'src/projection/worker.ts' },
+    clean: false,
+  },
+  {
+    ...shared,
+    name: 'attachment-reference-worker',
+    entry: { 'attachment-reference.worker': 'src/attachments/reference-scan.worker.ts' },
+    clean: false,
+  },
+  {
+    ...shared,
+    name: 'search-snippet-worker',
+    entry: { 'search.mapped-snippet.worker': 'src/search/mapped-snippet.worker.ts' },
+    clean: false,
+  },
 ]);

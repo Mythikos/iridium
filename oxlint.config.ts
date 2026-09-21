@@ -35,6 +35,8 @@ export default defineConfig({
     // Markdown/vault fixtures are pipeline test data, never code; apps/e2e/fixtures/*.ts stays linted.
     'packages/testkit/src/fixtures/**',
     'apps/server/test/fixtures/**',
+    // S11 emits benchmark bundles here; the authored spike harness remains linted.
+    'spikes/s11-markdown/results/**',
     '**/generated/**',
     'apps/desktop/release/**',
     'tooling/mutation/reports/**',
@@ -68,6 +70,27 @@ export default defineConfig({
           {
             paths: [
               ...bannedEverywhere,
+              ...yjsRestricted,
+              ...platformBans.electron,
+              ...platformBans.react,
+            ],
+            patterns: [nodeBuiltinsTypeOnly],
+          },
+        ],
+      },
+    },
+    {
+      // S11 executed A42's fallback. Only the compatibility adapter may import the parser;
+      // the public pipeline still exposes the same mdast/hast and sanitized HTML contract.
+      files: ['packages/markdown/src/markdown-it/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              ...bannedEverywhere.filter(
+                (entry) => !['markdown-it', 'markdown-it/parser'].includes(entry.name),
+              ),
               ...yjsRestricted,
               ...platformBans.electron,
               ...platformBans.react,
@@ -170,6 +193,30 @@ export default defineConfig({
     {
       files: ['apps/server/src/config/**', 'apps/server/src/main.ts'],
       rules: { 'node/no-process-env': 'off' },
+    },
+    {
+      files: ['apps/server/src/content/read/**'],
+      rules: {
+        'no-restricted-imports': [
+          'error',
+          {
+            paths: [
+              ...bannedEverywhere,
+              ...yjsRestricted,
+              {
+                name: '@iridium/crdt',
+                allowTypeImports: true,
+                message: 'Committed reads cannot load a live document (A37).',
+              },
+              {
+                name: '@hocuspocus/server',
+                allowTypeImports: true,
+                message: 'Committed reads cannot depend on collaboration state (A37).',
+              },
+            ],
+          },
+        ],
+      },
     },
     // ---- root and tooling configuration files run under Node
     {

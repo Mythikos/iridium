@@ -38,7 +38,7 @@ const LEGACY_HEAD = '0053_collab_owner_fence_grants';
 beforeAll(async () => {
   mysql = await startIridiumMysql();
   admin = createMaintDb(mysql.rootUrl());
-  await migrateToLatest({ db: admin.db, target: admin.target });
+  await migrateToLatest({ db: admin.db, target: admin.target, allowLongRunning: true });
 }, 600_000);
 
 afterAll(async () => {
@@ -60,7 +60,7 @@ describe('db.grants-provenance.integration [area:db]', () => {
       await migrateTo({ db: upgrade.db, target: upgrade.target }, LEGACY_HEAD, 'test');
       const history = await inspectMigrationHistory(upgrade.db, LEGACY_HEAD);
       await corruptDeliberately(upgrade.db, { kind: 'remove-grant-provenance' });
-      await migrateToLatest({ db: upgrade.db, target: upgrade.target });
+      await migrateToLatest({ db: upgrade.db, target: upgrade.target, allowLongRunning: true });
       expect((await migrationStatus(upgrade.db)).status).toBe('current');
       expect((await inspectMigrationHistory(upgrade.db, LEGACY_HEAD)).rows).toEqual(history.rows);
       expect(await readGrantProvenance(upgrade.db)).toEqual({ unverified: [], skipped: [] });
@@ -87,7 +87,7 @@ describe('db.grants-provenance.integration [area:db]', () => {
   ] as const)(
     'fails missing %s on %s and recovers on the same verifier after DBA repair',
     async (privilege, table) => {
-      await migrateToLatest({ db: admin.db, target: admin.target });
+      await migrateToLatest({ db: admin.db, target: admin.target, allowLongRunning: true });
       await corruptDeliberately(admin.db, {
         kind: 'revoke-app-privilege',
         schema: 'iridium',
@@ -154,7 +154,7 @@ describe('db.grants-provenance.integration [area:db]', () => {
     const appDb = createDb(parseDatabaseUrl(mysql.appUrl(schema)), 1);
     const scratch = await mkdtemp(join(tmpdir(), 'iridium-db-grants-'));
     try {
-      await migrateToLatest({ db: migrator.db, target: migrator.target });
+      await migrateToLatest({ db: migrator.db, target: migrator.target, allowLongRunning: true });
       expect((await migrationStatus(migrator.db)).status).toBe('current');
       const provenance = await readGrantProvenance(migrator.db);
       expect(provenance.unverified).toEqual([]);

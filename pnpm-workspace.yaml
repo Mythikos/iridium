@@ -6,6 +6,8 @@ packages:
   # spike code never becomes product code). Each is a leaf tagged `spike`; `turbo boundaries` lets
   # nothing depend on one.
   - 'spikes/*'
+  # Inert shared security corpus: browser/iso tests never depend on the Node testkit runtime.
+  - 'packages/testkit/src/fixtures/hostile'
 
 # Every external version the plan pins (02-system-architecture.md dependency table,
 # 13-decision-log.md ADRs, 12-milestones.md section 4.2 step 3). Exact versions only.
@@ -18,6 +20,7 @@ catalog:
   oxfmt: 0.67.0
   # Static source guards parse TypeScript without the removed TS 7 compiler API.
   oxc-parser: 0.148.0
+  diff: 8.0.4
   tsdown: 0.23.0
   vite: 8.3.0
   '@vitejs/plugin-react': 6.1.1
@@ -98,8 +101,6 @@ catalog:
   # Markdown pipeline
   unified: 11.0.5
   remark-parse: 11.0.0
-  mdast-util-from-markdown: 2.0.3
-  micromark: 4.0.2
   micromark-extension-gfm-table: 2.1.2
   micromark-extension-gfm-strikethrough: 2.1.0
   micromark-extension-gfm-footnote: 2.1.0
@@ -107,6 +108,7 @@ catalog:
   mdast-util-gfm-table: 2.0.0
   mdast-util-gfm-strikethrough: 2.0.0
   mdast-util-gfm-footnote: 2.1.0
+  mdast-util-gfm-autolink-literal: 2.0.1
   mdast-util-gfm-task-list-item: 2.0.0
   remark-frontmatter: 5.0.0
   remark-breaks: 4.0.0
@@ -114,13 +116,16 @@ catalog:
   mdast-util-to-hast: 13.2.1
   rehype-highlight: 7.0.2
   lowlight: 3.3.0
+  markdown-it: 15.0.2
   highlight.js: 11.12.0
   rehype-sanitize: 6.0.0
+  rehype-stringify: 10.0.1
   hast-util-sanitize: 5.0.2
   github-slugger: 2.0.0
   yaml: 2.9.1
   mdast-util-to-string: 4.0.0
   unist-util-visit: 5.1.0
+  vfile: 6.0.3
   '@types/hast': 3.0.5
   '@types/mdast': 4.0.4
   # Transfer (zip import/export) and attachment MIME sniffing (pinned by S8)
@@ -227,6 +232,8 @@ publicHoistPattern: []
 # One module instance each (A14): the whole closure resolves to the catalog version
 overrides:
   yjs: 'catalog:'
+  # lowlight must execute the same pinned engine that supplies the registered language grammars.
+  highlight.js: 'catalog:'
   # One Node type environment: transitive `@types/*` packages pull `@types/node@*`, which would
   # otherwise resolve to whatever is newest and make `pnpm dedupe --check` chase it (Node 24 is the
   # only runtime, A4).
@@ -241,6 +248,7 @@ overrides:
   '@codemirror/state': 'catalog:'
   '@codemirror/view': 'catalog:'
 patchedDependencies:
+  markdown-it@15.0.2: patches/markdown-it@15.0.2.patch
   '@fastify/websocket@11.3.0': patches/@fastify__websocket@11.3.0.patch
   '@hocuspocus/provider@4.7.0': patches/@hocuspocus__provider@4.7.0.patch
   '@hocuspocus/server@4.7.0': patches/@hocuspocus__server@4.7.0.patch

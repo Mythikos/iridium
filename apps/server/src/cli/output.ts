@@ -20,6 +20,8 @@
 export interface CliIo {
   /** The command's answer: the link, the JSON document, the table. */
   out(text: string): void;
+  /** Streaming exports await the real stdout write callback to keep pipe backpressure bounded. */
+  writeLine?(text: string): Promise<void>;
   /** Refusals, warnings and diagnostics — never part of the answer. */
   err(text: string): void;
 }
@@ -28,6 +30,11 @@ export interface CliIo {
 export const PROCESS_IO: CliIo = Object.freeze({
   out(text: string): void {
     process.stdout.write(`${text}\n`);
+  },
+  writeLine(text: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      process.stdout.write(`${text}\n`, (error) => (error == null ? resolve() : reject(error)));
+    });
   },
   err(text: string): void {
     process.stderr.write(`${text}\n`);

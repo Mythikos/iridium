@@ -1,0 +1,71 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "code",
+      "lang": "ts",
+      "meta": null,
+      "value": "const answer: number = 42;",
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 3,
+          "column": 4,
+          "offset": 36
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": "not-a-language",
+      "meta": null,
+      "value": "<script>alert(1)</script>",
+      "position": {
+        "start": {
+          "line": 5,
+          "column": 1,
+          "offset": 38
+        },
+        "end": {
+          "line": 7,
+          "column": 4,
+          "offset": 85
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": "mermaid",
+      "meta": null,
+      "value": "graph LR; A-->B;",
+      "position": {
+        "start": {
+          "line": 9,
+          "column": 1,
+          "offset": 87
+        },
+        "end": {
+          "line": 11,
+          "column": 4,
+          "offset": 118
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 12,
+      "column": 1,
+      "offset": 119
+    }
+  }
+}

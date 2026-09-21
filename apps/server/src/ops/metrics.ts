@@ -196,6 +196,20 @@ export interface Metrics {
   readonly stateVectorOversizeTotal: Counter;
   /** Hostile-content detections at compaction, by reason (A22). */
   readonly contentInvalidTotal: Counter<'reason'>;
+  /** Worker observations and committed-projection backlog. */
+  readonly projectionDurationSeconds: Histogram<'status'>;
+  readonly projectionTimeoutsTotal: Counter;
+  readonly projectionLagSeconds: Gauge;
+  /** Attachment observations use closed status labels and never attachment or vault ids. */
+  readonly attachmentUploadsTotal: Counter<'status'>;
+  readonly attachmentServedBytesTotal: Counter;
+  readonly attachmentMissingTotal: Counter;
+  readonly attachmentBytesTotal: Gauge;
+  /** Persisted maintenance outcomes and health, with closed job-type labels. */
+  readonly jobsTotal: Counter<'type' | 'status'>;
+  readonly jobDurationSeconds: Histogram<'type'>;
+  readonly jobLastSuccessTimestamp: Gauge<'type'>;
+  readonly jobIntervalSeconds: Gauge<'type'>;
 
   // ---- authentication and pools -----------------------------------------------------------------
   /** Failed logins, by reason. Never an email address and never a user id. */
@@ -405,6 +419,73 @@ export function createMetrics(
   });
   for (const reason of CONTENT_INVALID_REASONS) contentInvalidTotal.inc({ reason }, 0);
 
+  const projectionDurationSeconds = new Histogram({
+    name: 'iridium_projection_duration_seconds',
+    help: 'Projection worker duration by outcome.',
+    labelNames: ['status'] as const,
+    buckets: [...HTTP_DURATION_BUCKETS],
+    registers: [registry],
+  });
+  const projectionTimeoutsTotal = new Counter({
+    name: 'iridium_projection_timeouts_total',
+    help: 'Projection workers terminated at their deadline.',
+    registers: [registry],
+  });
+  const projectionLagSeconds = new Gauge({
+    name: 'iridium_projection_lag_seconds',
+    help: 'Age of the oldest committed head awaiting projection.',
+    registers: [registry],
+  });
+  const attachmentUploadsTotal = new Counter({
+    name: 'iridium_attachment_uploads_total',
+    help: 'Attachment uploads by outcome.',
+    labelNames: ['status'] as const,
+    registers: [registry],
+  });
+  for (const status of ['created', 'deduplicated', 'rejected'])
+    attachmentUploadsTotal.inc({ status }, 0);
+  const attachmentServedBytesTotal = new Counter({
+    name: 'iridium_attachment_served_bytes_total',
+    help: 'Attachment bytes served by successful responses.',
+    registers: [registry],
+  });
+  const attachmentMissingTotal = new Counter({
+    name: 'iridium_attachment_missing_total',
+    help: 'Reads whose persisted attachment bytes were missing.',
+    registers: [registry],
+  });
+  const attachmentBytesTotal = new Gauge({
+    name: 'iridium_attachment_bytes_total',
+    help: 'Total bytes referenced by retained attachment metadata.',
+    registers: [registry],
+  });
+
+  const jobsTotal = new Counter({
+    name: 'iridium_jobs_total',
+    help: 'Persisted job attempts by type and outcome.',
+    labelNames: ['type', 'status'] as const,
+    registers: [registry],
+  });
+  const jobDurationSeconds = new Histogram({
+    name: 'iridium_job_duration_seconds',
+    help: 'Maintenance job duration by type.',
+    labelNames: ['type'] as const,
+    buckets: [...HTTP_DURATION_BUCKETS],
+    registers: [registry],
+  });
+  const jobLastSuccessTimestamp = new Gauge({
+    name: 'iridium_job_last_success_timestamp',
+    help: 'Unix time of the latest completed job by type.',
+    labelNames: ['type'] as const,
+    registers: [registry],
+  });
+  const jobIntervalSeconds = new Gauge({
+    name: 'iridium_job_interval_seconds',
+    help: 'Configured maintenance cadence by type.',
+    labelNames: ['type'] as const,
+    registers: [registry],
+  });
+
   const loginFailuresTotal = new Counter({
     name: 'iridium_login_failures_total',
     help: 'Failed logins by reason. Never an email address and never a user id.',
@@ -467,6 +548,17 @@ export function createMetrics(
     noteStateBytes,
     stateVectorOversizeTotal,
     contentInvalidTotal,
+    projectionDurationSeconds,
+    projectionTimeoutsTotal,
+    projectionLagSeconds,
+    attachmentUploadsTotal,
+    attachmentServedBytesTotal,
+    attachmentMissingTotal,
+    attachmentBytesTotal,
+    jobsTotal,
+    jobDurationSeconds,
+    jobLastSuccessTimestamp,
+    jobIntervalSeconds,
     loginFailuresTotal,
     tokenAuthFailuresTotal,
     authzBusHandlerErrorsTotal,

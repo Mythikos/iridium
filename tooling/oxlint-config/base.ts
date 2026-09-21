@@ -17,7 +17,11 @@ export const bannedEverywhere: ReadonlyArray<{ name: string; message: string }> 
   { name: 'gray-matter', message: 'Frontmatter is parsed by remark-frontmatter + yaml (A42).' },
   {
     name: 'markdown-it',
-    message: 'The pipeline is unified/remark (A42); markdown-it is the recorded fallback only.',
+    message: 'The A42 fallback parser is private to packages/markdown/src/markdown-it (S11).',
+  },
+  {
+    name: 'markdown-it/parser',
+    message: 'The A42 token parser is private to packages/markdown/src/markdown-it (S11).',
   },
   { name: 'shiki', message: 'Highlighting is rehype-highlight (class output, CSP-safe) (A42).' },
   {

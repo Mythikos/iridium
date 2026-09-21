@@ -19,13 +19,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { M1_ROUTES } from '@iridium/contracts';
+import { API_ROUTES } from '@iridium/contracts';
 import {
   startServer,
   workerSchemaName,
   type BuildApp,
   type RestClient,
   type RestRequestInit,
+  type StructureNodeWriter,
   type TestServer,
 } from '@iridium/testkit';
 import type { FastifyInstance } from 'fastify';
@@ -36,6 +37,7 @@ import { buildApp } from '../../src/app.ts';
 import { applyAuthRoutes } from '../../src/auth/routes.ts';
 import { API_PREFIX } from '../../src/authz/route-policy.ts';
 import type { Database } from '../../src/db/index.ts';
+import { drainWithClock } from './drain-with-clock.ts';
 import { ManualClock } from './manual-clock.ts';
 import { registerRecordingOpenApiMatcher } from './openapi-coverage.ts';
 
@@ -142,6 +144,8 @@ export interface StartAuthServerOptions {
   readonly waitForReady?: boolean;
   readonly clock?: ManualClock;
   readonly extraEnv?: Readonly<Record<string, string>>;
+  /** A bulk fixture opts into the actual structural service without changing request quotas. */
+  readonly structureWriter?: (app: FastifyInstance) => StructureNodeWriter;
   /** Registered on the child under `/api/v1`, before the auth routes; for probe routes. */
   readonly extraRoutes?: (api: FastifyInstance) => void;
   /** Registered on the root instance, outside the API prefix; for probes of root-level policies. */
@@ -178,7 +182,7 @@ export async function startAuthServer(
     mode: 'in-process',
     async onResponse(response, method): Promise<void> {
       const segments = new URL(response.url).pathname.split('/');
-      const route = M1_ROUTES.find((candidate) => {
+      const route = API_ROUTES.find((candidate) => {
         if (candidate.method !== method) return false;
         const expected = `${candidate.mount}${candidate.path}`.split('/');
         return (
@@ -196,6 +200,7 @@ export async function startAuthServer(
     },
     attachmentsDir: join(scratch, 'attachments'),
     buildApp: build,
+    ...(options.structureWriter === undefined ? {} : { structureWriter: options.structureWriter }),
     // Behind a trusted proxy so each client's `X-Forwarded-For` is the address the limiter reads.
     extraEnv: { TRUST_PROXY: '127.0.0.1', ...FAST_ARGON2_ENV, ...options.extraEnv },
   });
@@ -203,9 +208,13 @@ export async function startAuthServer(
     if (options.waitForReady !== false) await server.waitReady({ timeoutMs: 30_000 });
   } catch (error) {
     try {
-      await server.stop();
+      if (captured !== null) await drainWithClock(captured, clock);
     } finally {
-      rmSync(scratch, { recursive: true, force: true });
+      try {
+        await server.stop();
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
     }
     throw error;
   }
@@ -221,8 +230,15 @@ export async function startAuthServer(
     db,
     origin: server.origin,
     async stop(): Promise<void> {
-      await server.stop();
-      rmSync(scratch, { recursive: true, force: true });
+      try {
+        await drainWithClock(app, clock);
+      } finally {
+        try {
+          await server.stop();
+        } finally {
+          rmSync(scratch, { recursive: true, force: true });
+        }
+      }
     },
   };
 }

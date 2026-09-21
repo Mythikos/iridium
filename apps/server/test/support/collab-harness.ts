@@ -30,7 +30,11 @@ import { expect, inject } from 'vitest';
 
 import { buildApp } from '../../src/app.ts';
 import { createLogger } from '../../src/ops/logging.ts';
+import { drainWithClock } from './drain-with-clock.ts';
 import type { ManualClock } from './manual-clock.ts';
+import { recordRestResponse, registerRecordingOpenApiMatcher } from './openapi-coverage.ts';
+
+registerRecordingOpenApiMatcher();
 
 /** A durability observation assembled from one consistent MySQL transaction. */
 export interface DurableNote {
@@ -91,6 +95,10 @@ export async function startCollab(
     },
     attachmentsDir: scratch,
     ...serverOptions,
+    async onResponse(response, method): Promise<void> {
+      await recordRestResponse(response, method);
+      await options.onResponse?.(response, method);
+    },
     extraEnv: { METRICS_TOKEN: 'collab-fixture-not-a-secret', ...options.extraEnv },
     buildApp: (bootOptions) =>
       buildApp({
@@ -120,31 +128,7 @@ export async function startCollab(
     async close(): Promise<void> {
       await Promise.all([...clients].map((client) => client.close()));
       try {
-        if (server.app !== null) {
-          const draining = server.app.drain();
-          if (fixtureClock !== undefined) {
-            let settled = false;
-            void draining.then(
-              () => {
-                return (settled = true);
-              },
-              () => {
-                return (settled = true);
-              },
-            );
-            // Real SQL and sockets still need event-loop turns while product timers use injected time.
-            await expect
-              .poll(
-                async () => {
-                  await fixtureClock.advance(50);
-                  return settled;
-                },
-                { timeout: 25_000, interval: 10 },
-              )
-              .toBe(true);
-          }
-          await draining;
-        }
+        if (server.app !== null) await drainWithClock(server.app, fixtureClock);
       } finally {
         try {
           await server.stop();

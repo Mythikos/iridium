@@ -2,7 +2,7 @@
  * `applyMemberRoutes(app)` — the three membership routes of M1 (09-api-reference.md §2.6).
  *
  * Everyone who can read a vault can see who else can, and a manager can change who can: the two
- * policies come from the `M1_ROUTES` rows verbatim, so the read is `vault:read` and the two writes
+ * policies come from the `API_ROUTES` rows verbatim, so the read is `vault:read` and the two writes
  * are `vault:manage_members`.
  *
  * `If-Match` is parsed here and enforced in the service, because the header's *shape* is a wire rule

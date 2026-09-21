@@ -28,6 +28,7 @@ import type { WaitOptions } from '../harness/deadline.ts';
 import { reserveLoopbackPort } from '../harness/free-port.ts';
 import type { SeedApi, SeededUser } from '../seed/seed.ts';
 import { createSeedApi } from '../seed/seed.ts';
+import type { StructureNodeWriter } from '../seed/structure.ts';
 import type { ChildServer } from './child.ts';
 import { startChildServer } from './child.ts';
 import type { CliResult } from './cli.ts';
@@ -129,6 +130,8 @@ export interface StartServerOptions<TApp extends TestAppInstance = TestAppInstan
   readonly extraEnv?: Readonly<Record<string, string>>;
   /** Inject `buildApp` instead of importing `apps/server/src/app.ts` (`in-process` only). */
   readonly buildApp?: BuildApp<TApp>;
+  /** In-process bulk fixture adapter bound to the actual server instance and structural services. */
+  readonly structureWriter?: (app: TApp) => StructureNodeWriter;
   /** Override the reserved port; a restart re-uses the original by default. */
   readonly port?: number;
   /** How long to wait for `/readyz` to answer 200. */
@@ -416,7 +419,13 @@ export async function startServer<TApp extends TestAppInstance = TestAppInstance
     },
   };
 
-  const seed: SeedApi = createSeedApi({ client: () => rest(), cli });
+  const structureWriter =
+    inProcess === undefined ? undefined : options.structureWriter?.(inProcess.app);
+  const seed: SeedApi = createSeedApi({
+    client: () => rest(),
+    cli,
+    ...(structureWriter === undefined ? {} : { structureWriter }),
+  });
 
   const server: TestServer<TApp> = {
     origin,

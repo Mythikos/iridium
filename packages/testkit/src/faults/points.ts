@@ -14,6 +14,8 @@
  * (10-testing-and-quality.md, "Fault injection": *"never as string literals in tests"*).
  */
 export const FAULT = {
+  treeHoldAfterCommitBeforeNotify: 'tree.hold-after-commit-before-notify',
+  treeCrashAfterCommitBeforeNotify: 'tree.crash-after-commit-before-notify',
   storeThrow: 'store.throw',
   storeThrowAfterCommitBeforeAck: 'store.throw-after-commit-before-ack',
   storeCrashBeforeCommit: 'store.crash-before-commit',
@@ -62,6 +64,23 @@ export interface FaultPointDescriptor {
  * points 05-collaboration-and-durability.md adds and the one 04/06 add for the MCP cookie layers.
  */
 export const FAULT_POINTS: readonly FaultPointDescriptor[] = [
+  {
+    point: 'tree.hold-after-commit-before-notify',
+    constant: 'treeHoldAfterCommitBeforeNotify',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn:
+      'hold a committed trash before note closure and tree notifications until explicit disarm',
+    specifiedIn: '05-collaboration-and-durability.md, Trash crash-window reconciliation',
+  },
+  {
+    point: 'tree.crash-after-commit-before-notify',
+    constant: 'treeCrashAfterCommitBeforeNotify',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn: 'after the trash transaction COMMIT, before note closure and tree notifications',
+    specifiedIn: '12-milestones.md §6.2, lifecycle completion crash window',
+  },
   {
     point: 'store.throw',
     constant: 'storeThrow',

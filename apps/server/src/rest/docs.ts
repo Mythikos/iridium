@@ -18,7 +18,7 @@
  * carries `{ serverAdmin: true, permission: 'server:settings' }`: the OpenAPI document describes this
  * deployment's surface, which is server configuration, and gating it on a server-scoped permission
  * keeps the decision inside the single authorization core rather than in a hook of its own
- * (invariant 2). `/docs` itself carries the `M1_ROUTES` row's `{ serverAdmin: true }`, which is a
+ * (invariant 2). `/docs` itself carries the `API_ROUTES` row's `{ serverAdmin: true }`, which is a
  * member of `ADMIN_FLAG_ONLY_ROUTES`.
  *
  * **Development opens both**, as §2.17 says: under `NODE_ENV=development` the two documentation

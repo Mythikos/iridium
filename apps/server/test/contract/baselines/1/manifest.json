@@ -1,0 +1,10 @@
+{
+  "tag": "v0.1.0",
+  "commit": "f31a51fd2c3af6b3631a28fc45918245dfac34a1",
+  "apiVersion": 1,
+  "files": {
+    "openapi.json": "5a1221c0e0b8a3e479aff2f2d0287fe148982d7c9a5002652f40a6ad48e58bb3",
+    "stateless.json": "1d42f7a712f87eedc0c94e3c9c97d2d2cded3c65a758207bab6b272ba85549d0",
+    "desktop-ipc.d.ts": "10aed0406c9f7b17d4e672710d870507b423199310971003444db1bc136277cb"
+  }
+}

@@ -1,5 +1,21 @@
 # @iridium/server
 
+## 0.2.0
+
+### Minor Changes
+
+- [migration] [long-running] [api] Complete the headless content model: structural tree operations, trash and purge fencing, revisions and collaborative restore, source-preserving Markdown projection and sanitized preview, indexed links and search, attachments, and resumable maintenance jobs. The additive REST surface contains 62 operations and preserves the v0.1.0 wire contract.
+
+  Before starting the new server, stop serving writes, inspect `iridium migrate status`, and run `iridium migrate up --allow-long-running` in a maintenance window. Migrations 0056–0059 widen raw frontmatter storage, replace unused historical metadata indexes with bounded term memberships, apply grants, and backfill those memberships. Boot leaves these migrations pending until explicitly authorized. Keep a verified backup; production schema rollback uses restore.
+
+  The Markdown pipeline advances from version 1 to 2. Run `iridium reindex --stale` to publish existing notes through the complete pipeline and populate search and link data; interrupted reindex jobs resume from their committed cursor. [config] `REINDEX_RATE_PER_SECOND` controls the rebuild rate while normal collaboration remains available. The markdown-it token parser and typed adapter replace remark parsing after the measured S11 browser budget failure, preserving canonical source bytes and the sanitize-last policy.
+
+### Patch Changes
+
+- @iridium/contracts@0.2.0
+  - @iridium/crdt@0.2.0
+  - @iridium/markdown@0.2.0
+
 ## 0.1.0
 
 The runtime image applies Debian security updates, removes unused package-manager tooling, and retains signed MySQL client metadata and licenses for an accurate SBOM. The release vulnerability threshold is unchanged.

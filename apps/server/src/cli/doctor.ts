@@ -69,8 +69,6 @@ export const DOCTOR_RESERVED_CHECKS: readonly string[] = Object.freeze([
   'migrations',
   'triggers',
   'keys',
-  'heads',
-  'stale-projections',
   'checkpoint-stale',
   'content-invalid',
   'oversize',
@@ -82,7 +80,6 @@ export const DOCTOR_RESERVED_CHECKS: readonly string[] = Object.freeze([
   'oauth',
   'tls',
   'alerts',
-  'repair-heads',
 ]);
 
 /**

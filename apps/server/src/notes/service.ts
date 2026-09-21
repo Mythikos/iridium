@@ -15,7 +15,7 @@
  * compaction first for a loaded note; an unloaded note is already current.
  */
 import { LIMITS, type NoteId } from '@iridium/contracts';
-import { normalizeSource } from '@iridium/markdown';
+import { normalizeSource, type NoteProjection } from '@iridium/markdown';
 import type { Kysely, Transaction } from 'kysely';
 
 import { idBytes } from '../auth/ids.ts';
@@ -26,8 +26,11 @@ import { initialRows } from '../collab/persistence/initial-state.ts';
 import type { UpdateActor } from '../collab/persistence/types.ts';
 import type { Database } from '../db/schema.ts';
 import type { Clock } from '../ops/clock.ts';
+import type { ServerLogger } from '../ops/logging.ts';
+import type { PrepareProjection } from '../projection/prepare.ts';
 import { readCommittedMarkdown, type CommittedMarkdown } from '../projection/read.ts';
 import { upsertProjection } from '../projection/write.ts';
+import type { SearchIndexWrites } from '../search/index.ts';
 import { ProblemError } from '../security/problem.ts';
 import { NoteOversizedError } from './errors.ts';
 
@@ -37,6 +40,8 @@ import { repairContent, type RepairDeps, type RepairOptions, type RepairReport }
 
 /** What `initialize` takes. */
 export interface InitializeNoteInput {
+  /** Prepared before the caller's structural transaction, using prepare(). */
+  readonly prepared?: NoteProjection;
   readonly noteId: NoteId;
   /** The raw text as received: `normalizeSource` runs here, exactly once. */
   readonly markdown: string;
@@ -54,6 +59,7 @@ export interface InitializedNote {
 
 /** The note kernel as the instance decorates it (`app.notes`). */
 export interface NoteServices {
+  prepare(markdown: string): Promise<NoteProjection>;
   initialize(trx: Transaction<Database>, input: InitializeNoteInput): Promise<InitializedNote>;
   markClosing(noteId: NoteId): void;
   clearClosing(noteId: NoteId): void;
@@ -96,6 +102,9 @@ export class NoteRowMissingError extends Error {
 
 /** What the kernel needs. */
 export interface NoteServicesOptions {
+  readonly logger?: Pick<ServerLogger, 'warn'>;
+  readonly searchIndex: SearchIndexWrites;
+  readonly prepareProjection: PrepareProjection;
   readonly gateway: CollabGateway;
   readonly persistence: CollabPersistenceService;
   /** `dbApp`, resolved per call. */
@@ -202,15 +211,21 @@ export function createNoteServices(options: NoteServicesOptions): NoteServices {
         created_at: rows.revision.createdAt,
       })
       .execute();
-    await upsertProjection(trx, {
-      noteId: id,
-      revision: rows.projection.revision,
-      markdown: rows.projection.markdown,
-      contentHash: rows.projection.contentHash,
-      pipelineVersion: rows.projection.pipelineVersion,
-      now: rows.projection.now,
-      strict: false,
-    });
+    await upsertProjection(
+      trx,
+      {
+        ...(input.prepared === undefined ? {} : { prepared: input.prepared }),
+        logger: options.logger,
+        noteId: id,
+        revision: rows.projection.revision,
+        markdown: rows.projection.markdown,
+        contentHash: rows.projection.contentHash,
+        pipelineVersion: rows.projection.pipelineVersion,
+        now: rows.projection.now,
+        strict: false,
+      },
+      options.searchIndex,
+    );
 
     // 7. The guard, flipped last, inside the same transaction.
     await trx
@@ -289,6 +304,7 @@ export function createNoteServices(options: NoteServicesOptions): NoteServices {
   };
 
   return {
+    prepare: (markdown) => options.prepareProjection(normalizeSource(markdown).text),
     initialize,
     markClosing: (noteId) => gateway.markClosing(noteId),
     clearClosing: (noteId) => gateway.clearClosing(noteId),

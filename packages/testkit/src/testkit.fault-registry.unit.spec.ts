@@ -34,6 +34,8 @@ describe('testkit.fault-registry.unit [area:testkit]', () => {
 
   it('carries the points the fault table of 10-testing-and-quality.md specifies', () => {
     expect(FAULT_POINTS.map((d) => d.point)).toStrictEqual([
+      'tree.hold-after-commit-before-notify',
+      'tree.crash-after-commit-before-notify',
       'store.throw',
       'store.throw-after-commit-before-ack',
       'store.crash-before-commit',

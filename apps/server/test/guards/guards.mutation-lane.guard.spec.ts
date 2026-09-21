@@ -1,14 +1,14 @@
 /**
  * `guards.mutation-lane.guard` (10-testing-and-quality.md, the guard table and "Mutation";
- * 13-decision-log.md A2 as amended 2026-09-13; `docs/adr/0002-mutation-lane.md`).
+ * 13-decision-log.md A2 as amended 2026-09-20; `docs/adr/0002-mutation-lane.md`).
  *
- * A2 keeps two consumers of the TypeScript **JavaScript** compiler API alive inside a repository
+ * A2 keeps three consumers of the TypeScript **JavaScript** compiler API alive inside a repository
  * that builds with TypeScript 7.0.2, which ships no such API until 7.1. Each lives in its own leaf
  * package that aliases `typescript` to `@typescript/typescript6`: `tooling/mutation` for Stryker's
- * `typescript-checker`, and `tooling/api-codegen` for `openapi-typescript`, whose type printer calls
- * `ts.factory` (the M0 finding that amended A2).
+ * `typescript-checker`, `tooling/api-codegen` for `openapi-typescript`, whose type printer calls
+ * `ts.factory`, and `spikes/s11-markdown` for the pinned parser patch's AST transformation.
  *
- * The alias is safe only because it is contained. A third manifest carrying it — or the alias
+ * The alias is safe only because it is contained. An unlisted manifest carrying it — or the alias
  * reaching the workspace `catalog`/`catalogs` or `overrides`, which apply to the whole closure —
  * would put TypeScript 6 under packages that are supposed to compile with 7, and the symptom would
  * not be a build failure but a *checker* that quietly agrees with the wrong compiler. So this guard
@@ -39,11 +39,12 @@ const WORKSPACE_FILE = join(REPO_ROOT, 'pnpm-workspace.yaml');
 const STRYKER_CONFIG = join(REPO_ROOT, 'tooling', 'mutation', 'stryker.config.mjs');
 const CI_WORKFLOW = join(REPO_ROOT, '.github', 'workflows', 'ci.yml');
 
-/** The npm package the two leaf manifests alias `typescript` to (A2). */
+/** The npm package the three leaf manifests alias `typescript` to (A2). */
 const ALIAS_PACKAGE = '@typescript/typescript6';
 
-/** The only two manifests that may carry the alias (A2 as amended; ADR 0002). */
+/** The exact manifests that may carry the alias (A2 as amended; ADR 0002). */
 const ALIAS_MANIFESTS: readonly string[] = [
+  'spikes/s11-markdown/package.json',
   'tooling/api-codegen/package.json',
   'tooling/mutation/package.json',
 ];
@@ -55,6 +56,17 @@ const REMEDY_ALIAS =
 
 function repoRelative(absolute: string): string {
   return relative(REPO_ROOT, absolute).replaceAll('\\', '/');
+}
+
+/** An exception applies to one reviewed leaf, never every package beneath its directory. */
+function aliasManifestDifferences(carriers: readonly string[]): {
+  readonly missing: readonly string[];
+  readonly unexpected: readonly string[];
+} {
+  return {
+    missing: ALIAS_MANIFESTS.filter((manifest) => !carriers.includes(manifest)),
+    unexpected: carriers.filter((manifest) => !ALIAS_MANIFESTS.includes(manifest)),
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -346,7 +358,7 @@ beforeAll(async () => {
 });
 
 describe('guards.mutation-lane.guard [area:ops]', () => {
-  describe('the TypeScript 6 alias stays in its two leaf packages', () => {
+  describe('the TypeScript 6 alias stays in its three named leaf packages', () => {
     it('enumerates every workspace manifest from the workspace file, spikes included', () => {
       const globs = workspaceGlobs(WORKSPACE_YAML);
       expect(globs, 'pnpm-workspace.yaml no longer lists the spike harnesses').toContain(
@@ -363,17 +375,30 @@ describe('guards.mutation-lane.guard [area:ops]', () => {
       expect(MANIFESTS.length).toBeGreaterThan(15);
     });
 
-    it(`finds ${ALIAS_PACKAGE} in exactly the two manifests A2 names`, () => {
+    it(`finds ${ALIAS_PACKAGE} in exactly the three manifests A2 names`, () => {
       const carriers = MANIFESTS.filter((manifest) =>
         readFileSync(join(REPO_ROOT, manifest), 'utf8').includes(ALIAS_PACKAGE),
       );
       expect(
-        carriers.join('\n'),
+        aliasManifestDifferences(carriers),
         `${ALIAS_PACKAGE} must appear in exactly ${ALIAS_MANIFESTS.join(' and ')}.\n${REMEDY_ALIAS}`,
-      ).toBe(ALIAS_MANIFESTS.join('\n'));
+      ).toEqual({ missing: [], unexpected: [] });
     });
 
-    it('declares the alias on `typescript`, at one exact version shared by both leaves', () => {
+    it('refuses a product alias and an unreviewed spike leaf, and detects a missing exception', () => {
+      for (const manifest of ['packages/markdown/package.json', 'spikes/unreviewed/package.json']) {
+        expect(aliasManifestDifferences([...ALIAS_MANIFESTS, manifest])).toEqual({
+          missing: [],
+          unexpected: [manifest],
+        });
+      }
+      expect(aliasManifestDifferences(ALIAS_MANIFESTS.slice(1))).toEqual({
+        missing: ['spikes/s11-markdown/package.json'],
+        unexpected: [],
+      });
+    });
+
+    it('declares the alias on `typescript`, at one exact version shared by all three leaves', () => {
       const specifiers = ALIAS_MANIFESTS.map((manifest) => typescriptSpecifier(manifest));
       for (const manifest of ALIAS_MANIFESTS) {
         const specifier = typescriptSpecifier(manifest);
@@ -388,7 +413,7 @@ describe('guards.mutation-lane.guard [area:ops]', () => {
       }
       expect(
         new Set(specifiers).size,
-        `the two leaf packages must alias the same ${ALIAS_PACKAGE} version, or the mutation lane and \`pnpm gen\` step 3 run against two different compilers: ${specifiers.join(' vs ')}`,
+        `the three leaf packages must alias the same ${ALIAS_PACKAGE} version, or mutation, code generation and parser patch tooling use different compiler APIs: ${specifiers.join(' vs ')}`,
       ).toBe(1);
     });
 

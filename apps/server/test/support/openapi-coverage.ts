@@ -27,14 +27,35 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { API_ROUTES } from '@iridium/contracts';
 import {
   registerOpenApiMatcher,
   type OpenApiOracle,
   type OpenApiOracleOptions,
+  type RestResponse,
+  type HttpMethod,
 } from '@iridium/testkit';
 import { afterAll, expect } from 'vitest';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+
+/** Validate and record a real wire response using its registered method and path template. */
+export async function recordRestResponse(
+  response: RestResponse,
+  method: HttpMethod,
+): Promise<void> {
+  const segments = new URL(response.url).pathname.split('/');
+  const route = API_ROUTES.find((candidate) => {
+    if (candidate.method !== method) return false;
+    const expected = `${candidate.mount}${candidate.path}`.split('/');
+    return (
+      expected.length === segments.length &&
+      expected.every((segment, index) => segment.startsWith(':') || segment === segments[index])
+    );
+  });
+  if (route !== undefined)
+    await expect(response).toMatchOpenApi(route.operationId, response.status);
+}
 
 /** Where the workers write. `scripts/check-openapi-coverage.ts` reads the same two values. */
 export const COVERAGE_REPORTS_ENV = 'IRIDIUM_TEST_OPENAPI_COVERAGE_REPORTS';

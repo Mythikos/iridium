@@ -39,6 +39,7 @@ export type LimitOverrideName =
   | 'maxConnectionsPerIp'
   | 'mcpRateLimitPerHour'
   | 'projectionTimeoutMs'
+  | 'reindexRatePerSecond'
   | 'updateLogRetentionDays'
   | 'shutdownDrainMs';
 
@@ -63,6 +64,7 @@ export const LIMIT_OVERRIDE_ENV: Readonly<Record<LimitOverrideName, LimitEnvKey>
   maxConnectionsPerIp: 'COLLAB_MAX_CONNECTIONS_PER_IP',
   mcpRateLimitPerHour: 'MCP_RATE_LIMIT_PER_HOUR',
   projectionTimeoutMs: 'PROJECTION_TIMEOUT_MS',
+  reindexRatePerSecond: 'REINDEX_RATE_PER_SECOND',
   updateLogRetentionDays: 'UPDATE_LOG_RETENTION_DAYS',
   shutdownDrainMs: 'SHUTDOWN_DRAIN_MS',
 });

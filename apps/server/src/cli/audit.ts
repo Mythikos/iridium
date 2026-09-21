@@ -20,8 +20,18 @@
  * with the most recent backup. The refusal prints that, because an operator reading a red exit code at
  * 02:00 should not have to find the runbook first.
  */
-import { SERVER_CHAIN_ID, VAULT_CHAIN_PREFIX } from '@iridium/contracts';
+import { open } from 'node:fs/promises';
+
+import {
+  AuditAction,
+  LIMITS,
+  SERVER_CHAIN_ID,
+  Timestamp,
+  VAULT_CHAIN_PREFIX,
+  VaultId,
+} from '@iridium/contracts';
 import type { FastifyInstance } from 'fastify';
+import { sql, type Selectable } from 'kysely';
 
 import {
   listChainIds,
@@ -34,9 +44,122 @@ import {
   createAuditKeys,
   readPromotedAuditKeyVersion,
 } from '../audit/keys.ts';
+import type { AuditEventsTable } from '../db/schema.ts';
+import { auditExportRow } from '../jobs/archive.ts';
 import { requireDatabase } from './app.ts';
+import type { CommandInput } from './commands.ts';
 import { EXIT } from './exit.ts';
 import { renderJson, renderTable, type CliIo } from './output.ts';
+
+function csv(values: readonly unknown[]): string {
+  return values
+    .map((value) => {
+      const text = value == null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
+      return `"${text.replaceAll('"', '""')}"`;
+    })
+    .join(',');
+}
+
+/** One repeatable snapshot prevents archive movement from duplicating or hiding streamed rows. */
+export async function runAuditExport(input: CommandInput): Promise<number> {
+  if (input.app === null) throw new Error('Audit export requires the CLI application.');
+  const app = input.app;
+  const db = requireDatabase(app, input.path);
+  const format = input.args.value('format') ?? 'jsonl';
+  const vault = input.args.value('vault'),
+    from = input.args.value('from'),
+    to = input.args.value('to'),
+    action = input.args.value('action');
+  if (
+    !['jsonl', 'csv'].includes(format) ||
+    (vault !== undefined && !VaultId.safeParse(vault).success) ||
+    (from !== undefined && !Timestamp.safeParse(from).success) ||
+    (to !== undefined && !Timestamp.safeParse(to).success) ||
+    (action !== undefined && !AuditAction.safeParse(action).success) ||
+    (from !== undefined && to !== undefined && Date.parse(from) > Date.parse(to))
+  ) {
+    input.io.err(
+      'audit export requires jsonl or csv, canonical UUIDs, UTC timestamps, and a known action.',
+    );
+    return EXIT.usage;
+  }
+  const out = input.args.value('out');
+  const file = out === undefined ? null : await open(out, 'wx', 0o600);
+  const emit = async (line: string): Promise<void> => {
+    if (file !== null) await file.writeFile(`${line}\n`, 'utf8');
+    else if (input.io.writeLine !== undefined) await input.io.writeLine(line);
+    else input.io.out(line);
+  };
+  let rows = 0;
+  let columns: string[] | null = null;
+  try {
+    await db
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .execute(async (trx) => {
+        let after = 0;
+        for (;;) {
+          const predicates = [sql`id > ${after}`];
+          if (vault !== undefined)
+            predicates.push(sql`chain_id = ${`${VAULT_CHAIN_PREFIX}${vault.replaceAll('-', '')}`}`);
+          if (from !== undefined) predicates.push(sql`occurred_at >= ${new Date(from)}`);
+          if (to !== undefined) predicates.push(sql`occurred_at <= ${new Date(to)}`);
+          if (action !== undefined) predicates.push(sql`action = ${action}`);
+          const where = sql.join(predicates, sql` AND `);
+          const active = sql`SELECT * FROM audit_events WHERE ${where} ORDER BY id LIMIT ${LIMITS.JOB_ARCHIVE_BATCH_SIZE}`;
+          const selection = input.args.has('include-archive')
+            ? sql`
+          (${active}) UNION ALL
+          (SELECT * FROM audit_events_archive WHERE ${where} ORDER BY id LIMIT ${LIMITS.JOB_ARCHIVE_BATCH_SIZE})
+          ORDER BY id LIMIT ${LIMITS.JOB_ARCHIVE_BATCH_SIZE}`
+            : active;
+          // eslint-disable-next-line no-await-in-loop -- consume one bounded page before fetching the next export cursor
+          const page = await sql<Selectable<AuditEventsTable>>`${selection}`.execute(trx);
+          if (page.rows.length === 0) break;
+          for (const row of page.rows) {
+            const exported = auditExportRow(row);
+            if (format === 'csv' && columns === null) {
+              columns = Object.keys(exported);
+              // eslint-disable-next-line no-await-in-loop -- stdout and file writes apply backpressure to this stream
+              await emit(csv(columns));
+            }
+            // eslint-disable-next-line no-await-in-loop -- stdout and file writes apply backpressure to this stream
+            await emit(
+              format === 'jsonl'
+                ? JSON.stringify(exported)
+                : csv((columns ?? []).map((column) => exported[column])),
+            );
+            rows += 1;
+            after = row.id;
+          }
+        }
+      });
+    await file?.sync();
+  } finally {
+    await file?.close();
+  }
+  if (input.actor.userId !== null)
+    await db.transaction().execute(async (trx) => {
+      await app.audit.record(trx, {
+        action: 'admin.audit.exported',
+        actorType: input.actor.actorType,
+        actorId: input.actor.actorId,
+        actorDisplay: input.actor.actorDisplay,
+        credentialType: 'cli',
+        credentialId: null,
+        outcome: 'success',
+        context: input.auditContext,
+        metadata: {
+          format,
+          rows,
+          includeArchive: input.args.has('include-archive'),
+          vaultId: vault ?? null,
+        },
+      });
+    });
+  input.io.err(`Exported ${String(rows)} audit rows${out === undefined ? '' : ` to ${out}`}.`);
+  return EXIT.success;
+}
 
 /** What `audit verify-chain` needs after the flags are parsed. */
 export interface VerifyChainInput {

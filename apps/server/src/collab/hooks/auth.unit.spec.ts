@@ -317,7 +317,7 @@ describe('collab.auth-hook.unit [area:collab]', () => {
         },
       );
       await expect(refused(s, ticket(), vaultDocName(world.vault()))).resolves.toMatchObject({
-        reason: 'note-not-found',
+        reason: 'unauthorized',
       });
     });
 

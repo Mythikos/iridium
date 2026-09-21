@@ -58,7 +58,7 @@ import {
   type CanonicalObject,
   type CanonicalValue,
 } from '@iridium/contracts';
-import type { Kysely, Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 
 import { classifyDatabaseFailure } from '../db/failure.ts';
 import type { AuditContext, Database } from '../db/schema.ts';
@@ -608,14 +608,17 @@ async function readChainPage(
   chainId: string,
   afterId: number,
 ): Promise<readonly StoredAuditRow[]> {
-  return db
-    .selectFrom('audit_events')
-    .selectAll()
-    .where('chain_id', '=', chainId)
-    .where('id', '>', afterId)
-    .orderBy('id', 'asc')
-    .limit(VERIFY_PAGE_ROWS)
-    .execute();
+  // Limit each branch before merging. An outer LIMIT alone could materialize the entire retained
+  // chain; one statement also observes an atomic archive move without a duplicate or missing row.
+  const result = await sql<StoredAuditRow>`
+    (SELECT * FROM audit_events WHERE chain_id = ${chainId} AND id > ${afterId}
+      ORDER BY id LIMIT ${VERIFY_PAGE_ROWS})
+    UNION ALL
+    (SELECT * FROM audit_events_archive WHERE chain_id = ${chainId} AND id > ${afterId}
+      ORDER BY id LIMIT ${VERIFY_PAGE_ROWS})
+    ORDER BY id LIMIT ${VERIFY_PAGE_ROWS}
+  `.execute(db);
+  return result.rows;
 }
 
 function verifyRow(

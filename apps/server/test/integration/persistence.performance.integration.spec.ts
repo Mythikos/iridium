@@ -9,6 +9,7 @@ import { LIMITS, NoteId } from '@iridium/contracts';
 import { dominates, getContent, stateVector } from '@iridium/crdt';
 import { describe, expect, it } from 'vitest';
 
+import { selectedMysqlLane } from '../db-mysql-container.ts';
 import { startCollab } from '../support/collab-harness.ts';
 
 const COMMIT_COUNT = 200;
@@ -26,7 +27,7 @@ describe('persistence.performance.integration [hp:HP-1]', () => {
         'SELECT VERSION(), @@GLOBAL.innodb_flush_log_at_trx_commit',
       );
       const version = settings[0]?.[0];
-      expect(version).toMatch(/^(8\.4\.|9\.7\.)/);
+      expect(version).toMatch(selectedMysqlLane().versionPattern);
       expect(settings[0]?.[1]).toBe('1');
       const cast = await harness.server.seed.kernel();
       const noteId = NoteId.parse(cast.note.id);

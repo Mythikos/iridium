@@ -47,6 +47,7 @@ import {
   READYZ_CHECK_NAMES,
   type ReadyzBody,
 } from '../../src/ops/readiness.ts';
+import { selectedMysqlLane } from '../db-mysql-container.ts';
 
 /** ≥ 32 characters and obviously fake, so `/metrics` is both reachable and actually protected. */
 const METRICS_TOKEN = 'readyz-integration-metrics-not-a-secret';
@@ -243,7 +244,9 @@ describe('readyz.integration [area:ops]', () => {
         expect(check.status).toBe('ok');
         expect(check.detail).not.toContain('not registered');
       }
-      expect(checkNamed(body, 'projection_workers').detail).toContain('M1 projection runs inline');
+      expect(checkNamed(body, 'projection_workers').detail).toMatch(
+        /^0 projection tasks admitted; [1-9]\d* worker slots$/,
+      );
     });
     it('reports key_versions as ok once the audit plugin has compared them with schema_meta', () => {
       const keyVersions = checkNamed(body, 'key_versions');
@@ -259,10 +262,12 @@ describe('readyz.integration [area:ops]', () => {
       expect(durability.detail).toContain('innodb_flush_log_at_trx_commit=1');
     });
 
-    it('reports mysql_version as ok on the required image this lane runs', () => {
+    it('reports the selected required engine as ok and an admitted advisory engine as warn', () => {
+      const lane = selectedMysqlLane();
       const version = checkNamed(body, 'mysql_version');
-      expect(version.status).toBe('ok');
-      expect(version.detail).toMatch(/^(8\.4|9\.7)\./);
+      expect(version.status).toBe(lane.required ? 'ok' : 'warn');
+      expect(version.detail).toMatch(lane.versionPattern);
+      expect(version.detail?.includes('IRIDIUM_ALLOW_UNTESTED_MYSQL=true')).toBe(!lane.required);
     });
 
     it('reports mysql_version as a permanent warn for a version outside the supported set', () => {
@@ -297,10 +302,10 @@ describe('readyz.integration [area:ops]', () => {
       expect(checkNamed(body, 'db_persist').status).toBe('ok');
     });
 
-    it('probes the attachment store and names the directory it wrote to', () => {
+    it('probes the configured attachment driver and reports its measured latency', () => {
       const attachments = checkNamed(body, 'attachment_store');
       expect(attachments.status).toBe('ok');
-      expect(attachments.detail).toContain('attachments');
+      expect(attachments.detail).toMatch(/^fs \(\d+ms\)$/);
     });
 
     it('reports clock skew between the database and the process', () => {

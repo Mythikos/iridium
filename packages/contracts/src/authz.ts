@@ -528,7 +528,7 @@ export type RoutePrincipalKind = 'user' | 'token';
  * Every Fastify route declares `config.auth`; a route without one refuses to boot the server
  * (04-auth-and-access-control.md section 6.2; skeleton A30; invariant 2 of
  * 02-system-architecture.md). `apps/server/src/authz/route-policy.ts` reads this type and nothing
- * else, and `M1_ROUTES` carries one of these values per route so the policy, the OpenAPI
+ * else, and `API_ROUTES` carries one of these values per route so the policy, the OpenAPI
  * `x-iridium-auth` extension and the boot assertion all read the same object.
  *
  * `'test-only'` is the `/__test__` namespace, which is registered only when `NODE_ENV=test`
@@ -591,6 +591,7 @@ export type AdminFlagOnlyRoute = (typeof ADMIN_FLAG_ONLY_ROUTES)[number];
  * asserts membership, so archiving actually freezes a vault.
  */
 export const ALLOW_ARCHIVED_ROUTES = [
+  'POST /vaults/:vaultId/archive',
   'POST /vaults/:vaultId/unarchive',
   'GET /vaults/:vaultId/audit',
 ] as const;
@@ -616,6 +617,20 @@ export const CSRF_EXEMPT_ROUTES = [
 
 /** A route the CSRF guard skips. */
 export type CsrfExemptRoute = (typeof CSRF_EXEMPT_ROUTES)[number];
+
+/** Routes and query parameters whose history policy needs its own isolation proof (D10-39). */
+export const HISTORY_GATED_SURFACES = [
+  'revisions.list',
+  'revisions.get',
+  'revisions.create',
+  'revisions.restore',
+  'notes.markdown.revision',
+  'nodes.list.includeTrashed',
+  'trash.list',
+] as const;
+
+/** Adding a history surface requires a case in both authorization matrices. */
+export type HistoryGatedSurface = (typeof HISTORY_GATED_SURFACES)[number];
 
 /** Whether a `RouteAuth` requires the step-up window. `public` routes never do. */
 export function requiresStepUp(auth: RouteAuth): boolean {

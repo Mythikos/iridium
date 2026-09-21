@@ -1,0 +1,432 @@
+[
+  {
+    "example": 21,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;a href=\"/bar\\/)\">"
+  },
+  {
+    "example": 31,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;a href=\"&amp;ouml;&amp;ouml;.html\">"
+  },
+  {
+    "example": 34,
+    "reason": "The sanitizer drops a language class outside its bounded ASCII allowlist (08 section 2.8).",
+    "html": "<pre><code>foo\n</code></pre>"
+  },
+  {
+    "example": 96,
+    "reason": "Leading YAML frontmatter is metadata and is omitted from preview (08 section 2.5).",
+    "html": "<h2>Bar</h2>\n<p>Baz</p>"
+  },
+  {
+    "example": 98,
+    "reason": "Leading YAML frontmatter is metadata and is omitted from preview (08 section 2.5).",
+    "html": ""
+  },
+  {
+    "example": 144,
+    "reason": "The sanitizer drops a language class outside its bounded ASCII allowlist (08 section 2.8).",
+    "html": "<pre><code></code></pre>"
+  },
+  {
+    "example": 148,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;table>&lt;tr>&lt;td>\n&lt;pre>\n**Hello**,\n<p><em>world</em>.\n&lt;/pre></p>\n&lt;/td>&lt;/tr>&lt;/table>"
+  },
+  {
+    "example": 149,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;table>\n  &lt;tr>\n    &lt;td>\n           hi\n    &lt;/td>\n  &lt;/tr>\n&lt;/table>\n<p>okay.</p>"
+  },
+  {
+    "example": 150,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": " &lt;div>\n  *hello*\n         &lt;foo>&lt;a>"
+  },
+  {
+    "example": 151,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;/div>\n*foo*"
+  },
+  {
+    "example": 152,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;DIV CLASS=\"foo\">\n<p><em>Markdown</em></p>\n&lt;/DIV>"
+  },
+  {
+    "example": 153,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div id=\"foo\"\n  class=\"bar\">\n&lt;/div>"
+  },
+  {
+    "example": 154,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div id=\"foo\" class=\"bar\n  baz\">\n&lt;/div>"
+  },
+  {
+    "example": 155,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>\n*foo*\n<p><em>bar</em></p>"
+  },
+  {
+    "example": 156,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div id=\"foo\"\n*hi*"
+  },
+  {
+    "example": 157,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div class\nfoo"
+  },
+  {
+    "example": 158,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div *???-&amp;&amp;&amp;-&lt;---\n*foo*"
+  },
+  {
+    "example": 159,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>&lt;a href=\"bar\">*foo*&lt;/a>&lt;/div>"
+  },
+  {
+    "example": 160,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;table>&lt;tr>&lt;td>\nfoo\n&lt;/td>&lt;/tr>&lt;/table>"
+  },
+  {
+    "example": 161,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>&lt;/div>\n``` c\nint x = 33;\n```"
+  },
+  {
+    "example": 162,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;a href=\"foo\">\n*bar*\n&lt;/a>"
+  },
+  {
+    "example": 163,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;Warning>\n*bar*\n&lt;/Warning>"
+  },
+  {
+    "example": 164,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;i class=\"foo\">\n*bar*\n&lt;/i>"
+  },
+  {
+    "example": 165,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;/ins>\n*bar*"
+  },
+  {
+    "example": 166,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;del>\n*foo*\n&lt;/del>"
+  },
+  {
+    "example": 167,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;del>\n<p><em>foo</em></p>\n&lt;/del>"
+  },
+  {
+    "example": 168,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;del><em>foo</em>&lt;/del></p>"
+  },
+  {
+    "example": 169,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;pre language=\"haskell\">&lt;code>\nimport Text.HTML.TagSoup\n\nmain :: IO ()\nmain = print $ parseTags tags\n&lt;/code>&lt;/pre>\n<p>okay</p>"
+  },
+  {
+    "example": 170,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;script type=\"text/javascript\">\n// JavaScript example\n\ndocument.getElementById(\"demo\").innerHTML = \"Hello JavaScript!\";\n&lt;/script>\n<p>okay</p>"
+  },
+  {
+    "example": 171,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;textarea>\n\n*foo*\n\n_bar_\n\n&lt;/textarea>"
+  },
+  {
+    "example": 172,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;style\n  type=\"text/css\">\nh1 {color:red;}\n\np {color:blue;}\n&lt;/style>\n<p>okay</p>"
+  },
+  {
+    "example": 173,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;style\n  type=\"text/css\">\n\nfoo"
+  },
+  {
+    "example": 174,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<blockquote>\n&lt;div>\nfoo\n</blockquote>\n<p>bar</p>"
+  },
+  {
+    "example": 175,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<ul>\n<li>\n&lt;div>\n</li>\n<li>foo</li>\n</ul>"
+  },
+  {
+    "example": 176,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;style>p{color:red;}&lt;/style>\n<p><em>foo</em></p>"
+  },
+  {
+    "example": 177,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;!-- foo -->*bar*\n<p><em>baz</em></p>"
+  },
+  {
+    "example": 178,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;script>\nfoo\n&lt;/script>1. *bar*"
+  },
+  {
+    "example": 179,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;!-- Foo\n\nbar\n   baz -->\n<p>okay</p>"
+  },
+  {
+    "example": 180,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;?php\n\n  echo '>';\n\n?>\n<p>okay</p>"
+  },
+  {
+    "example": 181,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;!DOCTYPE html>"
+  },
+  {
+    "example": 182,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;![CDATA[\nfunction matchwo(a,b)\n{\n  if (a &lt; b &amp;&amp; a &lt; 0) then {\n    return 1;\n\n  } else {\n\n    return 0;\n  }\n}\n]]>\n<p>okay</p>"
+  },
+  {
+    "example": 183,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "  &lt;!-- foo -->\n<pre><code>&lt;!-- foo -->\n</code></pre>"
+  },
+  {
+    "example": 184,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "  &lt;div>\n<pre><code>&lt;div>\n</code></pre>"
+  },
+  {
+    "example": 185,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>Foo</p>\n&lt;div>\nbar\n&lt;/div>"
+  },
+  {
+    "example": 186,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>\nbar\n&lt;/div>\n*foo*"
+  },
+  {
+    "example": 187,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>Foo\n&lt;a href=\"bar\">\nbaz</p>"
+  },
+  {
+    "example": 188,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>\n<p><em>Emphasized</em> text.</p>\n&lt;/div>"
+  },
+  {
+    "example": 189,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;div>\n*Emphasized* text.\n&lt;/div>"
+  },
+  {
+    "example": 190,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;table>\n&lt;tr>\n&lt;td>\nHi\n&lt;/td>\n&lt;/tr>\n&lt;/table>"
+  },
+  {
+    "example": 191,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "&lt;table>\n  &lt;tr>\n<pre><code>&lt;td>\n  Hi\n&lt;/td>\n</code></pre>\n  &lt;/tr>\n&lt;/table>"
+  },
+  {
+    "example": 201,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>[foo]: &lt;bar>(baz)</p>\n<p>[foo]</p>"
+  },
+  {
+    "example": 308,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<ul>\n<li>foo</li>\n<li>bar</li>\n</ul>\n&lt;!-- -->\n<ul>\n<li>baz</li>\n<li>bim</li>\n</ul>"
+  },
+  {
+    "example": 309,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<ul>\n<li>\n<p>foo</p>\n<p>notcode</p>\n</li>\n<li>\n<p>foo</p>\n</li>\n</ul>\n&lt;!-- -->\n<pre><code>code\n</code></pre>"
+  },
+  {
+    "example": 344,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a href=\"`\">`</p>"
+  },
+  {
+    "example": 475,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>*&lt;img src=\"foo\" title=\"*\"/></p>"
+  },
+  {
+    "example": 476,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>**&lt;a href=\"**\"></p>"
+  },
+  {
+    "example": 477,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>__&lt;a href=\"__\"></p>"
+  },
+  {
+    "example": 491,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>[link](&lt;foo\nbar>)</p>"
+  },
+  {
+    "example": 494,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>[a](&lt;b)c\n[a](&lt;b)c>\n[a](&lt;b>c)</p>"
+  },
+  {
+    "example": 500,
+    "reason": "The sanitizer removes a URL scheme outside http, https and mailto (08 section 2.8).",
+    "html": "<p><a>link</a></p>"
+  },
+  {
+    "example": 524,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>[foo &lt;bar attr=\"](baz)\"></p>"
+  },
+  {
+    "example": 536,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>[foo &lt;bar attr=\"][ref]\"></p>"
+  },
+  {
+    "example": 596,
+    "reason": "The sanitizer removes a URL scheme outside http, https and mailto (08 section 2.8).",
+    "html": "<p><a>irc://foo.bar:2233/baz</a></p>"
+  },
+  {
+    "example": 598,
+    "reason": "The sanitizer removes a URL scheme outside http, https and mailto (08 section 2.8).",
+    "html": "<p><a>a+b+c:d</a></p>"
+  },
+  {
+    "example": 599,
+    "reason": "The sanitizer removes a URL scheme outside http, https and mailto (08 section 2.8).",
+    "html": "<p><a>made-up-scheme://foo,bar</a></p>"
+  },
+  {
+    "example": 601,
+    "reason": "The sanitizer removes a URL scheme outside http, https and mailto (08 section 2.8).",
+    "html": "<p><a>localhost:5001/foo</a></p>"
+  },
+  {
+    "example": 602,
+    "reason": "GFM transform-only URL/email autolinking extends CommonMark (08 section 2.4).",
+    "html": "<p>&lt;<a href=\"https://foo.bar/baz\">https://foo.bar/baz</a> bim></p>"
+  },
+  {
+    "example": 606,
+    "reason": "GFM transform-only URL/email autolinking extends CommonMark (08 section 2.4).",
+    "html": "<p>&lt;<a href=\"mailto:foo+@bar.example.com\">foo+@bar.example.com</a>></p>"
+  },
+  {
+    "example": 608,
+    "reason": "GFM transform-only URL/email autolinking extends CommonMark (08 section 2.4).",
+    "html": "<p>&lt; <a href=\"https://foo.bar\">https://foo.bar</a> ></p>"
+  },
+  {
+    "example": 611,
+    "reason": "GFM transform-only URL/email autolinking extends CommonMark (08 section 2.4).",
+    "html": "<p><a href=\"https://example.com\">https://example.com</a></p>"
+  },
+  {
+    "example": 612,
+    "reason": "GFM transform-only URL/email autolinking extends CommonMark (08 section 2.4).",
+    "html": "<p><a href=\"mailto:foo@bar.example.com\">foo@bar.example.com</a></p>"
+  },
+  {
+    "example": 613,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a>&lt;bab>&lt;c2c></p>"
+  },
+  {
+    "example": 614,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a/>&lt;b2/></p>"
+  },
+  {
+    "example": 615,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a  />&lt;b2\ndata=\"foo\" ></p>"
+  },
+  {
+    "example": 616,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a foo=\"bar\" bam = 'baz &lt;em>\"&lt;/em>'\n_boolean zoop:33=zoop:33 /></p>"
+  },
+  {
+    "example": 617,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>Foo &lt;responsive-image src=\"foo.jpg\" /></p>"
+  },
+  {
+    "example": 623,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;/a>&lt;/foo ></p>"
+  },
+  {
+    "example": 625,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;!-- this is a --\ncomment - with hyphens --></p>"
+  },
+  {
+    "example": 626,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;!--> foo --></p>\n<p>foo &lt;!---> foo --></p>"
+  },
+  {
+    "example": 627,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;?php echo $a; ?></p>"
+  },
+  {
+    "example": 628,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;!ELEMENT br EMPTY></p>"
+  },
+  {
+    "example": 629,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;![CDATA[>&amp;&lt;]]></p>"
+  },
+  {
+    "example": 630,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;a href=\"&amp;ouml;\"></p>"
+  },
+  {
+    "example": 631,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>foo &lt;a href=\"\\*\"></p>"
+  },
+  {
+    "example": 642,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a href=\"foo  \nbar\"></p>"
+  },
+  {
+    "example": 643,
+    "reason": "Raw HTML is escaped as text by the untrusted-content policy (08 section 2.8).",
+    "html": "<p>&lt;a href=\"foo\\\nbar\"></p>"
+  }
+]

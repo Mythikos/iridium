@@ -15,7 +15,7 @@
  * them, and COMMIT when the callback resolves. A callback that throws rolls back. The handle exposes
  * no way to issue an arbitrary statement, which is how the lock set stays what the plan says it is.
  */
-import type { NoteId } from '@iridium/contracts';
+import type { NoteId, VaultId } from '@iridium/contracts';
 
 import type { AuditEventInput } from '../../audit/chain.ts';
 import type {
@@ -41,6 +41,10 @@ export interface WriteTransaction {
   insertUpdates(rows: readonly UpdateInsert[]): Promise<void>;
   /** `UPDATE note_docs SET head_seq = to … WHERE head_seq = from`; whether exactly one row matched. */
   casHead(from: number, to: number, now: Date): Promise<boolean>;
+  /** Restore checkpoints share the update transaction, so a durable restore is always reversible. */
+  insertRevision(row: RevisionInsert): Promise<{ readonly id: number; readonly inserted: boolean }>;
+  /** The restore audit is the final lock in the same transaction as both revision rows. */
+  recordAudit(event: AuditEventInput): Promise<void>;
 }
 
 /** The statements of the compaction transaction (03 §8.6), in the order the compactor issues them. */
@@ -67,6 +71,12 @@ export interface CompactionTransaction {
   recordAudit(event: AuditEventInput): Promise<void>;
 }
 
+/** An explicit retained checkpoint does not publish links or acquire a structural read gate. */
+export type CheckpointTransaction = Pick<
+  CompactionTransaction,
+  'lockHead' | 'insertRevision' | 'recordAudit'
+>;
+
 /** The storage port. */
 export interface PersistenceStore {
   /** The joined `note_docs` / `nodes` / `notes` row, or `null` when the note has no `note_docs` row. */
@@ -85,8 +95,14 @@ export interface PersistenceStore {
   ): Promise<{ readonly id: number; readonly inserted: boolean }>;
   /** One write transaction on `dbPersist`, committed when `work` resolves. */
   runWrite<T>(noteId: NoteId, work: (tx: WriteTransaction) => Promise<T>): Promise<T>;
-  /** One compaction transaction on `dbPersist`, committed when `work` resolves. */
-  runCompaction<T>(noteId: NoteId, work: (tx: CompactionTransaction) => Promise<T>): Promise<T>;
+  /** Publication locks the known vault shared before its source parents and derived rows. */
+  runCompaction<T>(
+    noteId: NoteId,
+    vaultId: VaultId,
+    work: (tx: CompactionTransaction) => Promise<T>,
+  ): Promise<T>;
+  /** Retained revision metadata takes only the per-note locks and final audit head. */
+  runCheckpoint<T>(noteId: NoteId, work: (tx: CheckpointTransaction) => Promise<T>): Promise<T>;
 }
 
 /** A loaded document's store belongs to one owner generation, including its asynchronous load. */

@@ -30,10 +30,19 @@ import { systemClock } from '../ops/clock.ts';
 import { runCreateUser } from './admin.ts';
 import type { CliArgs, FlagSpec } from './args.ts';
 import { cliPrincipal, type CliActor } from './attribution.ts';
-import { runVerifyChain } from './audit.ts';
+import { runAuditExport, runVerifyChain } from './audit.ts';
 import { runConfigCheck } from './config.ts';
+import { contentDoctorChecks, runRepairHeads } from './doctor-content.ts';
 import { DOCTOR_RESERVED_CHECKS, reportChecks, runAllChecks, runRepairContent } from './doctor.ts';
 import { EXIT } from './exit.ts';
+import {
+  runAuditArchive,
+  runJob,
+  runJobsCancel,
+  runJobsList,
+  runReindex,
+  runTrashPurge,
+} from './maintenance.ts';
 import { runMigrate, type MigrateSubcommand } from './migrate.ts';
 import type { CliIo } from './output.ts';
 import { runServe } from './serve.ts';
@@ -158,7 +167,7 @@ function migrateSubcommand(name: MigrateSubcommand, usage: string, summary: stri
     usage,
     summary,
     // `status` reads; `up` and `to` write, so they carry `--actor` like every other mutation.
-    flags: mutates ? ACTOR_FLAG : {},
+    flags: mutates ? { ...ACTOR_FLAG, 'allow-long-running': 'switch' } : JSON_FLAG,
     positional: name === 'to' ? '<name>' : null,
     mutations: mutates ? ['system.migration.applied'] : [],
     needsConfig: true,
@@ -216,6 +225,10 @@ const DOCTOR: CliSubcommand = {
     argon2: 'switch',
     'yjs-instances': 'switch',
     'repair-content': 'value',
+    heads: 'switch',
+    'stale-projections': 'switch',
+    'repair-heads': 'switch',
+    note: 'value',
     'dry-run': 'switch',
     yes: 'switch',
     ...doctorReservedFlags(),
@@ -227,7 +240,14 @@ const DOCTOR: CliSubcommand = {
   // without `--yes` is refused by 11's "Repair" rule, and booting an application to answer that
   // would open two connection pools to say no.
   needsApp: (args) =>
-    args.value('repair-content') !== undefined && (args.has('yes') || args.has('dry-run')),
+    reservedDoctorCheck(args) === undefined &&
+    (args.has('heads') ||
+      args.has('stale-projections') ||
+      args.has('repair-heads') ||
+      (!args.has('argon2') &&
+        !args.has('yjs-instances') &&
+        args.value('repair-content') === undefined) ||
+      (args.value('repair-content') !== undefined && (args.has('yes') || args.has('dry-run')))),
   run: async (input) => {
     const reserved = reservedDoctorCheck(input.args);
     if (reserved !== undefined) {
@@ -239,6 +259,26 @@ const DOCTOR: CliSubcommand = {
       return EXIT.refused;
     }
 
+    if (input.args.has('repair-heads'))
+      return runRepairHeads({
+        app: requireApp(input),
+        io: input.io,
+        noteId: input.args.value('note'),
+        confirmed: input.args.has('yes'),
+        dryRun: input.args.has('dry-run'),
+        json: input.args.has('json'),
+        actor: input.actor,
+        context: input.auditContext,
+      });
+    if (input.args.has('heads') || input.args.has('stale-projections')) {
+      const noteId = input.args.value('note');
+      const checks = await contentDoctorChecks(requireApp(input), {
+        heads: input.args.has('heads'),
+        staleProjections: input.args.has('stale-projections'),
+        ...(noteId === undefined ? {} : { noteId }),
+      });
+      return reportChecks(input.io, checks, input.args.has('json'));
+    }
     const note = input.args.value('repair-content');
     if (note !== undefined) {
       return runRepairContent({
@@ -254,7 +294,16 @@ const DOCTOR: CliSubcommand = {
 
     const wantsArgon2 = input.args.has('argon2');
     const wantsYjs = input.args.has('yjs-instances');
-    const all = await runAllChecks(requireLoaded(input).config, systemClock);
+    const selectedNote = input.args.value('note');
+    const all = [
+      ...(await runAllChecks(requireLoaded(input).config, systemClock)),
+      ...(input.app === null
+        ? []
+        : await contentDoctorChecks(
+            input.app,
+            selectedNote === undefined ? {} : { noteId: selectedNote },
+          )),
+    ];
     const selected =
       wantsArgon2 || wantsYjs
         ? all.filter(
@@ -355,6 +404,106 @@ const TOKENS_REVOKE_ALL: CliSubcommand = {
     }),
 };
 
+const REINDEX: CliSubcommand = {
+  name: null,
+  usage: 'reindex [--vault <id>] [--stale] [--pipeline-version] [--note <id>]',
+  summary: 'Rebuild projections through the durable maintenance queue.',
+  flags: {
+    ...ACTOR_FLAG,
+    ...JSON_FLAG,
+    vault: 'value',
+    note: 'value',
+    stale: 'switch',
+    'pipeline-version': 'switch',
+  },
+  positional: null,
+  mutations: ['admin.job.triggered'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runReindex,
+};
+const JOBS_LIST: CliSubcommand = {
+  name: 'list',
+  usage: 'jobs list [--status <s>] [--type <t>] [--json]',
+  summary: 'List durable jobs, progress and results.',
+  flags: { ...JSON_FLAG, status: 'value', type: 'value', cursor: 'value', limit: 'value' },
+  positional: null,
+  mutations: [],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runJobsList,
+};
+const JOBS_RUN: CliSubcommand = {
+  name: 'run',
+  usage: 'jobs run <type> [--vault <id>] [--dry-run]',
+  summary: 'Queue maintenance and wait for its committed outcome.',
+  flags: { ...ACTOR_FLAG, ...JSON_FLAG, vault: 'value', 'dry-run': 'switch' },
+  positional: '<type>',
+  mutations: ['admin.job.triggered'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runJob,
+};
+const JOBS_CANCEL: CliSubcommand = {
+  name: 'cancel',
+  usage: 'jobs cancel --id <jobId>',
+  summary: 'Cancel queued work or stop a running job at its next checkpoint.',
+  flags: { ...ACTOR_FLAG, ...JSON_FLAG, id: 'value' },
+  positional: null,
+  mutations: ['admin.job.cancelled'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runJobsCancel,
+};
+const TRASH_PURGE: CliSubcommand = {
+  name: 'purge',
+  usage: 'trash purge --vault <id> [--older-than-days N] [--dry-run]',
+  summary: 'Purge expired trash for one vault; dry-run reports eligible roots.',
+  flags: {
+    ...ACTOR_FLAG,
+    ...JSON_FLAG,
+    vault: 'value',
+    'older-than-days': 'value',
+    'dry-run': 'switch',
+  },
+  positional: null,
+  mutations: ['admin.job.triggered'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runTrashPurge,
+};
+const AUDIT_ARCHIVE: CliSubcommand = {
+  name: 'archive',
+  usage: 'audit archive [--older-than-days N] [--dry-run]',
+  summary: 'Verify, export and archive retained audit prefixes.',
+  flags: { ...ACTOR_FLAG, ...JSON_FLAG, 'older-than-days': 'value', 'dry-run': 'switch' },
+  positional: null,
+  mutations: ['admin.job.triggered'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runAuditArchive,
+};
+const AUDIT_EXPORT: CliSubcommand = {
+  name: 'export',
+  usage: 'audit export --format jsonl|csv [--include-archive] [--out <file>]',
+  summary: 'Stream audit rows and chain hashes in bounded pages.',
+  flags: {
+    ...ACTOR_FLAG,
+    format: 'value',
+    vault: 'value',
+    from: 'value',
+    to: 'value',
+    action: 'value',
+    'include-archive': 'switch',
+    out: 'value',
+  },
+  positional: null,
+  mutations: ['admin.audit.exported'],
+  needsConfig: true,
+  needsApp: () => true,
+  run: runAuditExport,
+};
+
 /** Every command this build answers, in the order `--help` lists them. */
 export const CLI_COMMANDS: readonly CliCommand[] = Object.freeze([
   { name: 'serve', subcommands: [SERVE], defaultSubcommand: null, reserved: [] },
@@ -363,17 +512,17 @@ export const CLI_COMMANDS: readonly CliCommand[] = Object.freeze([
     subcommands: [
       migrateSubcommand(
         'status',
-        'migrate status',
+        'migrate status [--json]',
         'Print applied, pending and unknown-newer migrations.',
       ),
       migrateSubcommand(
         'up',
-        'migrate up',
+        'migrate up [--allow-long-running]',
         "Apply every pending migration under GET_LOCK('iridium_migrate', 60).",
       ),
       migrateSubcommand(
         'to',
-        'migrate to <name>',
+        'migrate to <name> [--allow-long-running]',
         'Migrate to a named migration; a target behind the current head is\n' +
           '                            refused with exit 3 when NODE_ENV=production.',
       ),
@@ -409,9 +558,9 @@ export const CLI_COMMANDS: readonly CliCommand[] = Object.freeze([
   },
   {
     name: 'audit',
-    subcommands: [AUDIT_VERIFY_CHAIN],
+    subcommands: [AUDIT_VERIFY_CHAIN, AUDIT_ARCHIVE, AUDIT_EXPORT],
     defaultSubcommand: null,
-    reserved: ['export', 'archive', 'chain-status'],
+    reserved: ['chain-status'],
   },
   {
     name: 'sessions',
@@ -425,6 +574,14 @@ export const CLI_COMMANDS: readonly CliCommand[] = Object.freeze([
     defaultSubcommand: null,
     reserved: ['list', 'revoke'],
   },
+  { name: 'reindex', subcommands: [REINDEX], defaultSubcommand: null, reserved: [] },
+  {
+    name: 'jobs',
+    subcommands: [JOBS_LIST, JOBS_RUN, JOBS_CANCEL],
+    defaultSubcommand: null,
+    reserved: [],
+  },
+  { name: 'trash', subcommands: [TRASH_PURGE], defaultSubcommand: null, reserved: [] },
 ]);
 
 /**
@@ -434,10 +591,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = Object.freeze([
 export const RESERVED_COMMANDS: readonly string[] = Object.freeze([
   'backup',
   'restore',
-  'reindex',
   'keys',
-  'jobs',
-  'trash',
   'desktop-updates',
   'mirror',
 ]);
@@ -450,7 +604,11 @@ export const USAGE: string = `iridium <command> [args]
 
 Commands available in this build:
 ${CLI_COMMANDS.flatMap((command) => command.subcommands)
-  .map((subcommand) => `  ${subcommand.usage.padEnd(SUMMARY_COLUMN)}${subcommand.summary}`)
+  .map((subcommand) =>
+    subcommand.usage.length >= SUMMARY_COLUMN
+      ? `  ${subcommand.usage}\n${' '.repeat(SUMMARY_COLUMN + 2)}${subcommand.summary}`
+      : `  ${subcommand.usage.padEnd(SUMMARY_COLUMN)}${subcommand.summary}`,
+  )
   .join('\n')}
 
 Reserved for later milestones (each exits 3 with not_implemented):

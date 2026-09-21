@@ -28,6 +28,7 @@ import {
 
 import { HeadSeqCasViolation } from '../../db/cas.ts';
 import { contentHash } from '../../projection/hash.ts';
+import type { PrepareProjection } from '../../projection/prepare.ts';
 import { NoteDocMissing } from './errors.ts';
 import type { PersistenceStore } from './store.ts';
 import type {
@@ -80,6 +81,10 @@ export interface CompactionFaults {
 
 /** What `runCompaction` needs beside the store. */
 export interface RunCompactionOptions {
+  /** A loaded writer rechecks its local lifetime after any wait for the publication/head locks. */
+  readonly assertActive?: () => void;
+  /** The CPU adapter runs before lock acquisition; storage-only model tests omit it. */
+  readonly prepareProjection?: PrepareProjection;
   readonly noteId: NoteId;
   readonly vaultId: VaultId;
   readonly captured: Captured;
@@ -126,9 +131,14 @@ export async function runCompaction(
   const { noteId, captured, trigger, now, faults } = options;
   const snapshotBytes = captured.stateV2.byteLength;
 
-  return store.runCompaction(noteId, async (tx) => {
+  const prepared = captured.scan.ok
+    ? await options.prepareProjection?.(captured.markdown)
+    : undefined;
+
+  return store.runCompaction(noteId, options.vaultId, async (tx) => {
     // Step 0: the trashed guard, under the same lock the writer takes.
     const head = await tx.lockHead();
+    options.assertActive?.();
     if (head === null) throw new NoteDocMissing(noteId);
     if (head.deletedAt !== null) {
       return {
@@ -173,6 +183,7 @@ export async function runCompaction(
     const scanOk = captured.scan.ok;
     if (scanOk) {
       await tx.writeProjection({
+        ...(prepared === undefined ? {} : { prepared }),
         revision: captured.throughSeq,
         markdown: captured.markdown,
         contentHash: captured.contentHash,

@@ -1,0 +1,4 @@
+- [ ] open
+- [x] done
+- [X] also done
+- [/] partial

@@ -1,5 +1,5 @@
 /** Archived vaults freeze every currently mounted mutation, including administrator writes. */
-import { M1_ROUTES } from '@iridium/contracts';
+import { API_ROUTES } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { idBytes } from '../../src/auth/ids.ts';
@@ -18,7 +18,7 @@ describe('authz.archived-vault.integration [area:authz]', () => {
       const app = harness.application();
       const db = app.database.dbApp;
       if (db === null) throw new Error('Archived-vault proof requires a real database.');
-      const mountedWrites = M1_ROUTES.filter(
+      const mountedWrites = API_ROUTES.filter(
         (route) =>
           typeof route.auth === 'object' &&
           'vaultFrom' in route.auth &&

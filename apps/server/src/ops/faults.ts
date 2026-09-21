@@ -68,6 +68,19 @@ export interface FaultPointDescriptor {
  */
 export const FAULT_POINTS: readonly FaultPointDescriptor[] = Object.freeze([
   {
+    point: 'tree.hold-after-commit-before-notify',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn:
+      'hold a committed trash before note closure and tree notifications until explicit disarm',
+  },
+  {
+    point: 'tree.crash-after-commit-before-notify',
+    argument: 'none',
+    lifetime: 'one-shot',
+    firesIn: 'after the trash transaction COMMIT, before note closure and tree notifications',
+  },
+  {
     point: 'store.throw',
     argument: 'none',
     lifetime: 'counted',

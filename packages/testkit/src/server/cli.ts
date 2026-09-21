@@ -99,7 +99,8 @@ export async function migrateSchema(options: MigrateOptions): Promise<void> {
     ...(options.extraEnv === undefined ? {} : { extraEnv: options.extraEnv }),
     publicOrigin: options.publicOrigin ?? 'http://127.0.0.1:4000',
   });
-  const result = await runIridiumCli(['migrate', 'up'], {
+  // Disposable schemas explicitly authorize rebuilds through the same flag an operator uses.
+  const result = await runIridiumCli(['migrate', 'up', '--allow-long-running'], {
     env,
     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
   });

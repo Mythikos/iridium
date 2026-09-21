@@ -366,7 +366,7 @@ sequenceDiagram
   K->>K: Y.applyUpdate into the document, relay to other connections
   K-->>N: SyncStatus(true) (in memory only, never shown as Saved)
   K->>W: update listener: svAfter = Y.encodeStateVector(doc) and dsAfter = deleteSetFingerprint(doc) captured synchronously, enqueue {update, svAfter, dsAfter, actor {userId, sessionId}, origin}
-  W->>D: BEGIN. SELECT d.head_seq, n.deleted_at FROM note_docs d JOIN nodes n ON n.id = d.note_id WHERE d.note_id = ? FOR UPDATE
+  W->>D: BEGIN. SELECT deleted_at FROM nodes WHERE id = ? FOR SHARE; SELECT node_id FROM notes WHERE node_id = ? FOR UPDATE; SELECT head_seq FROM note_docs WHERE note_id = ? FOR UPDATE
   W->>W: coalesce consecutive same-actor updates with Y.mergeUpdates (<= 1 MiB per row)
   W->>D: INSERT note_updates (seq = head+1..head+N, update_v1, sv_after, actor, origin)
   W->>D: UPDATE note_docs SET head_seq = head+N, updated_at = ? WHERE note_id = ? AND head_seq = head (numUpdatedRows === 1n else corruption alarm)
@@ -378,7 +378,7 @@ sequenceDiagram
   Note over W,D: later, after debounce 2000 / maxDebounce 10000 ms: onStoreDocument awaits the compaction job in the same FIFO -> snapshot V2, projection, checkpoint policy -> broadcast {t:'projected', seq}
 ```
 
-Failure branches (`persist-failed` with `reason` and `retryInMs`, backpressure at 5 000 updates or 32 MiB, `failed` after 10 attempts/30 s, the `save-failed` client rule, `flush {}` for an immediate projection) are specified in 05-collaboration-and-durability.md. Architecturally the important points are: the acknowledgement is emitted only after COMMIT on `dbPersist`; the only lock the writer ever takes is the `note_docs` row (it never participates in structural transactions, skeleton A46); and the baseline reply on every `synced` closes the "opened without editing" and "crash after COMMIT before ack" gaps.
+Failure branches (`persist-failed` with `reason` and `retryInMs`, backpressure at 5 000 updates or 32 MiB, `failed` after 10 attempts/30 s, the `save-failed` client rule, `flush {}` for an immediate projection) are specified in 05-collaboration-and-durability.md. Architecturally the important points are: the acknowledgement is emitted only after COMMIT on `dbPersist`; the writer takes parent locks before `note_docs`, without entering the structural vault mutex (A46); and the baseline reply on every `synced` closes the "opened without editing" and "crash after COMMIT before ack" gaps.
 
 ### Agent read through MCP
 
@@ -463,7 +463,7 @@ sequenceDiagram
   R-->>U: 200 node with new ETag
 ```
 
-Trash follows the same shape with two extras: the transaction never locks `note_docs` (the writer's `deleted_at` check under its own lock plus `markClosing` handle the race), and after COMMIT `CollabGateway.closeNote()` sends `{t:'closing', reason:'note-trashed', graceMs}` and closes the connections; `onAuthenticate` and `onLoadDocument` refuse trashed notes so a stale client cannot resurrect one (skeleton A46, acceptance "Structural concurrency").
+Trash fences affected writers, captures a durable `trash` checkpoint inside the structural transaction in parent-before-document order, and marks nodes deleted. After COMMIT `CollabGateway.closeNote()` sends the closing frame and closes connections. The writer, authentication and load paths all refuse trashed notes; boot closes any document left loaded by a crash between COMMIT and the side effect (A46).
 
 ### Import job
 
@@ -519,6 +519,8 @@ Scope `@iridium/*`, every package private, pnpm 12.4.1 workspaces (`apps/*`, `pa
 Two entries the catalog deliberately does **not** carry, both recorded here because their absence is load-bearing rather than accidental. `electron-updater` is not a 1.0 dependency: the 1.0 desktop build has no in-application updater (§G-8), and an unused dependency fails `knip --production` in `ci.yml › static`; the post-1.0 desktop distribution epic re-adds it at 6.8.9, the companion of electron-builder 26.16.1 (07-client-applications.md D07-43). No OAuth or JOSE library is added either — not `jose`, not `openid-client` — because Iridium's authorization server issues **opaque** credentials hashed with `node:crypto` and never a JWT, so there is no signature to produce, no key to distribute and no `jwks_uri` to serve (§G-1; 06-mcp-and-agent-access.md D06-28). The authorization server's only third-party dependencies are the ones the server already has, plus the zod metadata schemas exported by `@modelcontextprotocol/core` 2.0.0, which `oauth.metadata.contract` validates the served documents against so a hand-written field list cannot drift from the specification.
 
 Language rules for every package: ESM-only (`"type": "module"`), explicit `.ts`/`.tsx` import extensions, `erasableSyntaxOnly`, `verbatimModuleSyntax`, `isolatedDeclarations`, `target es2024`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`. **Compiled** packages build with `tsc -b` (declaration + declarationMap, `dist/` with `.tsbuildinfo` inside `dist/`) and export `./dist/*`; **JIT** packages export `./src/*` and are compiled by the consuming Vite build so React Fast Refresh works across package boundaries. The root `tsconfig.json` is a solution file (`files: []`, `references` to every package) for `tsc -b --builders 8`.
+
+**Compiler API exceptions (A2, amended 2026-09-20).** Exactly three isolated leaf manifests declare `"typescript": "npm:@typescript/typescript6@6.0.2"`: `tooling/mutation` for Stryker's checker, `tooling/api-codegen` for the OpenAPI type printer, and `spikes/s11-markdown` for the AST-based generator of the pinned `markdown-it` packaging patch. The S11 script uses `createSourceFile`, `factory`, transformations and `createPrinter` to split upstream capabilities without copying or rewriting grammar algorithms. The alias is never a workspace catalog or override entry, no product imports these leaves, and all product compilation and type checks stay on TypeScript 7. `guards.mutation-lane.guard` checks the exact three paths and rejects an unreviewed spike as well as a product package. The S11 exception is removed with the packaging patch when an equivalent upstream token entry satisfies the semantic and bundle gates.
 
 ### Layout
 
@@ -665,7 +667,7 @@ collab/
   vault-channel.ts           vault:<id> never-persisted documents
   persistence/               writer.ts (NoteWriter FIFO, CAS, coalescing, backpressure, retry, baseline), loader.ts, compactor.ts (snapshot + projection + checkpoints + content-invalid scan), initial-state.ts (thin wrapper over @iridium/crdt)
   limits.ts                  maxPayload, single-update cap, msgs/s, awareness cap, connection caps, admission budget
-projection/                  piscina pool running @iridium/markdown project(); note_projections/note_search/note_links writers with revision guards; reindex
+projection/                  piscina pool running @iridium/markdown project(); note_projections/note_projection_terms/note_search/note_links writers with revision guards; reindex
 search/                      SearchIndex interface; MysqlFulltextSearch; boolean query builder; snippet locator
 attachments/                 service, StorageDriver (fs, s3), MIME policy, serving headers, unreferenced report
 transfer/                    import (upload/scan/report/commit/abort), export (zip stream, manifest, EOL restore), mirror
@@ -955,6 +957,7 @@ There is deliberately **no `OAUTH_ISSUER` and no `OAUTH_RESOURCE`**: the issuer 
 | `UPDATE_LOG_RETENTION_DAYS` | int | `7` | `jobs/update_log_prune` |
 | `PROJECTION_WORKERS` | int ≥ 1 | `max(1, cpus - 1)` | `projectionPool` size |
 | `PROJECTION_TIMEOUT_MS` | int | `10000` | Per-task hard timeout, worker terminated and respawned |
+| `REINDEX_RATE_PER_SECOND` | int ≥ 1 | `20` | Shared maintenance/CLI projection rebuild admission rate |
 | `TRANSFER_WORKERS` | int ≥ 1 | `1` | `transferPool` size (decision ARCH-05) |
 
 #### Storage, transfer and retention
@@ -1085,6 +1088,71 @@ The exhaustive `satisfies Record<LimitId, Enforcement>` in `apps/server/src/limi
 | Shutdown drain | 20 s | `SHUTDOWN_DRAIN_MS` | `ops/shutdown.ts` | Clients see `{t:'closing', reason:'shutdown'}` then reconnect | `SHUTDOWN_DRAIN_MS` |
 
 Rules that keep this the *single* policy:
+
+Additional M2 bounds below name the existing Markdown and attachment caps from section 08,
+the worker resource policy, and the maximum valid structural notification. They are enforced
+at M2 and participate in the same exhaustive limits register.
+
+| Item | Value | Constant in `limits.ts` | Enforced where (module) | Client behaviour | Env override |
+|---|---|---|---|---|---|
+| reject excessive YAML alias expansion | 100 | `YAML_MAX_ALIAS_COUNT` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| reject oversized link targets | 2048 | `LINK_TARGET_MAX_CHARS` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound maintenance job inputs | 200 | `JOB_LIST_MAX` | `packages/contracts/src/rest/jobs.ts` | Validated before job admission | no |
+| bound maintenance job inputs | 50 | `JOB_LIST_DEFAULT` | `packages/contracts/src/rest/jobs.ts` | Validated before job admission | no |
+| bound maintenance job inputs | 200 | `JOB_REINDEX_NOTE_MAX` | `packages/contracts/src/rest/jobs.ts` | Validated before job admission | no |
+| projection rebuild admission | 20 notes/s | `REINDEX_RATE_PER_SECOND` | `apps/server/src/config/env.ts` and `apps/server/src/projection/reindex.ts` | Throttle worker admission | `REINDEX_RATE_PER_SECOND` |
+| maintenance lifetime and batch policy | 900000 | `JOB_LOCK_TIMEOUT_MS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 30000 | `JOB_HEARTBEAT_MS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 5 | `JOB_MAX_ATTEMPTS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 1000 | `JOB_PROGRESS_INTERVAL_MS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 1000 | `JOB_POLL_INTERVAL_MS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 100 | `JOB_BATCH_SIZE` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 1000 | `JOB_ARCHIVE_BATCH_SIZE` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 30 | `JOB_RETENTION_DAYS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 30 | `SESSION_ROW_RETENTION_DAYS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 3600000 | `ATTACHMENT_TEMP_RETENTION_MS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 24 | `REVISION_KEEP_ALL_HOURS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| maintenance lifetime and batch policy | 30 | `REVISION_HOURLY_DAYS` | `apps/server/src/jobs` | Bounded job processing and retained history | no |
+| bound search input | 512 | `SEARCH_QUERY_MAX_CHARS` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| bound search pages | 100 | `SEARCH_LIMIT_MAX` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| default search page | 20 | `SEARCH_LIMIT_DEFAULT` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| bound explicit search vaults | 50 | `SEARCH_VAULTS_MAX` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| minimum requested snippet length | 80 | `SNIPPET_CHARS_MIN` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| maximum requested snippet length | 1000 | `SNIPPET_CHARS_MAX` | `packages/contracts/src/rest/search.ts` | Enforced by shared query schema or bounded cache | no |
+| bound mapped snippet cache | 500 | `SNIPPET_CACHE_MAX` | `apps/server/src/search` | Enforced by shared query schema or bounded cache | no |
+| expire mapped snippets | 120000 | `SNIPPET_CACHE_TTL_MS` | `apps/server/src/search` | Enforced by shared query schema or bounded cache | no |
+| bound revision pages | 200 | `REVISION_LIST_MAX` | `packages/contracts/src/rest/revisions.ts` | Enforced by shared query schema or bounded cache | no |
+| default revision page | 50 | `REVISION_LIST_DEFAULT` | `packages/contracts/src/rest/revisions.ts` | Enforced by shared query schema or bounded cache | no |
+| bound checkpoint labels | 200 | `REVISION_LABEL_MAX` | `packages/contracts/src/rest/revisions.ts` | Enforced by shared query schema or bounded cache | no |
+| bound persisted link fragments | 255 | `LINK_FRAGMENT_MAX_CHARS` | `packages/markdown/src` | `broken` link on overflow | no |
+| bound links extracted from one note | 10000 | `MARKDOWN_LINKS_MAX` | `packages/markdown/src` | `too_complex` projection on overflow | no |
+| bound ambiguous link suggestions | 5 | `LINK_CANDIDATES_MAX` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound code language metadata | 32 | `CODE_LANGUAGE_MAX_CHARS` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound distinct code languages | 50 | `CODE_LANGUAGES_MAX` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound finding source excerpts | 120 | `OBSIDIAN_FINDING_MAX_CHARS` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound per-code finding samples | 200 | `OBSIDIAN_FINDINGS_PER_CODE_MAX` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound total finding samples | 1000 | `OBSIDIAN_FINDINGS_MAX` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| bound detector summaries | 20 | `OBSIDIAN_SAMPLE_MAX` | `apps/server/src/projection/derived.ts` | Bounded processing or documented refusal | no |
+| truncate complete heading graphemes | 255 | `HEADING_TITLE_MAX_CODEPOINTS` | `packages/markdown/src` | Bounded processing or documented refusal | no |
+| refuse excess queued projections | 1000 | `PROJECTION_QUEUE_MAX` | `apps/server/src/projection/pool.ts` | Bounded processing or documented refusal | no |
+| bound worker heap | 512 | `PROJECTION_WORKER_HEAP_MB` | `apps/server/src/projection/pool.ts` | Bounded processing or documented refusal | no |
+| bound worker stack | 8 | `PROJECTION_WORKER_STACK_MB` | `apps/server/src/projection/pool.ts` | Bounded processing or documented refusal | no |
+| release idle workers | 60000 | `PROJECTION_WORKER_IDLE_MS` | `apps/server/src/projection/pool.ts` | Bounded processing or documented refusal | no |
+| bound MIME signature prefix | 4100 | `ATTACHMENT_SNIFF_BYTES` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| refuse oversized filenames | 255 | `ATTACHMENT_NAME_MAX_BYTES` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound stored attachment paths | 760 | `ATTACHMENT_PATH_MAX_CHARS` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound collision suffix attempts | 50 | `ATTACHMENT_NAME_COLLISION_ATTEMPTS` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound simultaneous uploads | 8 | `ATTACHMENT_UPLOAD_CONCURRENCY` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| refuse excess uploads | 60 | `ATTACHMENT_UPLOADS_PER_MINUTE` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| switch to bounded S3 multipart streaming | 8388608 | `ATTACHMENT_MULTIPART_THRESHOLD_BYTES` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound reference report examples | 50 | `ATTACHMENT_REFERENCE_SAMPLE_MAX` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound referenced-delete response | 20 | `ATTACHMENT_DELETE_REFERENCE_SAMPLE_MAX` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound retained-reference scan batches | 100 | `ATTACHMENT_SCAN_BATCH` | `apps/server/src/attachments` | Bounded processing or documented refusal | no |
+| bound attachment pages | 200 | `ATTACHMENT_LIST_MAX` | `packages/contracts/src/rest/attachments.ts` | Bounded processing or documented refusal | no |
+| default attachment page size | 100 | `ATTACHMENT_LIST_DEFAULT` | `packages/contracts/src/rest/attachments.ts` | Bounded processing or documented refusal | no |
+| bound maximum-depth paths including Markdown suffix | 16387 | `NODE_PATH_MAX_CHARS` | `packages/contracts/src/collab.ts` | Bounded processing or documented refusal | no |
+| bound changes per vault frame | 500 | `TREE_CHANGES_MAX` | `packages/contracts/src/collab.ts` | Bounded processing or documented refusal | no |
+
 
 - No module defines a numeric limit of its own; the guard test `limits.single-source` greps `apps/server/src`, `packages/collab-client`, `packages/editor` and `packages/ui` for numeric literals adjacent to the words `limit`, `max`, `cap` outside `limits.ts` and fails on new occurrences (an allowlist file records the few legitimate ones such as CodeMirror viewport sizes).
 - The `collab.limits` integration test drives every WebSocket limit to its boundary and asserts the exact close reason; `security.rate-limits` does the same for the REST buckets; `mcp.rate-limit` for the token buckets; `attachments.security` for uploads; `markdown.pathological` for the projection caps.
@@ -1335,29 +1403,11 @@ Iridium has exactly two kinds of mutation: **structural** changes to metadata (v
 
 ### Lock order
 
-A deadlock is possible only when two transactions take the same locks in different orders, so the order is fixed globally and stated here once (A46):
+**Lock order is normative**, declared in `02-system-architecture.md` section "Lock order": owner-generation fence → `vaults` (exclusive for structural changes, shared for projection publication) → `nodes` → `notes` → `note_docs` → `note_updates` → `note_projections` → `note_projection_terms` → `note_search` → `note_links` → `note_revisions` → `trash_entries` → `audit_chain_heads`. All serving writes first hold the captured owner-generation fence. Publication takes the known immutable vault id through `lockProjectionVault()` immediately afterward, before any consistent snapshot read or source-note lock, and holds that shared gate through COMMIT. This serializes target lookup with rename, trash and purge while allowing concurrent publishers. Raw update appends and explicit revision checkpoints omit the vault gate. Every note persistence path then locks the source `nodes` row `FOR SHARE`, parent `notes` row `FOR UPDATE`, and `note_docs` row `FOR UPDATE` through `lockNoteParents()`, in that order. Explicit parent locks account for foreign-key locks; joined SQL is not a lock-order guarantee. Audit heads remain last.
 
-```
-1. vaults            (FOR UPDATE, via withVaultLock)
-2. nodes             (FOR UPDATE, the specific rows a structural change touches)
-3. note_docs         (FOR UPDATE, persistence writer only)
-4. audit_chain_heads (FOR UPDATE, always the last lock of any transaction)
-```
+Trash fences affected writers, locks subtree node, note and document rows through sorted unique-key point reads under `withVaultLock()` (a small-table `IN (...) FOR UPDATE` scan can lock unrelated keys), and captures a protected durable `trash` revision before marking nodes deleted. It may therefore lock a live note's `note_docs`. Purge validates the trashed subtree and starts synchronous local writer fencing while holding a short vault lock, waits for disposal after releasing it, then reacquires the vault lock and repeats all authorization, CAS and tombstone checks before deleting in FK-safe order. No wait for a publisher holding vault-S occurs under vault-X. Queued writers recheck their local lifetime after acquiring the locked head, so a concurrent restore cannot revive a pre-fence queue. Closing marks are owned and balanced. Authentication/load recheck durable tombstones, and post-COMMIT session closure plus startup reconciliation repair missed notifications. `withVaultLock()` refuses a pre-existing child transaction. `tree.purge-fence.integration`, `projection.target-lifecycle.integration` and `lock-order.integration` prove the critical interleavings against MySQL.
 
-The persistence writer is deliberately outside this chain, and the reason is worth spelling out because it is the one place where the two mutation kinds meet:
-
-```mermaid
-flowchart LR
-  subgraph ST["Structural transaction (dbApp) — for example trash a note"]
-    S1["1. vaults FOR UPDATE"] --> S2["2. nodes FOR UPDATE<br/>set deleted_at"] --> S3["4. audit_chain_heads FOR UPDATE<br/>append node.trashed"] --> S4["COMMIT<br/>then effects: closeNote()"]
-  end
-  subgraph WT["Writer transaction (dbPersist) — append a batch"]
-    W1["3. note_docs JOIN nodes FOR UPDATE<br/>read head_seq and deleted_at"] --> W2["INSERT note_updates<br/>UPDATE note_docs head_seq CAS"] --> W3["COMMIT<br/>then broadcast persisted"]
-  end
-  S2 -.->|"writer waits here<br/>nodes row held by the structural tx"| W1
-```
-
-The writer's guard statement joins `note_docs` to `nodes`, so it acquires a row lock on the note's `nodes` row as well as on `note_docs`. The structural transaction holds that `nodes` row, so a writer batch that races a trash operation simply waits and then observes `deleted_at IS NOT NULL`, drops the batch and closes the document with `note-trashed`. There is no cycle because **the structural transaction never locks `note_docs`**: it has nothing to wait for. That asymmetry, plus `markClosing` before COMMIT and the refusal of trashed notes in `onAuthenticate`/`onLoadDocument`, is what makes "stale clients cannot resurrect trashed notes" true even if the process dies between COMMIT and the gateway effect (a boot-time sweep closes any loaded trashed document).
+The non-audit derived writes commit in projection, term memberships, search, then link order; `projected_seq` is updated last. CPU projection work runs before the transaction, and only broadcasts run after COMMIT. Existing row locks remain held until COMMIT even when a later statement updates an already-locked parent.
 
 ### What runs where
 
@@ -1449,7 +1499,7 @@ Every row below is a choice the consolidated decision set does not make explicit
 | ARCH-21 | Repo-wide TypeScript strictness adds `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess` to the skeleton's `erasableSyntaxOnly`, `verbatimModuleSyntax`, `isolatedDeclarations`, `target es2024` | Both flags catch real defects in zod-inferred DTOs and cursor/array handling; at M0 there is no existing code to adapt, whereas turning them on later is a repo-wide migration |
 | ARCH-22 | CLI exit codes are the single seven-code contract of OPS-16 (11-operations-and-deployment.md), restated here because this section's boot and drain paths use it: `0` success or a verified no-op, `1` unexpected internal error (also the shutdown-drain timeout, logged as `persist.drain_timeout`), `2` configuration or usage error including an `EnvSchema` parse failure, an unknown `IRIDIUM_*` key and a missing role URL, `3` refused precondition (migration lock held, `migrate down` in production, `keys rotate` onto an existing file, missing `--yes` in a non-TTY, `not_implemented`), `4` pre-flight integrity failure (backup dump hash mismatch, a key version missing from the bundle, a non-clean restore target), `5` verification failure (`restore --verify` invariant broken, `audit verify-chain` chain broken), `6` diagnostic findings (`doctor` found problems it reports correctly); `--json` prints a `ProblemDetails`-shaped object on failure. OPS-16 owns the table; this row is the same contract and no other section may define a second one | The wrapper scripts `infra/backup/{backup.sh,restore.sh}`, the `infra/systemd/iridium-backup.{service,timer}` unit and its documented cron equivalent, the systemd `ExecStartPre` chain and the CI drills all branch on these numbers, so "wrong config" (2), "refused" (3), "corrupt input" (4) and "verification failed" (5) must be distinguishable; an earlier four-code draft of this row assigned 2 and 3 the opposite meanings and is superseded |
 | ARCH-23 | One transaction helper, `withTransaction(db, ctx, fn)`, opens every transaction, forbids nesting by type, and returns collected `effects` that run only after COMMIT; no HTTP, `StorageDriver`, worker-dispatch or WebSocket call happens between `BEGIN` and `COMMIT`; `AuditWriter.record(trx, event)` is the single deliberate in-transaction writer and is always the last statement | A19/A46 require that `persisted` broadcasts, `AuthzBus` events and revocation closes describe committed facts only; making "after COMMIT" a property of the helper rather than of each call site removes a whole class of phantom-event bugs, and keeping non-MySQL I/O out of transactions keeps lock hold times bounded |
-| ARCH-24 | `withTransaction` retries `ER_LOCK_DEADLOCK` (1213) and `ER_LOCK_WAIT_TIMEOUT` (1205) up to 3 times with 20–200 ms jittered backoff for transactions declared `idempotent: true`; every pooled connection sets `SET SESSION innodb_lock_wait_timeout = 10` on `dbApp` and `= 5` on `dbPersist`; exhaustion surfaces as `503 busy` with `Retry-After: 1` on REST and `persist-failed {reason:'db_error'}` on `/collab`; the global lock order is `vaults → nodes → note_docs → audit_chain_heads` with `audit_chain_heads` always last | Per-vault serialization (A12) plus the writer's `note_docs` lock (A19) make deadlocks rare but not impossible under concurrent structural operations; MySQL's 50 s default lock wait would hold request threads and mask the condition, and a declared retry policy turns a transient conflict into a retry instead of a user-visible 500 |
+| ARCH-24 | `withTransaction` retries `ER_LOCK_DEADLOCK` (1213) and `ER_LOCK_WAIT_TIMEOUT` (1205) up to 3 times with 20–200 ms jittered backoff for transactions declared `idempotent: true`; every pooled connection sets `SET SESSION innodb_lock_wait_timeout = 10` on `dbApp` and `= 5` on `dbPersist`; exhaustion surfaces as `503 busy` with `Retry-After: 1` on REST and `persist-failed {reason:'db_error'}` on `/collab`; the global lock order starts with the owner fence, then `vaults` when structural, `nodes → notes → note_docs`, derived children, and `audit_chain_heads` with `audit_chain_heads` always last | Per-vault serialization (A12) plus the writer's `note_docs` lock (A19) make deadlocks rare but not impossible under concurrent structural operations; MySQL's 50 s default lock wait would hold request threads and mask the condition, and a declared retry policy turns a transient conflict into a retry instead of a user-visible 500 |
 | ARCH-25 | `EnvSchema` reserves the prefixes `IRIDIUM_TEST_*`, `IRIDIUM_PROP_*`, `IRIDIUM_CHAOS_*`, `IRIDIUM_E2E_*`, `IRIDIUM_FIXTURE_*`, `IRIDIUM_COVERAGE_*` and the exact names `IRIDIUM_MYSQL_IMAGE`, `IRIDIUM_USER_DATA`, `IRIDIUM_SERVER_URL`, `IRIDIUM_MCP_TOKEN` for harnesses, fixtures, clients and the bridge: they are known-and-ignored rather than fatal, `iridium config check` prints them as "ignored harness keys", and no product key may use those prefixes. Every other unknown `IRIDIUM_*` variable stays fatal (`config.unknown_key`, exit 2), and `IRIDIUM_ALLOW_NO_ORIGIN_WS` stays rejected by name | The `child` harness mode spawns the production binary with the job environment, so an unqualified fatal rule would make the chaos and E2E lanes unable to start a server as soon as a job exported one of the test knobs of 10-testing-and-quality.md D10-5 — the lanes that prove the durability invariants. Reserving namespaces keeps typo protection exact for the keys that matter while making the harness contract explicit rather than accidental |
 | ARCH-26 | The `IridiumHost` behavioural contract is runner-agnostic data, not a shared test file: `hostContractCases(): Array<{ name; run(host, assert): Promise<void> }>` is iterated by `host.contract.component` under Vitest Browser Mode (`BrowserHost`, `MemoryHost`) and by `desktop.host-contract.e2e` under Playwright's `electron` project (`ElectronHost`), each injecting its own assertion facade; a case without a passing run in both runners fails `guards.acceptance-map.guard` | One file cannot execute under two runners whose `expect` and test APIs are incompatible, and the shared cases cannot live in `@iridium/testkit` because the testkit is not a devDependency of `packages/ui` (the `browser` tag forbids it). Expressing the contract as data is the only form that keeps a single definition — which is the entire point of the test |
 | ARCH-27 | The documentation surfaces are ordinary Iridium-registered routes, not plugin defaults: `GET /openapi.json` (operationId `meta.openapi`) and `GET /docs` (`meta.docs`) are registered by the `rest` plugin with an explicit `config.auth = {serverAdmin: true}` (any principal when `NODE_ENV=development`), `Cache-Control: no-store`, and Swagger UI's "try it out" disabled outside development; they are part of the M1 route set and of the `openapi.contract` coverage list like every other operation | The route-policy boot assertion refuses to boot on a route without `config.auth`, and `openapi.coverage.contract` fails on a documented `(operationId, status)` pair that no test exercises — so a documentation route that nobody registers deliberately is either a boot failure or a red coverage job, never a harmless omission |

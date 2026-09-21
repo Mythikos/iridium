@@ -131,13 +131,22 @@ describe('testkit.fixtures.unit [area:testkit]', () => {
   it('maps every hostile fixture to an expectation and every expectation to a file', () => {
     const corpus = readHostileCorpus();
     const onDisk = listFixtureFiles(HOSTILE_CORPUS_PATH)
-      .filter((f) => f.path.endsWith('.md'))
+      // This is the one release-owned Markdown metadata file in the inert asset workspace.
+      .filter((f) => f.path.endsWith('.md') && f.path !== 'CHANGELOG.md')
       .map((f) => f.path)
       .toSorted();
     expect(Object.keys(corpus.files).toSorted()).toStrictEqual(onDisk);
     expect(onDisk.length).toBeGreaterThanOrEqual(11);
     expect(corpus.sinkHost).toBe('sink.invalid');
     expect(corpus.fixtureVersion).toBe(IRIDIUM_FIXTURE_VERSION);
+  });
+
+  it('refuses release metadata and undeclared files as hostile corpus input', () => {
+    expect(() => readHostileFixture('CHANGELOG.md')).toThrow(/not declared in expectations.json/);
+    expect(() => readHostileFixture('package.json')).toThrow(/not declared in expectations.json/);
+    expect(() => readHostileFixture('../commonmark/PROVENANCE.md')).toThrow(
+      /not declared in expectations.json/,
+    );
   });
 
   it('gives every hostile fixture something to forbid', () => {

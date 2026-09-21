@@ -8,7 +8,10 @@
   "ignorePatterns": [
     // Markdown/vault fixtures are pipeline test data and are never reformatted; apps/e2e/fixtures/*.ts is code.
     "packages/testkit/src/fixtures/**",
+    "packages/markdown/fixtures/**",
     "apps/server/test/fixtures/**",
+    // Previous-release wire evidence is byte-for-byte immutable and manifest-hashed.
+    "apps/server/test/contract/baselines/**",
     "pnpm-lock.yaml",
     "**/dist/**",
     "**/coverage/**",

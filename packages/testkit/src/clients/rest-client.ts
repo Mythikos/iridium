@@ -179,7 +179,7 @@ async function readBody(response: Response, type: string | null) {
     return undefined;
   }
   const buffer = await response.arrayBuffer();
-  if (buffer.byteLength === 0) {
+  if (buffer.byteLength === 0 && !type?.startsWith('text/')) {
     return undefined;
   }
   if (type === null) {

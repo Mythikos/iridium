@@ -1,0 +1,221 @@
+{
+  "status": "ok",
+  "pipelineVersion": 2,
+  "contentHash": "fixture-hash",
+  "sizeChars": 159,
+  "lineCount": 8,
+  "wordCount": 23,
+  "headingTitle": null,
+  "frontmatter": null,
+  "fmTags": [],
+  "fmAliases": [],
+  "headings": [],
+  "tasks": [],
+  "codeLangs": [],
+  "bodyText": "[[Projects/Plan#Scope|the plan]] and ![[Diagram.png|300]].\n[!warning]- Read me\n\n#inbox ==important== %%visible comment%% $E=mc^2$\nClaim^[source] ^block-id\n",
+  "bodyRuns": [
+    [
+      0,
+      0,
+      58
+    ],
+    [
+      58,
+      58,
+      0
+    ],
+    [
+      59,
+      62,
+      19
+    ],
+    [
+      78,
+      81,
+      0
+    ],
+    [
+      79,
+      81,
+      0
+    ],
+    [
+      80,
+      83,
+      49
+    ],
+    [
+      129,
+      132,
+      0
+    ],
+    [
+      130,
+      134,
+      24
+    ],
+    [
+      154,
+      158,
+      0
+    ]
+  ],
+  "links": [
+    {
+      "ordinal": 0,
+      "kind": "wikilink",
+      "rawTarget": "Projects/Plan#Scope",
+      "startOffset": 0,
+      "endOffset": 32,
+      "line": 1,
+      "resolved": {
+        "kind": "broken",
+        "reason": "not_found"
+      }
+    },
+    {
+      "ordinal": 1,
+      "kind": "embed",
+      "rawTarget": "Diagram.png",
+      "startOffset": 37,
+      "endOffset": 57,
+      "line": 1,
+      "resolved": {
+        "kind": "broken",
+        "reason": "not_found"
+      }
+    }
+  ],
+  "obsidian": {
+    "counts": {
+      "wikilink": 1,
+      "embed": 1,
+      "block_id": 1,
+      "block_ref": 0,
+      "callout": 1,
+      "tag": 1,
+      "tag_invalid": 0,
+      "highlight": 1,
+      "comment": 1,
+      "inline_footnote": 1,
+      "math_inline": 1,
+      "math_block": 0,
+      "mermaid": 0,
+      "dataview": 0,
+      "dataviewjs": 0,
+      "query_block": 0,
+      "image_size_syntax": 1,
+      "non_gfm_task_state": 0,
+      "soft_break_reliance": 0,
+      "deprecated_frontmatter_key": 0,
+      "frontmatter_link_unquoted": 0,
+      "strict_line_breaks_off": 0,
+      "canvas": 0,
+      "bases": 0,
+      "obsidian_config": 0,
+      "obsidian_trash": 0
+    },
+    "findings": [
+      {
+        "code": "wikilink",
+        "severity": "info",
+        "line": 1,
+        "offset": 0,
+        "endOffset": 32,
+        "text": "[[Projects/Plan#Scope|the plan]]",
+        "detail": {
+          "target": "Projects/Plan#Scope",
+          "resolution": "broken"
+        }
+      },
+      {
+        "code": "embed",
+        "severity": "warn",
+        "line": 1,
+        "offset": 37,
+        "endOffset": 57,
+        "text": "![[Diagram.png|300]]",
+        "detail": {
+          "target": "Diagram.png",
+          "resolution": "broken"
+        }
+      },
+      {
+        "code": "image_size_syntax",
+        "severity": "info",
+        "line": 1,
+        "offset": 37,
+        "endOffset": 57,
+        "text": "![[Diagram.png|300]]"
+      },
+      {
+        "code": "callout",
+        "severity": "warn",
+        "line": 3,
+        "offset": 60,
+        "endOffset": 81,
+        "text": "> [!warning]- Read me",
+        "detail": {
+          "type": "warning"
+        }
+      },
+      {
+        "code": "tag",
+        "severity": "info",
+        "line": 5,
+        "offset": 83,
+        "endOffset": 89,
+        "text": "#inbox",
+        "detail": {
+          "tag": "inbox"
+        }
+      },
+      {
+        "code": "highlight",
+        "severity": "info",
+        "line": 5,
+        "offset": 90,
+        "endOffset": 103,
+        "text": "==important=="
+      },
+      {
+        "code": "comment",
+        "severity": "warn",
+        "line": 5,
+        "offset": 104,
+        "endOffset": 123,
+        "text": "%%visible comment%%"
+      },
+      {
+        "code": "math_inline",
+        "severity": "warn",
+        "line": 5,
+        "offset": 124,
+        "endOffset": 132,
+        "text": "$E=mc^2$"
+      },
+      {
+        "code": "inline_footnote",
+        "severity": "warn",
+        "line": 7,
+        "offset": 139,
+        "endOffset": 148,
+        "text": "^[source]"
+      },
+      {
+        "code": "block_id",
+        "severity": "info",
+        "line": 7,
+        "offset": 149,
+        "endOffset": 158,
+        "text": "^block-id"
+      }
+    ],
+    "truncated": false
+  },
+  "timings": {
+    "prescanMs": 0,
+    "parseMs": 0,
+    "projectMs": 0
+  }
+}

@@ -1,0 +1,110 @@
+/** Revision metadata, text, naming and coordinated restore share the declared history policy. */
+import { ClientHeaders } from './common.ts';
+import { NoteIdParams } from './params.ts';
+import {
+  CreateRevisionBody,
+  ListRevisionsQuery,
+  NoteRevision,
+  RestoredRevision,
+  RestoreRevisionBody,
+  RevisionContent,
+  RevisionPage,
+  RevisionParams,
+} from './revisions.ts';
+import { REST_ROUTE_POLICIES } from './route-policies.ts';
+import type { RouteSpec } from './routes.ts';
+
+/** M2 revision operations. */
+export const M2_REVISION_ROUTES: readonly RouteSpec[] = [
+  {
+    operationId: 'revisions.list',
+    method: 'GET',
+    path: '/notes/:noteId/revisions',
+    mount: '/api/v1',
+    plugin: 'rest',
+    tag: 'revisions',
+    auth: REST_ROUTE_POLICIES['revisions.list'],
+    request: { params: NoteIdParams, query: ListRevisionsQuery },
+    responses: [{ status: 200, body: { kind: 'json', schema: RevisionPage } }],
+    errors: ['unauthenticated', 'forbidden', 'not_found', 'validation_failed', 'token_expired'],
+    rateLimit: 'pat',
+    summary: 'List retained checkpoints with their thinning policy, newest first.',
+  },
+  {
+    operationId: 'revisions.get',
+    method: 'GET',
+    path: '/notes/:noteId/revisions/:revisionId',
+    mount: '/api/v1',
+    plugin: 'rest',
+    tag: 'revisions',
+    auth: REST_ROUTE_POLICIES['revisions.get'],
+    request: { params: RevisionParams },
+    responses: [
+      { status: 200, body: { kind: 'json', schema: RevisionContent }, etag: 'strong-version' },
+      { status: 200, body: { kind: 'markdown' }, etag: 'strong-version' },
+      { status: 304, body: { kind: 'empty' }, etag: 'strong-version' },
+    ],
+    errors: ['unauthenticated', 'forbidden', 'not_found', 'validation_failed', 'token_expired'],
+    rateLimit: 'pat',
+    summary: 'Read immutable revision metadata and Markdown, or negotiate its Markdown text.',
+  },
+  {
+    operationId: 'revisions.create',
+    method: 'POST',
+    path: '/notes/:noteId/revisions',
+    mount: '/api/v1',
+    plugin: 'rest',
+    tag: 'revisions',
+    auth: REST_ROUTE_POLICIES['revisions.create'],
+    request: { params: NoteIdParams, body: CreateRevisionBody, headers: ClientHeaders },
+    responses: [
+      {
+        status: 201,
+        body: { kind: 'json', schema: NoteRevision },
+        location: '/api/v1/notes/<noteId>/revisions/<id>',
+      },
+    ],
+    errors: [
+      'unauthenticated',
+      'forbidden',
+      'csrf_rejected',
+      'not_found',
+      'node_trashed',
+      'content_invalid',
+      'vault_archived',
+      'validation_failed',
+      'rate_limited',
+      'capacity',
+      'unavailable',
+    ],
+    rateLimit: 'fresh-markdown',
+    summary: 'Retain a named checkpoint of the current committed head.',
+  },
+  {
+    operationId: 'revisions.restore',
+    method: 'POST',
+    path: '/notes/:noteId/revisions/:revisionId/restore',
+    mount: '/api/v1',
+    plugin: 'rest',
+    tag: 'revisions',
+    auth: REST_ROUTE_POLICIES['revisions.restore'],
+    request: { params: RevisionParams, body: RestoreRevisionBody, headers: ClientHeaders },
+    responses: [{ status: 200, body: { kind: 'json', schema: RestoredRevision } }],
+    errors: [
+      'unauthenticated',
+      'forbidden',
+      'step_up_required',
+      'csrf_rejected',
+      'not_found',
+      'node_trashed',
+      'content_invalid',
+      'note_oversized',
+      'vault_archived',
+      'validation_failed',
+      'capacity',
+      'unavailable',
+    ],
+    summary:
+      'Restore retained content as one reversible writer operation, preserving the document identity.',
+  },
+];

@@ -38,9 +38,8 @@ import {
   type DbLogger,
 } from '../../src/db/index.ts';
 import {
-  DEFAULT_MYSQL_IMAGE,
-  REFERENCE_MYSQL_IMAGE,
   selectedMysqlImage,
+  selectedMysqlLane,
   startIridiumMysql,
   type IridiumMysql,
 } from '../db-mysql-container.ts';
@@ -135,14 +134,30 @@ describe('db.version-floor.integration [area:ops]', () => {
     expect(innovation).toContain('three months');
   });
 
-  it(`boots clean against the selected required image (${selectedMysqlImage()})`, async () => {
+  it(`admits the selected image with its exact supported or override verdict (${selectedMysqlImage()})`, async () => {
+    const lane = selectedMysqlLane();
     const mysql = await mysqlFor(selectedMysqlImage());
     const { logger, lines } = recordingLogger();
-    const layer = await createDatabaseLayer({ url: mysql.migratorUrl(), logger });
+    const layer = await createDatabaseLayer({
+      url: mysql.migratorUrl(),
+      allowUntestedMysql: lane.allowUntestedMysql,
+      logger,
+    });
     try {
-      expect(layer.serverVersion.verdict).toBe('supported');
-      expect([DEFAULT_MYSQL_IMAGE, REFERENCE_MYSQL_IMAGE]).toContain(mysql.image);
-      expect(lines.filter((l) => l.level === 'warn')).toEqual([]);
+      expect(layer.serverVersion.verdict === 'supported').toBe(lane.required);
+      expect(layer.serverVersion.raw).toMatch(lane.versionPattern);
+      expect(mysql.image).toBe(lane.image);
+      expect(lines.filter((line) => line.level === 'warn').map((line) => line.fields)).toEqual(
+        lane.required
+          ? []
+          : [
+              {
+                mysqlVersion: layer.serverVersion.raw,
+                code: 'config.mysql_unsupported',
+                override: 'IRIDIUM_ALLOW_UNTESTED_MYSQL',
+              },
+            ],
+      );
     } finally {
       await layer.destroy();
     }

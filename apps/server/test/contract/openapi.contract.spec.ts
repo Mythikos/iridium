@@ -24,7 +24,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { ERROR_CODES, M1_ROUTES, routeKey, type RouteSpec } from '@iridium/contracts';
+import { ERROR_CODES, API_ROUTES, routeKey, type RouteSpec } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 const DOCUMENT_PATH = fileURLToPath(
@@ -190,7 +190,7 @@ function assertLinkExpression(root: unknown, sourceSchema: unknown, value: unkno
 /** Each manifest edge must survive export and resolve at both its source and its target. */
 function assertPublishedLinks(root: unknown): void {
   const published = operations(root);
-  for (const row of M1_ROUTES) {
+  for (const row of API_ROUTES) {
     for (const response of row.responses) {
       if (response.links === undefined) continue;
       const source = published.find((entry) => entry.operationId === row.operationId);
@@ -352,12 +352,12 @@ describe('openapi.contract [area:contracts]', () => {
 
   it('documents every `rest` row of the manifest at its own path', () => {
     const documented = new Set(DOCUMENTED.map((entry) => entry.operationId));
-    const missing = M1_ROUTES.filter(
+    const missing = API_ROUTES.filter(
       (row) => row.plugin === 'rest' && !documented.has(row.operationId),
     ).map(routeKey);
     expect(missing).toStrictEqual([]);
 
-    const misplaced = M1_ROUTES.filter((row) => row.plugin === 'rest').flatMap((row) => {
+    const misplaced = API_ROUTES.filter((row) => row.plugin === 'rest').flatMap((row) => {
       const entry = DOCUMENTED.find((candidate) => candidate.operationId === row.operationId);
       if (entry === undefined) return [];
       return entry.path === documentPath(row) && entry.method === row.method.toLowerCase()
@@ -368,7 +368,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('documents every success status its row declares', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const entry = DOCUMENTED.find((candidate) => candidate.operationId === row.operationId);
       if (entry === undefined) return [];
       const responses = isRecord(entry.operation['responses']) ? entry.operation['responses'] : {};
@@ -392,7 +392,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('says a public operation needs neither scheme, and an authenticated one accepts both', () => {
-    const problems = M1_ROUTES.flatMap((row) => {
+    const problems = API_ROUTES.flatMap((row) => {
       const entry = DOCUMENTED.find((candidate) => candidate.operationId === row.operationId);
       if (entry === undefined) return [];
       const security = Array.isArray(entry.operation['security'])
@@ -426,7 +426,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('declares an ETag on every versioned read the manifest marks', () => {
-    const problems = M1_ROUTES.flatMap((row) =>
+    const problems = API_ROUTES.flatMap((row) =>
       row.responses
         .filter((response) => response.etag !== undefined)
         .flatMap((response) => {
@@ -450,7 +450,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('documents an If-Match parameter on every route the manifest marks', () => {
-    const problems = M1_ROUTES.filter((row) => row.ifMatch !== undefined).flatMap((row) => {
+    const problems = API_ROUTES.filter((row) => row.ifMatch !== undefined).flatMap((row) => {
       const entry = DOCUMENTED.find((candidate) => candidate.operationId === row.operationId);
       if (entry === undefined) return [];
       const parameters = Array.isArray(entry.operation['parameters'])
@@ -470,7 +470,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('fully documents every M1 response without placeholder schemas', () => {
-    const undocumented = M1_ROUTES.flatMap((row) => {
+    const undocumented = API_ROUTES.flatMap((row) => {
       const entry = DOCUMENTED.find((candidate) => candidate.operationId === row.operationId);
       return entry !== undefined && isFullyDocumented(row, entry) ? [] : [row.operationId];
     });
@@ -478,7 +478,7 @@ describe('openapi.contract [area:contracts]', () => {
   });
 
   it('uses only codes from the closed vocabulary in its row declarations', () => {
-    const unknown = M1_ROUTES.flatMap((row) =>
+    const unknown = API_ROUTES.flatMap((row) =>
       row.errors
         .filter((code) => !ERROR_CODES.includes(code))
         .map((code) => `${row.operationId}: ${code}`),

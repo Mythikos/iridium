@@ -1,0 +1,106 @@
+{
+  "status": "ok",
+  "pipelineVersion": 2,
+  "contentHash": "fixture-hash",
+  "sizeChars": 128,
+  "lineCount": 10,
+  "wordCount": 3,
+  "headingTitle": "Content",
+  "frontmatter": {
+    "raw": "tags: ['#Projects', draft, DRAFT]\naliases: [\"First name\", Second]\ndate: 2026-09-20\nyes: no\n",
+    "data": {
+      "tags": [
+        "#Projects",
+        "draft",
+        "DRAFT"
+      ],
+      "aliases": [
+        "First name",
+        "Second"
+      ],
+      "date": "2026-09-20",
+      "yes": "no"
+    },
+    "error": null
+  },
+  "fmTags": [
+    "projects",
+    "draft"
+  ],
+  "fmAliases": [
+    "First name",
+    "Second"
+  ],
+  "headings": [
+    {
+      "depth": 1,
+      "text": "Content",
+      "slug": "content",
+      "line": 7,
+      "offset": 99
+    }
+  ],
+  "tasks": [],
+  "codeLangs": [],
+  "bodyText": "Content\nSearchable prose.\n",
+  "bodyRuns": [
+    [
+      0,
+      101,
+      7
+    ],
+    [
+      7,
+      108,
+      0
+    ],
+    [
+      8,
+      110,
+      17
+    ],
+    [
+      25,
+      127,
+      0
+    ]
+  ],
+  "links": [],
+  "obsidian": {
+    "counts": {
+      "wikilink": 0,
+      "embed": 0,
+      "block_id": 0,
+      "block_ref": 0,
+      "callout": 0,
+      "tag": 0,
+      "tag_invalid": 0,
+      "highlight": 0,
+      "comment": 0,
+      "inline_footnote": 0,
+      "math_inline": 0,
+      "math_block": 0,
+      "mermaid": 0,
+      "dataview": 0,
+      "dataviewjs": 0,
+      "query_block": 0,
+      "image_size_syntax": 0,
+      "non_gfm_task_state": 0,
+      "soft_break_reliance": 0,
+      "deprecated_frontmatter_key": 0,
+      "frontmatter_link_unquoted": 0,
+      "strict_line_breaks_off": 0,
+      "canvas": 0,
+      "bases": 0,
+      "obsidian_config": 0,
+      "obsidian_trash": 0
+    },
+    "findings": [],
+    "truncated": false
+  },
+  "timings": {
+    "prescanMs": 0,
+    "parseMs": 0,
+    "projectMs": 0
+  }
+}

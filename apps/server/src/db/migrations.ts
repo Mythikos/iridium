@@ -71,6 +71,10 @@ import * as m0052 from '../../migrations/0052_collab_owner_fence.ts';
 import * as m0053 from '../../migrations/0053_collab_owner_fence_grants.ts';
 import * as m0054 from '../../migrations/0054_grants_provenance.ts';
 import * as m0055 from '../../migrations/0055_min_client_version.ts';
+import * as m0056 from '../../migrations/0056_projection_alias_lookup.ts';
+import * as m0057 from '../../migrations/0057_projection_terms.ts';
+import * as m0058 from '../../migrations/0058_projection_terms_grants.ts';
+import * as m0059 from '../../migrations/0059_projection_terms_backfill.ts';
 
 /** Every migration of 03-data-model.md section 14.1, in apply order. */
 export const MIGRATIONS: Readonly<Record<string, Migration>> = Object.freeze({
@@ -129,7 +133,17 @@ export const MIGRATIONS: Readonly<Record<string, Migration>> = Object.freeze({
   '0053_collab_owner_fence_grants': m0053,
   '0054_grants_provenance': m0054,
   '0055_min_client_version': m0055,
+  '0056_projection_alias_lookup': m0056,
+  '0057_projection_terms': m0057,
+  '0058_projection_terms_grants': m0058,
+  '0059_projection_terms_backfill': m0059,
 });
+
+/** Bundled admission metadata; the marker guard keeps this equal to the source-file headers. */
+export const LONG_RUNNING_MIGRATIONS: ReadonlySet<string> = new Set([
+  '0056_projection_alias_lookup',
+  '0059_projection_terms_backfill',
+]);
 
 /** The names `/readyz` compares against `kysely_migration`, in apply order. */
 export const MIGRATION_NAMES: readonly string[] = Object.freeze(Object.keys(MIGRATIONS));

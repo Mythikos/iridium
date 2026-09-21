@@ -1,0 +1,151 @@
+{
+  "status": "ok",
+  "pipelineVersion": 2,
+  "contentHash": "fixture-hash",
+  "sizeChars": 98,
+  "lineCount": 4,
+  "wordCount": 18,
+  "headingTitle": null,
+  "frontmatter": null,
+  "fmTags": [],
+  "fmAliases": [],
+  "headings": [],
+  "tasks": [],
+  "codeLangs": [],
+  "bodyText": "www.example.com, https://example.com/a?b=c&d=e and author@example.com.\n~literal~ and deleted\n",
+  "bodyRuns": [
+    [
+      0,
+      0,
+      15
+    ],
+    [
+      15,
+      15,
+      1
+    ],
+    [
+      16,
+      16,
+      1
+    ],
+    [
+      17,
+      17,
+      29
+    ],
+    [
+      46,
+      46,
+      5
+    ],
+    [
+      51,
+      51,
+      18
+    ],
+    [
+      69,
+      69,
+      1
+    ],
+    [
+      70,
+      70,
+      0
+    ],
+    [
+      71,
+      72,
+      14
+    ],
+    [
+      85,
+      88,
+      7
+    ],
+    [
+      92,
+      95,
+      0
+    ]
+  ],
+  "links": [
+    {
+      "ordinal": 0,
+      "kind": "markdown",
+      "rawTarget": "http://www.example.com",
+      "startOffset": 0,
+      "endOffset": 15,
+      "line": 1,
+      "resolved": {
+        "kind": "external",
+        "href": "http://www.example.com",
+        "scheme": "http"
+      }
+    },
+    {
+      "ordinal": 1,
+      "kind": "markdown",
+      "rawTarget": "https://example.com/a?b=c&d=e",
+      "startOffset": 17,
+      "endOffset": 46,
+      "line": 1,
+      "resolved": {
+        "kind": "external",
+        "href": "https://example.com/a?b=c&d=e",
+        "scheme": "https"
+      }
+    },
+    {
+      "ordinal": 2,
+      "kind": "markdown",
+      "rawTarget": "mailto:author@example.com",
+      "startOffset": 51,
+      "endOffset": 69,
+      "line": 1,
+      "resolved": {
+        "kind": "external",
+        "href": "mailto:author@example.com",
+        "scheme": "mailto"
+      }
+    }
+  ],
+  "obsidian": {
+    "counts": {
+      "wikilink": 0,
+      "embed": 0,
+      "block_id": 0,
+      "block_ref": 0,
+      "callout": 0,
+      "tag": 0,
+      "tag_invalid": 0,
+      "highlight": 0,
+      "comment": 0,
+      "inline_footnote": 0,
+      "math_inline": 0,
+      "math_block": 0,
+      "mermaid": 0,
+      "dataview": 0,
+      "dataviewjs": 0,
+      "query_block": 0,
+      "image_size_syntax": 0,
+      "non_gfm_task_state": 0,
+      "soft_break_reliance": 0,
+      "deprecated_frontmatter_key": 0,
+      "frontmatter_link_unquoted": 0,
+      "strict_line_breaks_off": 0,
+      "canvas": 0,
+      "bases": 0,
+      "obsidian_config": 0,
+      "obsidian_trash": 0
+    },
+    "findings": [],
+    "truncated": false
+  },
+  "timings": {
+    "prescanMs": 0,
+    "parseMs": 0,
+    "projectMs": 0
+  }
+}

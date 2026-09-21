@@ -29,6 +29,7 @@ import { NodeId, NoteId, SessionId, TokenId, UserId, VaultId } from '../ids.ts';
 import { LIMITS } from '../limits.ts';
 import { isSafeNodeName, RESERVED_DEVICE_NAMES } from '../paths.ts';
 import type { EnumOf } from '../schema.ts';
+import { VAULT_SETTING_FIELDS } from '../settings.ts';
 import { Timestamp } from '../time.ts';
 
 // ---- headers, validators and the client contract (section 1.2) -------------------------------
@@ -432,16 +433,7 @@ export interface VaultSettings {
  * carry identical bounds. Vault-relative, no leading `/` and no `..` on the attachment folder is
  * checked server-side, where the vault's tree is available.
  */
-const SETTING_FIELDS = {
-  markdownFlavor: MarkdownFlavor,
-  softBreaks: z.boolean(),
-  attachmentFolder: z.string().min(1).max(255),
-  loadExternalImages: LoadExternalImages,
-  mcpEnabled: z.boolean(),
-  aiGuidance: z.string().max(LIMITS.AI_GUIDANCE_MAX_CHARS).nullable(),
-  trashRetentionDays: z.int().min(1).max(3650),
-  autoCheckpointIntervalMin: z.int().min(1).max(1440),
-} as const;
+const SETTING_FIELDS = VAULT_SETTING_FIELDS;
 
 /** Every per-vault setting a manager can change. */
 export const VaultSettings: z.ZodType<VaultSettings> = z

@@ -198,6 +198,53 @@ describe('testkit.db-probes.unit [area:testing]', () => {
     }
   });
 
+  it('limits partition faults to the named catch-all and validates overflow data before I/O', async () => {
+    const context = fixture();
+    const operations: string[] = [];
+    const userId = new Uint8Array(16).fill(1);
+    const occurredAt = new Date('2027-01-01T00:00:00.000Z');
+    try {
+      for (const invalid of [
+        { occurredAt, userId: new Uint8Array(15) },
+        { occurredAt: new Date(Number.NaN), userId },
+      ]) {
+        // eslint-disable-next-line no-await-in-loop -- each invalid operation must be refused before the next is attempted
+        await expect(
+          corruptDeliberately(context.database, { kind: 'access-log-overflow-row', ...invalid }),
+        ).rejects.toThrow('binary user id and valid occurrence time');
+      }
+      expect(context.queries).toEqual([]);
+      await corruptDeliberately(
+        context.database,
+        { kind: 'access-log-overflow-row', occurredAt, userId },
+        (kind) => operations.push(kind),
+      );
+      expect(context.queries[0]?.sql).toContain('INSERT INTO access_log PARTITION (p_overflow)');
+      expect(context.queries[0]?.parameters).toEqual([occurredAt, Buffer.from(userId)]);
+      await corruptDeliberately(
+        context.database,
+        { kind: 'access-log-catch-all', present: false },
+        (kind) => operations.push(kind),
+      );
+      await corruptDeliberately(
+        context.database,
+        { kind: 'access-log-catch-all', present: true },
+        (kind) => operations.push(kind),
+      );
+      expect(context.queries.slice(1).map((query) => query.sql)).toEqual([
+        'ALTER TABLE access_log DROP PARTITION p_overflow',
+        'ALTER TABLE access_log ADD PARTITION (PARTITION p_overflow VALUES LESS THAN (MAXVALUE))',
+      ]);
+      expect(operations).toEqual([
+        'access-log-overflow-row',
+        'access-log-catch-all',
+        'access-log-catch-all',
+      ]);
+    } finally {
+      await context.database.destroy();
+    }
+  });
+
   it('binds advisory-lock names while observing through the original executor', async () => {
     const context = fixture();
     const name = "name'); DROP TABLE users; --";

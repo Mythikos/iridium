@@ -7,7 +7,6 @@ import * as fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it as test } from 'vitest';
 
 import { idBytes } from '../../src/auth/ids.ts';
-import { pruneUpdateLog } from '../../src/collab/persistence/prune.ts';
 import { connectionOrigin } from '../../src/collab/persistence/testing/fake-document.ts';
 import {
   assertCoalescingPreservesSemantics,
@@ -20,6 +19,7 @@ import {
 } from '../../src/collab/persistence/testing/model.ts';
 import { runScheduledPersistence } from '../../src/collab/persistence/testing/scheduled-model.ts';
 import { startDatabaseModel, type DatabaseModelFixture } from '../support/persistence-model.ts';
+import { pruneUpdateLog } from '../support/prune-updates.ts';
 
 const text = noteText({ minLength: 1, maxLength: 12 }).filter((value) => value.isWellFormed());
 const seed = noteText({ maxLength: 24 }).filter((value) => value.isWellFormed());

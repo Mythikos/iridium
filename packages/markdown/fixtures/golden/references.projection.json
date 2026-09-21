@@ -1,0 +1,125 @@
+{
+  "status": "ok",
+  "pipelineVersion": 2,
+  "contentHash": "fixture-hash",
+  "sizeChars": 127,
+  "lineCount": 6,
+  "wordCount": 4,
+  "headingTitle": null,
+  "frontmatter": null,
+  "fmTags": [],
+  "fmAliases": [],
+  "headings": [],
+  "tasks": [],
+  "codeLangs": [],
+  "bodyText": "A reference and alt.\n",
+  "bodyRuns": [
+    [
+      0,
+      0,
+      2
+    ],
+    [
+      2,
+      3,
+      9
+    ],
+    [
+      11,
+      21,
+      5
+    ],
+    [
+      16,
+      28,
+      3
+    ],
+    [
+      19,
+      39,
+      1
+    ],
+    [
+      20,
+      40,
+      0
+    ]
+  ],
+  "links": [
+    {
+      "ordinal": 0,
+      "kind": "markdown",
+      "rawTarget": "../Plan.md#Scope",
+      "startOffset": 2,
+      "endOffset": 21,
+      "line": 1,
+      "resolved": {
+        "kind": "vault",
+        "nodeId": "plan",
+        "fragment": "Scope",
+        "via": "path"
+      }
+    },
+    {
+      "ordinal": 1,
+      "kind": "image",
+      "rawTarget": "attachments/photo.png",
+      "startOffset": 26,
+      "endOffset": 39,
+      "line": 1,
+      "resolved": {
+        "kind": "broken",
+        "reason": "not_found"
+      }
+    },
+    {
+      "ordinal": 2,
+      "kind": "definition",
+      "rawTarget": "/Other.md",
+      "startOffset": 107,
+      "endOffset": 126,
+      "line": 5,
+      "resolved": {
+        "kind": "broken",
+        "reason": "not_found"
+      }
+    }
+  ],
+  "obsidian": {
+    "counts": {
+      "wikilink": 0,
+      "embed": 0,
+      "block_id": 0,
+      "block_ref": 0,
+      "callout": 0,
+      "tag": 0,
+      "tag_invalid": 0,
+      "highlight": 0,
+      "comment": 0,
+      "inline_footnote": 0,
+      "math_inline": 0,
+      "math_block": 0,
+      "mermaid": 0,
+      "dataview": 0,
+      "dataviewjs": 0,
+      "query_block": 0,
+      "image_size_syntax": 0,
+      "non_gfm_task_state": 0,
+      "soft_break_reliance": 0,
+      "deprecated_frontmatter_key": 0,
+      "frontmatter_link_unquoted": 0,
+      "strict_line_breaks_off": 0,
+      "canvas": 0,
+      "bases": 0,
+      "obsidian_config": 0,
+      "obsidian_trash": 0
+    },
+    "findings": [],
+    "truncated": false
+  },
+  "timings": {
+    "prescanMs": 0,
+    "parseMs": 0,
+    "projectMs": 0
+  }
+}

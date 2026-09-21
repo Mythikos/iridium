@@ -53,6 +53,7 @@ export const LOG_EVENTS = [
   'projection.timeout',
   'projection.invalid_content',
   'projection.reindex.progress',
+  'links.index_capacity',
   // MCP
   'mcp.call',
   'mcp.denied',
@@ -76,6 +77,8 @@ export const LOG_EVENTS = [
   'job.started',
   'job.succeeded',
   'job.failed',
+  'job.cancelled',
+  'access_log.write_failed',
   'import.scanned',
   'import.committed',
   'export.completed',

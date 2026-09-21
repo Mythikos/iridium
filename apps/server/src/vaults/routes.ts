@@ -1,7 +1,7 @@
 /**
  * `applyVaultRoutes(app)` — the three vault routes of M1 (09-api-reference.md §2.5).
  *
- * Each registration is one row of `M1_ROUTES`: the path, the policy and the schemas come from the
+ * Each registration is one row of `API_ROUTES`: the path, the policy and the schemas come from the
  * row through `routeSpec()`, so a route cannot be served with a policy or a body the OpenAPI
  * document does not describe, and `rest.route-index.contract` holds the served set equal to the
  * documented one.
@@ -14,7 +14,9 @@
  */
 import {
   CreateVaultBody,
+  ConfirmVaultBody,
   ListVaultsQuery,
+  PatchVaultBody,
   strongEtag,
   UserId,
   Vault,
@@ -22,7 +24,7 @@ import {
   VaultSummaryList,
   type RouteSpec,
 } from '@iridium/contracts';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -32,6 +34,7 @@ import {
 import type { AuditRecorder } from '../auth/audit.ts';
 import { requireUserRow } from '../auth/users.ts';
 import { API_PREFIX } from '../authz/route-policy.ts';
+import type { ContentReadCore } from '../content/read/index.ts';
 import {
   appDb,
   auditContext,
@@ -41,15 +44,30 @@ import {
 } from '../rest/handler-context.ts';
 import { requestOwnerFence } from '../rest/ownership.ts';
 import { ProblemError } from '../security/problem.ts';
-import { createVault, listVaults, readVault } from './service.ts';
+import { requiredVersion } from '../tree/preconditions.ts';
+import { archiveVault, patchVault, type VaultMutationInput } from './mutations.ts';
+import { createVault } from './service.ts';
 
 /** What the composer passes: the instance's audit writer (boot step 6). */
 export interface VaultRouteDeps {
   readonly audit: AuditRecorder;
+  readonly core: () => ContentReadCore;
+  readonly broadcastVaultUpdated: (
+    vaultId: string,
+    version: number,
+    changed: readonly string[],
+  ) => void;
 }
 
 /** The operation ids this module registers, in registration order. */
-export const VAULT_OPERATION_IDS = ['vaults.list', 'vaults.create', 'vaults.get'] as const;
+export const VAULT_OPERATION_IDS = [
+  'vaults.list',
+  'vaults.create',
+  'vaults.get',
+  'vaults.update',
+  'vaults.archive',
+  'vaults.unarchive',
+] as const;
 
 /** An operation id of this module. */
 type VaultOperationId = (typeof VAULT_OPERATION_IDS)[number];
@@ -70,6 +88,33 @@ export function applyVaultRoutes(app: FastifyInstance, deps: VaultRouteDeps): vo
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   const api = app.withTypeProvider<ZodTypeProvider>();
+  const floors = {
+    mcpEnabled: app.iridiumConfig.mcp.enabled,
+    trashRetentionDays: app.iridiumConfig.retention.trashDaysDefault,
+  };
+  const mutationInput = async (request: FastifyRequest): Promise<VaultMutationInput> => {
+    const principal = requireUserPrincipal(request.principal);
+    if (request.vault === null) throw new ProblemError('not_found');
+    const user = await requireUserRow(appDb(app), principal.userId);
+    return {
+      vaultId: request.vault.id,
+      version: requiredVersion(request.headers['if-match']),
+      actor: {
+        userId: principal.userId,
+        sessionId: principal.sessionId,
+        displayName: user.display_name,
+      },
+      viewer: { role: request.vault.role, isServerAdmin: principal.isServerAdmin },
+      context: auditContext(request),
+    };
+  };
+  const mutationDeps = (request: FastifyRequest) => ({
+    db: appDb(app),
+    clock: app.clock,
+    audit: deps.audit,
+    ownerFence: requestOwnerFence(request),
+    floors,
+  });
 
   // ---- GET /vaults -------------------------------------------------------------------------------
   const list = routeSpec('vaults.list');
@@ -87,16 +132,9 @@ export function applyVaultRoutes(app: FastifyInstance, deps: VaultRouteDeps): vo
     },
     async (request, reply) => {
       const principal = requirePrincipal(request.principal);
-      const vaultIds = await app.authz.accessibleVaultIds(principal, {
-        permission: 'vault:read',
-        surface: 'rest',
-      });
-      const items = await listVaults(appDb(app), {
-        vaultIds,
-        userId: principal.userId,
-        isServerAdmin: principal.kind === 'user' && principal.isServerAdmin,
-        includeArchived: request.query.includeArchived,
-      });
+      const items = await deps
+        .core()
+        .listVaults(principal, { includeArchived: request.query.includeArchived });
       return reply.code(HTTP_OK).send({ items });
     },
   );
@@ -120,7 +158,7 @@ export function applyVaultRoutes(app: FastifyInstance, deps: VaultRouteDeps): vo
       const db = appDb(app);
       const creator = await requireUserRow(db, principal.userId);
       const { vault, events } = await createVault(
-        { db, audit: deps.audit, ownerFence: requestOwnerFence(request) },
+        { db, audit: deps.audit, ownerFence: requestOwnerFence(request), settingsFloor: floors },
         {
           name: request.body.name,
           ...(request.body.description === undefined
@@ -176,13 +214,63 @@ export function applyVaultRoutes(app: FastifyInstance, deps: VaultRouteDeps): vo
       // attachment is a policy defect rather than an unknown vault.
       const resolved = request.vault;
       if (resolved === null) throw new ProblemError('not_found');
-      const vault = await readVault(appDb(app), resolved.id, {
-        role: resolved.role,
-        isServerAdmin: principal.kind === 'user' && principal.isServerAdmin,
-      });
+      const vault = await deps.core().getVault(principal, resolved.id);
       if (vault === null) throw new ProblemError('not_found');
       reply.header('etag', strongEtag(vault.version));
       return reply.code(HTTP_OK).send(vault);
     },
   );
+
+  const patch = routeSpec('vaults.update');
+  api.patch(
+    patch.path,
+    {
+      config: { auth: patch.auth },
+      schema: {
+        operationId: patch.operationId,
+        tags: [patch.tag],
+        summary: patch.summary,
+        params: VaultIdParams,
+        body: PatchVaultBody,
+        response: { [HTTP_OK]: Vault },
+      },
+    },
+    async (request, reply) => {
+      const result = await patchVault(
+        mutationDeps(request),
+        await mutationInput(request),
+        request.body,
+      );
+      if (result.changed.length > 0)
+        deps.broadcastVaultUpdated(result.vault.id, result.vault.version, result.changed);
+      return reply.header('etag', strongEtag(result.vault.version)).send(result.vault);
+    },
+  );
+
+  for (const operationId of ['vaults.archive', 'vaults.unarchive'] as const) {
+    const route = routeSpec(operationId);
+    const archived = operationId === 'vaults.archive';
+    api.post(
+      route.path,
+      {
+        config: { auth: route.auth },
+        schema: {
+          operationId: route.operationId,
+          tags: [route.tag],
+          summary: route.summary,
+          params: VaultIdParams,
+          body: ConfirmVaultBody,
+          response: { [HTTP_OK]: Vault },
+        },
+      },
+      async (request, reply) => {
+        const input = await mutationInput(request);
+        const vault = await archiveVault(mutationDeps(request), input, archived);
+        if (archived)
+          await app.authz.bus.publishAndWait({ type: 'vault.archived', vaultId: input.vaultId });
+        else deps.broadcastVaultUpdated(vault.id, vault.version, ['status']);
+        return reply.header('etag', strongEtag(vault.version)).send(vault);
+      },
+    );
+  }
 }

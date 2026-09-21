@@ -8,11 +8,11 @@ This section is the build specification for everything that touches Markdown tex
 |---|---|---|---|
 | I1 | The note text of record (the Y.Text `content`) is LF-only, has one leading encoding BOM removed (any subsequent U+FEFF is content), contains no U+0000, and is never rewritten by parsing, previewing, projecting, importing or exporting | `normalizeSource` at create/import/restore/repair; client `\r` guard; compaction scan (`05-collaboration-and-durability.md`) | `markdown.no-rewrite.prop`, `collab.lf-invariant`, `markdown.roundtrip.prop` |
 | I2 | No AST→Markdown serializer exists anywhere in the codebase; every mutation of note text is a text edit driven by mdast offsets | oxlint `no-restricted-imports` bans `remark-stringify`, `mdast-util-to-markdown`, `gray-matter` repo-wide | `deps.banned-imports` |
-| I3 | `rehype-sanitize` with `iridiumSanitizeSchema` is the single security boundary for rendered Markdown and runs identically in the browser worker and in the server worker; nothing runs after it except the hast→React mapping | `toPreviewTree` is the only exported renderer entry point and its last stage is the sanitizer | `markdown.sanitize-schema.snapshot`, `markdown.xss.spec` |
+| I3 | `rehype-sanitize` with `iridiumSanitizeSchema` is the single security boundary for rendered Markdown and runs identically in the browser worker and in the server worker; nothing runs after it except the hast→React mapping | `toPreviewTree` is the product preview entry point and its last transform is the sanitizer | `markdown.sanitize-schema.unit`, `markdown.xss-corpus.unit` |
 | I4 | Untrusted Markdown is never parsed on the Node main thread or on the browser UI thread | server piscina pool, browser Web Worker; lint rule bans `@iridium/markdown` parse imports outside worker entry files | `projection.worker-isolation.unit` |
 | I5 | Every consumer of "what the note says" (REST `GET /notes/:id/markdown`, MCP `get_note`, export, search, mirror) reads `note_projections.markdown` at a recorded `revision`; never the live Y.Doc | `ContentReadCore` (A37) | `content.read-model.integration` |
 | I6 | Original bytes are restorable: `notes.original_eol` and `notes.had_bom` are recorded once and export restores them by default | `NoteService.initialize`, export job | `markdown.roundtrip.prop`, `export-roundtrip.e2e` |
-| I7 | Obsidian-specific syntax is detected, reported and indexed, never emulated or rewritten in MVP | `detectObsidianSyntax`, import report, `note_links.kind` | `markdown.obsidian-detector.spec`, `transfer.fixtures.integration` |
+| I7 | Obsidian-specific syntax is detected, reported and indexed, never emulated or rewritten in MVP | `detectObsidianSyntax`, import report, `note_links.kind` | `obsidian.detect.unit`, `transfer.fixtures.integration` |
 | I8 | Attachments are content-addressed, immutable, served only through the server with hardening headers, and deleted only by an explicit decision | `attachments/*`, `StorageDriver` | `attachments.security`, `attachments.unreferenced-report` |
 | I9 | The server never writes to a directory outside its own volumes; overwrite decisions belong to the desktop host and the user | export job writes only under `EXPORTS_DIR`; Electron main handles the save dialog | `export-roundtrip.e2e` (desktop) |
 
@@ -20,37 +20,37 @@ This section is the build specification for everything that touches Markdown tex
 
 ### 2.1 Package shape
 
-`packages/markdown` is a compiled, isomorphic, DOM-free and Node-free ESM package (boundary tag `iso`, see `02-system-architecture.md`). It has no runtime dependency on React, `node:*`, `window` or `document`; the only globals it uses are `TextDecoder`, `TextEncoder`, `crypto.subtle` (for `contentHash` in the browser) and `structuredClone`-compatible plain objects. Everything it returns is plain JSON so it can cross a `postMessage` boundary unchanged.
+`packages/markdown` is a compiled, isomorphic, DOM-free and Node-free ESM package (boundary tag `iso`, see `02-system-architecture.md`). It has no runtime dependency on React, `node:*`, `window` or `document`. Text encoding uses `TextDecoder` and `TextEncoder`; hashing belongs to the host worker, which supplies `contentHash`. Parse, preview and projection results contain structured-cloneable data and cross a `postMessage` boundary unchanged; offset helpers may return typed arrays.
 
 ```
 packages/markdown/
-  package.json                     "@iridium/markdown", type: module, exports: { ".", "./search", "./schema" }
+  package.json                     "@iridium/markdown", type: module, exports: { ".", "./search", "./schema" }; narrow "./benchmark" helpers for S11 only
   src/index.ts                     public API (below)
-  src/version.ts                   export const PIPELINE_VERSION = 1
-  src/normalize.ts                 normalizeSource, restoreSource, detectEol
+  src/version.ts                   export const PIPELINE_VERSION = 2 (M1 already persisted 1)
+  src/normalize.ts                 normalizeSource, detectEol
+  src/restore.ts                   restoreSource
   src/prescan.ts                   prescan(text) → caps check before any parsing
   src/processor.ts                 createProcessor({flavor, softBreaks}) — unified pipeline factory (memoised per flavor tuple)
-  src/plugins/remark-gfm-iridium.ts
-  src/plugins/remark-frontmatter-iridium.ts   remark-frontmatter(['yaml']) + yaml 2.9.1 diagnostics
-  src/plugins/rehype-iridium-ids.ts           heading ids (github-slugger, 'user-content-' prefix)
-  src/plugins/rehype-iridium-positions.ts     data-line / data-offset / data-end-offset
-  src/plugins/rehype-iridium-links.ts         link classification via resolveLink → data-link-kind …
-  src/plugins/rehype-highlight-iridium.ts     rehype-highlight with the fixed language registry
+  src/markdown-it/                  token parser, source positions, mdast conversion, GFM tables/footnotes
+  src/frontmatter.ts               exact leading YAML interior + yaml 2.9.1 diagnostics
+  src/plugins/rehype-iridium.ts     heading ids, source positions and classified links
+  src/plugins/rehype-highlight-iridium.ts     lowlight core with the fixed language registry
   src/sanitize/schema.ts                      iridiumSanitizeSchema (exported as "./schema")
   src/parse.ts                                parseNote(text, opts) → ParsedNote
   src/preview.ts                              toPreviewTree(parsed, ctx) → PreviewTree (sanitized hast + blocks)
   src/project.ts                              project(parsed, text, opts) → NoteProjection
-  src/body-text.ts                            toBodyText(mdast, text) → { bodyText, lineCount }
+  src/body-text.ts                            toBodyText(mdast, text) → { text, runs, lineCount }
   src/links/resolve.ts                        resolveLink, normalizeLinkTarget, VaultIndex interface
   src/links/collect.ts                        collectLinks(mdast, text) → RawLink[]
   src/obsidian/detect.ts                      detectObsidianSyntax(text, mdast, ctx) → ObsidianFindings
-  src/obsidian/catalogue.ts                   one entry per construct (code, matcher, severity)
+  src/obsidian/catalogue.ts                   one entry per construct (severity and import-report code)
   src/obsidian/wikilink.ts                    parseWikilinkTarget('[[Folder/Note#Heading|Alias]]')
-  src/search/parseQuery.ts                    search query grammar (path:, file:, "phrases", -neg) — exported as "./search"
+  src/search/parse-query.ts                   parseQuery grammar (path:, file:, "phrases", -neg) — exported as "./search"
   src/flavors.ts                              FlavorPlugin interface, gfmFlavor, obsidianCompatFlavor
   src/html.ts                                 renderHtml(hast) via rehype-stringify — fixtures/tests and future HTML export only
-  test/                                       commonmark/, golden/, xss/, pathological/, obsidian/, prop/
-  fixtures/                                   commonmark-0.31.2.json, golden/*.md + .mdast.json + .hast.json + .html, hostile/*.md, obsidian-vault/
+  src/*.spec.ts                               canonical unit/property suites
+  test/                                      fixture adapters and independent remark oracle
+  fixtures/                                  golden/*.md + .mdast.json + .hast.json + .html + .projection.json + manifest.json; hostile/pathological descriptors
 ```
 
 Public API (all pure functions; no I/O; no timers):
@@ -58,44 +58,44 @@ Public API (all pure functions; no I/O; no timers):
 ```ts
 export function normalizeSource(input: Uint8Array | string, opts?: { invalidUtf8?: 'reject' | 'replace' }): NormalizedSource;
 export function restoreSource(text: string, meta: { hadBom: boolean; originalEol: Eol }): Uint8Array;
-export function prescan(text: string): PrescanResult;                    // caps, ≈4 ms/MB
+export function prescan(text: string): PrescanResult;                    // linear caps check; S11 records throughput
 export function parseNote(text: string, opts?: ParseOptions): ParsedNote; // mdast + frontmatter
-export function toPreviewTree(parsed: ParsedNote, ctx: PreviewContext): PreviewTree;   // sanitized
+export function toPreviewTree(parsed: ParsedNote, ctx?: PreviewContext): PreviewTree;   // sanitized
 export function project(parsed: ParsedNote, text: string, opts: ProjectOptions): NoteProjection;
 export function detectObsidianSyntax(text: string, mdast: Root, ctx?: DetectContext): ObsidianFindings;
-export function resolveLink(raw: string, note: NoteContext, index: VaultIndex): ResolvedLink;
+export function resolveLink(raw: string, note: NoteContext, index: VaultIndex, options?: { wikilink?: boolean }): ResolvedLink;
+export function linkResolutionSteps(raw: string, note: NoteContext, vaultId: string, options?: { wikilink?: boolean }): Generator<LinkLookup, ResolvedLink, readonly string[]>;
 export function normalizeLinkTarget(raw: string, note: NoteContext): NormalizedTarget;
-export function createProcessor(opts: ProcessorOptions): Processor;        // for tests and the worker entry files
+export function createProcessor(opts?: ProcessorOptions): MarkdownProcessor; // frozen, sanitizer last
 export { iridiumSanitizeSchema } from './sanitize/schema.ts';
 export { PIPELINE_VERSION } from './version.ts';
 export { gfmFlavor, obsidianCompatFlavor, type FlavorPlugin } from './flavors.ts';
 ```
 
-Consumers: `@iridium/markdown-react` (browser worker + React mapping), `apps/server/src/projection/worker.ts` (piscina), `apps/server/src/transfer/import-scan.worker.ts` (piscina), `apps/server/src/search/snippets.ts` (query parser only), `@iridium/editor` (none — the editor uses `@lezer/markdown`, see `07-client-applications.md`).
+M2 consumers are `apps/server/src/projection/worker.ts`, `apps/server/src/search/mapped-snippet.worker.ts`, and the pure query subpath used by `apps/server/src/search/{service,index}.ts`. Future consumers are the `@iridium/markdown-react` browser worker and import-scan worker. The editor uses `@lezer/markdown` and does not parse through this package (`07-client-applications.md`).
 
 ### 2.2 Dependency pins
 
-All versions are exact (`saveExact`, `catalog:` strict) and come from the research digest of 2026-09-11.
+All versions are exact (`saveExact`, `catalog:` strict). S11 executed A42's parser fallback after the original remark pipeline missed the representative preview budget following mitigation; its measurements and packaging patch are recorded in `docs/spikes/S11-markdown-engine-cost.md`. The independent remark baseline remains a development-only differential oracle.
 
 | Package | Version | Role | Notes |
 |---|---|---|---|
 | unified | 11.0.5 | processor core | |
-| remark-parse | 11.0.0 | Markdown → mdast (mdast-util-from-markdown 2.0.3, micromark 4.0.2) | |
-| remark-frontmatter | 5.0.0 | `yaml` node with raw value and position | only at offset 0 |
-| micromark-extension-gfm-table | 2.1.2 | tables | with mdast-util-gfm-table 2.0.0 |
-| micromark-extension-gfm-strikethrough | 2.1.0 | `~~` only (`singleTilde:false`) | with mdast-util-gfm-strikethrough 2.0.0 |
-| micromark-extension-gfm-footnote | 2.1.0 | `[^id]` footnotes | with mdast-util-gfm-footnote 2.1.0 |
-| micromark-extension-gfm-task-list-item | 2.1.0 | `- [ ]` / `- [x]` | with mdast-util-gfm-task-list-item 2.0.0 |
+| markdown-it | 15.0.2, pinned packaging patch | token engine behind the unchanged mdast contract | imports confined to `src/markdown-it/`; shared grammar, no HTML renderer/linkifier/URL recoder in the token entry |
+| remark-parse, remark-frontmatter | 11.0.0, 5.0.0 | independent development-only mdast/position oracle | previous pipeline retained in `test/remark-baseline.ts` |
+| micromark-extension-gfm-table | 2.1.2 | development-only table oracle | with mdast-util-gfm-table 2.0.0 |
+| micromark-extension-gfm-strikethrough | 2.1.0 | development-only `singleTilde:false` oracle | with mdast-util-gfm-strikethrough 2.0.0 |
+| micromark-extension-gfm-footnote | 2.1.0 | development-only footnote oracle | with mdast-util-gfm-footnote 2.1.0 |
+| micromark-extension-gfm-task-list-item | 2.1.0 | development-only task-item oracle | with mdast-util-gfm-task-list-item 2.0.0 |
 | mdast-util-gfm-autolink-literal | 2.0.1 | **mdast transform only** (linear) | the micromark syntax extension is quadratic per paragraph and is never registered |
 | remark-rehype | 11.1.2 | mdast → hast (`allowDangerousHtml:false`, mdast-util-to-hast 13.2.1) | |
-| rehype-highlight | 7.0.2 | lowlight 3.3.0 / highlight.js 11.12.0, class output | `detect:false` |
+| lowlight | 3.3.0 | fixed 21-language transform, class output | no automatic detection or implicit common registry |
 | highlight.js | 11.12.0 | language grammars (BSD-3-Clause) | registered individually, never `lib/common` |
 | rehype-sanitize | 6.0.0 | hast-util-sanitize 5.0.2 | **last stage** |
 | rehype-stringify | 10.0.1 | hast → HTML string | fixtures and future HTML export only |
 | github-slugger | 2.0.0 | heading slugs | one slugger instance per document |
 | yaml | 2.9.1 | frontmatter (`parseDocument`, core schema) | `gray-matter` is banned |
 | mdast-util-to-string | 4.0.0 | heading text, alt text | not used for `body_text` (§3.2) |
-| unist-util-visit | 5.1.0 | tree walks | |
 | remark-breaks | 4.0.0 | soft line breaks (`vaults.soft_breaks`, preview only) | |
 | @types/mdast 4.0.4, @types/hast 3.0.5 | | types | |
 | hast-util-to-jsx-runtime | 2.3.6 | hast → React 19 (`@iridium/markdown-react`) | `tableCellAlignToStyle:false` |
@@ -103,7 +103,7 @@ All versions are exact (`saveExact`, `catalog:` strict) and come from the resear
 | piscina | 5.3.2 | server worker pool (`apps/server`) | |
 | dompurify | 3.4.15 | browser HTML-string sinks only (`@iridium/markdown-react`) | never on the server; explicit `CUSTOM_ELEMENT_HANDLING` |
 
-Banned by lint and by the CI license scan: `remark-gfm` as a black box (its autolink syntax extension), `gray-matter`, `remark-stringify`, `mdast-util-to-markdown`, `markdown-it`, `shiki`, `isomorphic-dompurify`, `remark-obsidian` (GPL-3.0) and any GPL/AGPL/LGPL remark/rehype plugin. `remark-math`, `rehype-katex`, `mermaid` are post-MVP and not installed.
+Banned by lint and by the CI license scan: `remark-gfm` as a black box (its autolink syntax extension), `gray-matter`, `remark-stringify`, `mdast-util-to-markdown`, `shiki`, `isomorphic-dompurify`, `remark-obsidian` (GPL-3.0) and any GPL/AGPL/LGPL remark/rehype plugin. `markdown-it` and `markdown-it/parser` are permitted only inside `packages/markdown/src/markdown-it/` for the executed A42 fallback. `remark-math`, `rehype-katex`, `mermaid` are post-MVP and not installed.
 
 ### 2.3 Pipeline stages
 
@@ -112,14 +112,14 @@ flowchart LR
   A[bytes or string] --> N[normalizeSource<br/>LF, no BOM, U+0000→U+FFFD]
   N --> P[prescan<br/>size / nesting caps]
   P -->|too_large / too_complex| S[status only,<br/>raw markdown kept]
-  P --> R[remark-parse + remarkGfmIridium<br/>+ remark-frontmatter]
+  P --> R[markdown-it tokens → positioned mdast<br/>GFM adapter + leading YAML]
   R --> M[(mdast)]
   M --> PJ[project<br/>outline · body text · links · tasks · findings]
   M --> RH[remark-rehype<br/>allowDangerousHtml:false]
   RH --> T1[rehype-iridium-ids]
   T1 --> T2[rehype-iridium-positions]
   T2 --> T3[rehype-iridium-links<br/>resolveLink]
-  T3 --> H[rehype-highlight<br/>fixed registry]
+  T3 --> H[lowlight core<br/>fixed registry]
   H --> Z[rehype-sanitize<br/>iridiumSanitizeSchema — LAST]
   Z --> V[(sanitized hast + blocks)]
   V --> RE[hast-util-to-jsx-runtime<br/>@iridium/markdown-react]
@@ -133,7 +133,7 @@ Stage table:
 |---|---|---|---|
 | 0 | `normalizeSource` | bytes/string → `{text, hadBom, originalEol, warnings}` | §4 |
 | 1 | `prescan` | text → ok / `too_large` / `too_complex` | `MARKDOWN_SOURCE_MAX_BYTES` 2 MiB of UTF-8, `NOTE_HARD_MAX_UTF16` 2 097 152 UTF-16 code units, blockquote depth ≤ 32, list indent ≤ 64 columns, ≤ 20 000 lines per paragraph (A.1) |
-| 2 | remark-parse + `remarkGfmIridium` + `remarkFrontmatterIridium` | text → mdast | §2.4, §2.5 |
+| 2 | `remarkMarkdownIt` token adapter + GFM transforms + leading YAML | text → mdast | §2.4, §2.5 |
 | 3 | `remark-breaks` | mdast → mdast | only when `softBreaks` is true and only in `toPreviewTree` (never in `project`) |
 | 4 | remark-rehype | mdast → hast | `allowDangerousHtml:false`, `clobberPrefix:'user-content-'` (default), `footnoteLabel:'Footnotes'`, `footnoteLabelId:'user-content-footnote-label'`, `footnoteLabelTagName:'h2'`, `footnoteLabelProperties:{className:['sr-only']}`, `footnoteBackLabel` default |
 | 5 | `rehypeIridiumIds` | heading `id` | §2.6 |
@@ -144,22 +144,17 @@ Stage table:
 
 `project()` stops after stage 2 (it works on mdast and the source text); `toPreviewTree()` runs all stages. Both are pure and deterministic: identical input and options produce identical output (asserted by golden fixtures and by the `PIPELINE_VERSION` policy in §2.13).
 
-### 2.4 `remarkGfmIridium`
+### 2.4 GFM token adapter and literal autolinks
 
-A first-party unified plugin (`src/plugins/remark-gfm-iridium.ts`) that registers, on `this.data()`:
+`src/markdown-it/parser.ts` attaches the parser to unified. It uses the pinned `markdown-it/parser` token entry and first-party token-to-mdast conversion, GFM table and footnote rules, task-item extraction and double-tilde strikethrough. Source coordinates remain UTF-16 offsets in the unchanged normalized source; position repair is tested against all CommonMark examples, committed GFM goldens and independent coordinate properties. The packaging patch shares upstream grammar with the full root API and changes no grammar algorithm.
 
-```ts
-micromarkExtensions: [gfmTable(), gfmStrikethrough({ singleTilde: false }), gfmFootnote(), gfmTaskListItem()]
-fromMarkdownExtensions: [gfmTableFromMarkdown(), gfmStrikethroughFromMarkdown(), gfmFootnoteFromMarkdown(), gfmTaskListItemFromMarkdown(), gfmAutolinkLiteralFromMarkdown()]
-```
-
-Only the `fromMarkdown` extension of `mdast-util-gfm-autolink-literal` is registered; its `transforms` pass converts `https://…`, `www.…` and `mailto:` literals inside text nodes after parsing in linear time. The micromark autolink-literal syntax extension is not installed. `singleTilde:false` matches Obsidian and GFM as written by humans (`~one~` stays text). No `toMarkdown` extension is registered anywhere (I2).
+Only the `transforms` pass of `mdast-util-gfm-autolink-literal` runs after parsing. It converts `https://…`, `www.…` and mail address literals inside text nodes in linear time; the micromark autolink-literal syntax extension is never registered. `~one~` stays text and `~~two~~` is deletion. No `toMarkdown` extension is registered anywhere (I2). The old `remarkGfmIridium` configuration survives only in the independent development oracle, not the production dependency graph.
 
 Task list items: GFM semantics only — `- [ ]` unchecked, `- [x]`/`- [X]` checked. Any other bracket content (`- [/]`, `- [-]`) is ordinary list text and is reported by the Obsidian detector as `non_gfm_task_state`.
 
 ### 2.5 Frontmatter
 
-`remark-frontmatter(['yaml'])` recognises a YAML block only at offset 0 of the normalized text (which is why the BOM is stripped first). The resulting `yaml` mdast node carries the raw block and its position. `parseNote` returns:
+The token adapter recognises a YAML block only at offset 0 of the normalized text (which is why the BOM is stripped first), preserving the original remark-frontmatter fence semantics. The resulting `yaml` mdast node carries the raw block and its position. `parseNote` returns the following metadata in addition to `source`, `flavor` and `prescan`:
 
 ```ts
 interface ParsedNote {
@@ -174,15 +169,15 @@ interface ParsedNote {
 }
 ```
 
-Parsing uses `yaml` 2.9.1 `parseDocument(raw, { maxAliasCount: 100, uniqueKeys: true, schema: 'core' })`: dates and `yes`/`no` stay strings (matching Obsidian's property storage), duplicate keys and alias bombs become diagnostics. `doc.errors.length > 0` → `data = null`, `frontmatter_error` is set in the projection, the note remains searchable and renderable (the block is simply not rendered). The raw block is never rewritten; property edits (post-MVP) are text edits inside `range`.
+Parsing uses `yaml` 2.9.1 `parseDocument(raw, { uniqueKeys: true, schema: 'core', prettyErrors: false })`, then `toJS({ maxAliasCount: LIMITS.YAML_MAX_ALIAS_COUNT })` (100): dates and `yes`/`no` stay strings (matching Obsidian's property storage), duplicate keys and alias bombs become diagnostics. Invalid or cyclic/non-finite JSON metadata also yields `data = null`; `frontmatter_error` is set in the projection, and the note remains searchable and renderable (the block is simply not rendered). The raw block is never rewritten; property edits (post-MVP) are text edits inside `range`.
 
-Normalisation for the index only (never written back): `tags` (and deprecated `tag`) → array of strings, comma-separated strings split, leading `#` stripped, NFC, lowercased, entries longer than 64 characters or more than 200 entries dropped with a diagnostic; `aliases` (and deprecated `alias`) → array of strings, NFC, entries longer than 255 characters dropped, at most 100. These caps exist because `note_projections` indexes `fm_tags` as `CAST(fm_tags AS CHAR(64) ARRAY)` and `fm_aliases` as `CHAR(255) ARRAY`.
+Normalisation for the index only (never written back): `tags` (and deprecated `tag`) → array of strings, comma-separated strings split, leading `#` stripped, NFC, lowercased, entries longer than 64 characters or more than 200 entries dropped with a diagnostic; `aliases` (and deprecated `alias`) → array of strings, NFC, entries longer than 255 characters dropped, at most 100. These bounds keep projection JSON and the derived `note_projection_terms` memberships finite. Lookup keys are folded separately from the retained alias display strings; the source block is unchanged.
 
 ### 2.6 Iridium rehype transforms
 
 `rehypeIridiumIds`: for every `h1`–`h6`, `id = 'user-content-' + slugger.slug(headingText)` where `headingText = toString(node)` over the mdast heading (so inline code and emphasis contribute their text) and `slugger` is a fresh `GithubSlugger` per run (dedupe counters `-1`, `-2`). The same slugs are stored in the outline projection (§3.4) so anchors in the preview, `#fragment` link resolution, MCP `heading` addressing and `data-fragment` all agree.
 
-`rehypeIridiumPositions`: every element whose hast node has `position` receives `data-line` (1-based start line), `data-offset` (UTF-16 start offset in the normalized text) and `data-end-offset`. Top-level children of the root are the **blocks** used for memoisation (§2.9) and for editor⇄preview scroll sync (`07-client-applications.md`). micromark reports offsets as UTF-16 code units after the BOM is removed, which is exactly the unit Y.Text and CodeMirror use, so `data-offset` addresses Y.Text positions directly (I1 makes this true).
+`rehypeIridiumPositions`: every element whose hast node has `position` receives `data-line` (1-based start line), `data-offset` (UTF-16 start offset in the normalized text) and `data-end-offset`. Top-level children of the root are the **blocks** used for memoisation (§2.9) and for editor⇄preview scroll sync (`07-client-applications.md`). The token adapter preserves offsets as UTF-16 code units after the BOM is removed, exactly the unit Y.Text and CodeMirror use, so `data-offset` addresses Y.Text positions directly (I1 makes this true).
 
 `rehypeIridiumLinks`: for every `a` (href) and `img` (src), `resolveLink(raw, noteContext, vaultIndex)` (§5.1) classifies the target and sets:
 
@@ -200,13 +195,13 @@ The transform runs **before** the sanitizer; the sanitizer then enforces the pro
 
 ### 2.7 Highlighting
 
-`rehypeHighlightIridium` wraps `rehype-highlight` 7.0.2 with `detect:false`, `prefix:'hljs-'`, `plainText:['txt','text','plaintext','plain','mermaid','math','latex','dataview','dataviewjs','query','base','canvas']` and a fixed `languages` registry built from `highlight.js/lib/languages/*` (never `lib/common`):
+`rehypeHighlightIridium` uses lowlight 3.3.0's core with no automatic detection, `hljs-` classes, `plainText:['txt','text','plaintext','plain','mermaid','math','latex','dataview','dataviewjs','query','base','canvas']` and a fixed registry built from `highlight.js/lib/languages/*` (never `lib/common`). S11 found that the ordinary rehype-highlight entry retained its default common registry; this equivalent fixed transform avoids that unused payload while preserving reviewed output:
 
-`javascript, typescript, xml (html/xml/svg/jsx/tsx via aliases), json, yaml, bash, python, java, csharp, go, rust, sql, css, markdown, diff, ini (toml alias), powershell, dockerfile, c, cpp, plaintext` — 21 grammars, measured ≈35 KB gzip in the preview worker.
+`javascript, typescript, xml (html/xml/svg via aliases), json, yaml, bash, python, java, csharp, go, rust, sql, css, markdown, diff, ini (toml alias), powershell, dockerfile, c, cpp, plaintext` — all 21 grammars remain in S11's complete measured preview payload; JSX/TSX use the JavaScript/TypeScript aliases below.
 
 Aliases (`aliases` option): `{ javascript: ['js','mjs','cjs','jsx'], typescript: ['ts','mts','cts','tsx'], xml: ['html','xhtml','svg','rss','atom','vue'], bash: ['sh','shell','zsh','console'], python: ['py'], csharp: ['cs'], rust: ['rs'], powershell: ['ps1','pwsh'], dockerfile: ['docker'], markdown: ['md'], json: ['jsonc','json5'], ini: ['toml'], yaml: ['yml'], plaintext: ['txt','text'] }`.
 
-Unknown languages are left unhighlighted with `class="hljs language-<x>"` (rehype-highlight warns, never throws); the raw highlighter is never called with user-supplied names. The language class survives the sanitizer through the `code[className]` rule below; all colour comes from CSS classes (CSP-friendly, no inline styles). `code_langs` in the projection records the raw (lowercased, ≤ 32 chars) info strings so vault statistics can show which languages people use.
+Unknown languages are left unhighlighted with `class="hljs language-<x>"`; only a registered language reaches the highlighter. The language class survives the sanitizer through the `code[className]` rule below; all colour comes from CSS classes (CSP-friendly, no inline styles). `code_langs` in the projection records the raw (lowercased, ≤ 32 chars) info strings so vault statistics can show which languages people use.
 
 ### 2.8 Sanitization — the security boundary
 
@@ -281,11 +276,11 @@ There is no `dangerouslySetInnerHTML` anywhere in `@iridium/markdown-react` or `
 
 ### 2.10 Pre-scan caps and pathological input
 
-`prescan(text)` is a single linear pass (≈4 ms/MB) run before any parse in every context. Every constant below is the one named in the limits policy of `02-system-architecture.md` §7, which is the sole naming authority for `@iridium/contracts/limits.ts`; this section defines no number and no name of its own beyond the two caps of D08-03:
+`prescan(text)` is linear in source length and runs before any parse in every context; its measured target is at least 250 MB/s. Native UTF-8 counting uses `TextEncoder.encodeInto` with reusable bounded scratch space, followed by the line-based syntax checks. Every policy constant below is defined once in `@iridium/contracts/markdown-limits` and aggregated into central `LIMITS`; `02-system-architecture.md` §7 remains the naming authority. The implementation buffer size is not a content limit.
 
 | Check | Limit (from `@iridium/contracts/limits.ts`) | Result |
 |---|---|---|
-| UTF-8 byte length of the source (`new TextEncoder().encode(text).length`, counted in the same pass) | `MARKDOWN_SOURCE_MAX_BYTES = 2_097_152` bytes | `too_large` (`detail: 'source_bytes'`) |
+| Exact UTF-8 byte length, including replacement semantics for lone surrogates | `MARKDOWN_SOURCE_MAX_BYTES = 2_097_152` bytes | `too_large` (`detail: 'source_bytes'`) |
 | `text.length` | `NOTE_HARD_MAX_UTF16 = 2_097_152` UTF-16 code units | `too_large` |
 | leading `>` count per line (after up to 3 spaces of indentation, repeated) | `MARKDOWN_BLOCKQUOTE_MAX_DEPTH = 32` | `too_complex` (`detail: 'blockquote_depth', line`) |
 | leading indentation columns of a list-marker line (tabs = 4 columns) | `MARKDOWN_LIST_INDENT_MAX_COLS = 64` | `too_complex` (`detail: 'list_indent'`) |
@@ -295,7 +290,7 @@ There is no `dangerouslySetInnerHTML` anywhere in `@iridium/markdown-react` or `
 
 The byte check is what gives the "2 MiB source" row of the limits policy an enforcement site: the two 2 097 152 caps are not the same limit, because 2 097 152 UTF-16 code units of CJK text are about 6 MiB of UTF-8. `NOTE_HARD_MAX_UTF16` governs whether a note may *exist* (`NoteService.initialize`, restore, repair, import commit → `422 note_oversized`); `MARKDOWN_SOURCE_MAX_BYTES` governs whether it is *parsed*, so a note that is legal but too large in bytes keeps its text and carries `status='too_large'` instead of being refused.
 
-Rejected notes are never parsed: the projection row gets `status='too_large'|'too_complex'`, `note_projections.markdown` still holds the text (REST, MCP, search on raw text via the source-line scan, and export keep working), derived fields are `NULL`, the preview shows "Preview unavailable: document exceeds the complexity limit" with the detail, and a metric `iridium_projection_duration_seconds{status}` counts it. The known micromark worst cases (unbalanced `*a_` emphasis at 20 000 repetitions, ~13–20 s; 3 000-deep `>`; 1 000-deep lists) are covered either by these caps or by the worker timeout in §2.11; the pathological suite (`test/pathological/*.spec.ts`) asserts that every corpus entry is rejected by `prescan` or completes/aborts inside the budget.
+Rejected notes are never parsed: the projection row gets `status='too_large'|'too_complex'`, `note_projections.markdown` still holds the durable text for reads/export, derived fields are `NULL`, and the preview can explain the admission detail. Search retains the note's title with an empty derived body; a source-line snippet scan does not independently create a FULLTEXT hit. `iridium_projection_duration_seconds{status}` records the outcome. S11 found that `'*a_' × 20000` timed out in the old engine despite admission, and completes within the worker deadlines after the fallback. The 3,000-deep blockquote and excessive indentation are rejected by caps; exactly 20,000 consecutive prose lines are admitted and 20,001 are refused. `markdown.pathological.unit` and real-worker integration prove rejection or bounded completion/abort, not a claim that every adversarial string is rejected before parsing.
 
 ### 2.11 Worker isolation
 
@@ -316,18 +311,17 @@ The client (`client.ts`) debounces `render` by source size — 150 ms ≤ 64 KB,
 **Server (`apps/server/src/projection/pool.ts`)** — one piscina 5.3.2 pool for the whole process:
 
 ```ts
-new Piscina({
-  filename: new URL('./worker.mjs', import.meta.url).href,   // separate tsdown entry: apps/server/src/projection/worker.ts
-  minThreads: 1,
-  maxThreads: env.PROJECTION_WORKERS,                         // default max(1, os.availableParallelism() - 1)
-  idleTimeout: 60_000,
-  maxQueue: 1_000,
-  resourceLimits: { maxOldGenerationSizeMb: 512, stackSizeMb: 8 },
+new ProjectionPool({
+  workers: env.PROJECTION_WORKERS,
+  timeoutMs: env.PROJECTION_TIMEOUT_MS,
+  clock,
 });
-pool.run(task, { signal: AbortSignal.timeout(env.PROJECTION_TIMEOUT_MS) });   // default 10_000
+// pool.ts owns the separate projection.worker.mjs entry, LIMITS.PROJECTION_QUEUE_MAX,
+// worker heap/stack/idle bounds and a Clock-driven AbortController per admitted task.
+pool.run({ markdown, pipelineVersion: PIPELINE_VERSION });
 ```
 
-An aborted task terminates its worker thread (piscina semantics) and the pool respawns; the caller records `status='timeout'` and increments `iridium_projection_timeouts_total`. `maxQueue` overflow rejects the enqueue; the note keeps `status='pending'` and is picked up by the `reindex --stale` sweep (§3.7) — nothing is lost because the raw markdown was already committed by the compactor. The same pool serves the import scan worker (`transfer/import-scan.worker.ts`) and the attachment reference scan (`attachments/reference-scan.worker.ts`); each is its own tsdown entry with `@iridium/markdown` inlined, so a worker can never run a different `PIPELINE_VERSION` than the server that spawned it.
+An aborted task terminates its worker thread and the pool awaits its terminal result before replacement; the preparer records `status='timeout'` and increments `iridium_projection_timeouts_total`. Admission counts executing and queued tasks. Overflow yields an empty prepared projection with `status='pending'`; the caller still commits its durable raw markdown and revision atomically (§3.5), then `reindex --stale` retries it. Pool shutdown is a lifecycle error rather than permission to start new work. The same pool accepts the mapped-snippet and attachment reference-scan worker entries; the future import scanner uses the same seam. Worker entries inline `@iridium/markdown` and verify `PIPELINE_VERSION` where a task carries it.
 
 ### 2.12 Flavors and the plugin seam
 
@@ -345,11 +339,13 @@ export const gfmFlavor: FlavorPlugin = { id: 'gfm', remark: [], rehype: [], sani
 export const obsidianCompatFlavor: FlavorPlugin = { ...gfmFlavor, id: 'obsidian-compat' };   // MVP: identical rendering
 ```
 
-`createProcessor` composes `[remarkParse, remarkGfmIridium, remarkFrontmatterIridium, ...flavor.remark, softBreaks ? remarkBreaks : null, remarkRehype, rehypeIridiumIds, rehypeIridiumPositions, rehypeIridiumLinks, ...flavor.rehype, rehypeHighlightIridium, [rehypeSanitize, mergeSchema(iridiumSanitizeSchema, flavor.sanitizeExtension)]]`. `mergeSchema` refuses to add `style`, `name`, event-handler attributes or any protocol (unit-tested), so a flavor cannot weaken the boundary. The seam is prepared but unused at MVP by decision rather than by default: **G2 was answered *no* on 2026-09-12** (`14-risks-and-open-questions.md` §G), so read-only rendering of Obsidian syntax does not ship in MVP and `obsidianCompatFlavor` stays `{ ...gfmFlavor, id: 'obsidian-compat' }` — `remark: []`, `rehype: []`, `sanitizeExtension: {}` — for the whole of 1.0, so the two flavors render identically and `markdown_flavor` changes what a vault is *recorded* as and nothing else. `markdown.flavor-parity.unit` asserts exactly that, so the seam cannot acquire a plugin without a deliberate change. When the post-MVP flavor flag is built it adds the first-party MIT plugins `remarkWikiLink`, `remarkCallout`, `remarkHighlight`, `remarkComment` and extends `tagNames` with `details`, `summary`, `mark`, `div`; the shape is fixed now so that work touches no MVP file except `flavors.ts` and the sanitizer extension it merges.
+`createProcessor` composes the token parser, `flavor.remark`, shared position/outline context, optional preview-only `remarkBreaks`, `remarkRehype`, the Iridium heading/position/link transforms, `flavor.rehype`, fixed highlighting and finally `rehypeSanitize` with `mergeSanitizeSchema(flavor.sanitizeExtension)`. The schema merger refuses `style`, `name`, event-handler attributes or widened protocols (unit-tested). **G2 was answered no on 2026-09-12** (`14-risks-and-open-questions.md` §G), so `obsidianCompatFlavor` stays `{ ...gfmFlavor, id: 'obsidian-compat' }` with empty plugin arrays and extension throughout 1.0. `markdown.flavor-parity.unit` asserts identical rendering. Future first-party Obsidian renderers attach through this seam before sanitization; none ships in M2.
 
 ### 2.13 `PIPELINE_VERSION`
 
-`PIPELINE_VERSION` is an integer in `src/version.ts` and is written into every `note_projections.pipeline_version` row and into `schema_meta.pipeline_version`. Bump rule: any change that alters the output of `project()` or `toPreviewTree()` for at least one golden fixture (the golden test fails until either the fixture or the version is updated; a CI check refuses a fixture change without a version bump, `markdown.pipeline-version.guard`). On boot, if `schema_meta.pipeline_version < PIPELINE_VERSION`, the server writes the new value and enqueues `reindex --pipeline-version` (background, throttled to `REINDEX_RATE_PER_SECOND` default 20 notes/s, oldest projections first). Dependency upgrades of micromark/remark/rehype/highlight.js/yaml always bump the version because they can change output.
+`PIPELINE_VERSION` is the positive integer in `src/version.ts`. M2 writes **2**, because M1 already persisted version 1. Any change that can alter parsed, projected or sanitized output requires an advance; `markdown.pipeline-version.guard` compares the actual tracked/staged/deleted/untracked implementation against Git history, including the flat files and adapter/plugin directories. Golden metadata and byte manifests carry the same current version. Parser/rehype/highlight.js/yaml upgrades also require review and a version bump when output can change.
+
+Each projection row records the version that produced it. `schema_meta.pipeline_version` is the **completed global rebuild marker**, not the running binary version. Boot only enqueues a throttled `reindex --pipeline-version` job when the marker is older; it never advances the marker. After a complete unscoped rebuild, a fenced transaction rechecks the full eligible selection independent of the saved cursor and advances the marker only if no old/missing/retry-status row remains. Cancellation, suffix resume, a skipped preparation, a scoped job or worker failure cannot falsely mark the global upgrade complete. Selection uses bounded pages ordered by note id (§3.7).
 
 ## 3. Server-side projections
 
@@ -359,32 +355,26 @@ Projections are **derived, rebuildable data**. The Yjs state in `note_docs`/`not
 
 | Producer | Trigger | Path |
 |---|---|---|
-| Compactor | after a compaction transaction COMMITs (`05-collaboration-and-durability.md`) | `projection/enqueue.ts` → piscina → `projection/writer.ts` |
-| `NoteService.initialize` | note creation and import commit | the worker runs before the creating transaction commits and its result is written with `revision = 1` inside that transaction |
+| Compactor | before acquiring the compaction transaction's row locks (`05-collaboration-and-durability.md`) | captured durable source → `projection/prepare.ts` → pool; `projection/write.ts` + `derived.ts` commit the result inside the compaction transaction |
+| `NoteService.initialize` | note creation and import commit | prepare in the worker before the creating transaction; write source and derived data with `revision = 1` inside that transaction |
 | `iridium reindex` | `--vault`, `--stale`, `--pipeline-version`, `--note`, or the hourly maintenance sweep | same pool, throttled |
 
-The task payload is self-contained so the worker needs no database access:
+The actual server task in `projection/worker.ts` is self-contained and needs no database or structural index:
 
 ```ts
 interface ProjectionTask {
-  noteId: string;                  // canonical lowercase UUID
-  vaultId: string;
-  revision: number;                // note_updates.seq the markdown reflects
-  markdown: string;                // already LF-normalised text taken from the Y.Text
-  note: NoteContext;               // { noteId, vaultId, path, parentPath, name }
-  vault: { flavor: MarkdownFlavor; softBreaks: boolean; attachmentFolder: string };
-  index: VaultIndexSnapshot;       // §5.2 — note paths, basenames, attachment path hints, aliases
-  pipelineVersion: number;         // asserted equal to PIPELINE_VERSION inside the worker
+  readonly markdown: string;       // committed/captured normalized source
+  readonly pipelineVersion: number; // checked against the inlined worker version
 }
 ```
 
-`VaultIndexSnapshot` is built by `projection/index-snapshot.ts` (one recursive CTE over `nodes` plus one query over live `attachments`) and cached in-process keyed by `(vaultId, tree_version, attachmentsVersion)`, where `attachmentsVersion = MAX(version)` over the vault's live attachment rows. A tree or attachment change invalidates it; the `tree-changed` broadcast already carries `treeVersion`, so the browser preview worker invalidates its own copy by the same key (`07-client-applications.md`).
+The worker hashes and parses the source and returns raw link targets and positions. The committing transaction resolves those links against its current vault context through `projection/index-snapshot.ts`, so prepare-before-create and concurrent structural edits do not require a stale pretransaction index. A bounded snapshot is used below the capacity limit; above it the shared resolver generator yields indexed SQL lookups (§5.2). No parser runs in the transaction. The package also exports a richer `ProjectionTask` shape containing note/vault/revision/context/snapshot for hosts that already have that context; the server's production pool deliberately uses the narrower task above.
 
 The worker returns one value:
 
 ```ts
 interface NoteProjection {
-  status: 'ok' | 'too_large' | 'too_complex' | 'timeout' | 'error';
+  status: 'ok' | 'pending' | 'too_large' | 'too_complex' | 'timeout' | 'error' | 'invalid_content';
   pipelineVersion: number;
   contentHash: string;             // hex SHA-256 of the LF markdown
   sizeChars: number;               // UTF-16 code units
@@ -399,7 +389,7 @@ interface NoteProjection {
   codeLangs: string[];             // lowercased info strings, <= 32 chars, deduplicated, <= 50 entries
   bodyText: string;                // §3.2 — what FULLTEXT indexes
   bodyRuns: TextRun[];             // §3.3 — plain-text to source offset map (not persisted)
-  links: RawLink[];                // §5.3
+  links: RawLink[];                // source target/range plus a resolution; server resolves again transactionally
   obsidian: ObsidianFindings;      // §6
   timings: { prescanMs: number; parseMs: number; projectMs: number };
 }
@@ -432,11 +422,11 @@ Field-to-column mapping (the writer only copies and guards):
 | `link`, `linkReference`, `emphasis`, `strong`, `delete`, `footnoteReference` | nothing of their own; children are visited |
 | `definition`, `footnoteDefinition` label | nothing (link definitions are not prose; footnote bodies are visited as blocks) |
 | `yaml` | **skipped entirely** |
-| `html` | **skipped entirely** (it is not rendered either) |
+| `html` | **skipped entirely** for search; preview emits its source as literal text, never as an HTML element |
 | `break`, `thematicBreak` | a single `\n`, synthetic run |
 | every other block node (`paragraph`, `heading`, `listItem`, `tableCell`, `blockquote`, `footnoteDefinition`) | a single `\n` after its children, synthetic run |
 
-Deliberate consequences: a heading term is indexed both in `note_search.title` and in `body_text`, so it ranks twice; table cells are separated so `"alpha beta"` cannot match two neighbouring cells; frontmatter is reachable only through `fm_tags`/`fm_aliases` and the `path:`/`file:` operators, never as prose (`tag:` and `line:` operators are reserved in `@iridium/markdown/search/parseQuery.ts`).
+Deliberate consequences: a heading term is indexed both in `note_search.title` and in `body_text`, so it ranks twice; table cells are separated so `"alpha beta"` cannot match two neighbouring cells; frontmatter is reachable only through `fm_tags`/`fm_aliases` and the `path:`/`file:` operators, never as prose (`tag:` and `line:` operators are reserved in `@iridium/markdown/search`, implemented by `src/search/parse-query.ts`).
 
 `note_search.title` is the **effective title** `headingTitle ?? nodes.name`, read in the same transaction as the write; for notes without an H1 a structural rename also updates it (A38).
 
@@ -447,17 +437,17 @@ No truncation is applied: `body_text` is `MEDIUMTEXT` (16 MiB) and the hard note
 Matches are found in `body_text`, but every user-facing artefact (snippet line numbers, jump-to-match, agent line ranges) must address the **Markdown source**. `toBodyText` therefore emits a monotonic run map:
 
 ```ts
-/** [bodyOffset, sourceOffset, length] — both coordinates are UTF-16 code units, both strictly increasing. */
+/** [bodyOffset, sourceOffset, length] — UTF-16 units; body offsets increase, source anchors never decrease. */
 export type TextRun = readonly [number, number, number];
 
 export interface BodyTextResult { text: string; runs: TextRun[]; lineCount: number }
 
 /** Maps a bodyText offset back to a source offset; synthetic separators map to the end of the preceding run. */
-export function sourceOffsetOf(runs: TextRun[], bodyOffset: number): number;    // binary search
+export function sourceOffsetOf(runs: readonly TextRun[], bodyOffset: number): number; // binary search
 export function lineOf(lineStarts: Int32Array, sourceOffset: number): number;   // 1-based, binary search
 ```
 
-One run per contributing node value keeps the map small (a 100 KB note yields a few thousand runs). The map is **not stored**: it is fully derivable from `note_projections.markdown` plus `PIPELINE_VERSION`, and persisting it would add a second artefact to keep consistent for no read benefit. It is recomputed in the projection worker only when the snippet locator needs it (§3.6). `markdown.body-text-map.prop` asserts, for generated documents, that `markdown.slice(sourceOffsetOf(runs, i), …)` starts with the character at `bodyText[i]` for every non-synthetic offset `i`.
+Contiguous literal source spans share one run. Synthetic separators and decoded characters without a literal source counterpart have zero-length anchor runs, so they never claim a false source span. The map is **not stored**: it is fully derivable from `note_projections.markdown` plus `PIPELINE_VERSION`, and persisting it would add a second artefact to keep consistent for no read benefit. It is recomputed in the projection worker only when the snippet locator needs it (§3.6). `markdown.body-text-map.prop` asserts, for generated documents, that `markdown.slice(sourceOffsetOf(runs, i), …)` starts with the character at `bodyText[i]` for every non-synthetic offset `i`.
 
 ### 3.4 Outline, tasks and statistics
 
@@ -471,28 +461,24 @@ One run per contributing node value keeps the map small (a 100 KB note yields a 
 
 ### 3.5 The projection write transaction
 
-`projection/writer.ts` runs one transaction on `dbApp` per note:
+`projection/write.ts` owns the monotonic source row and delegates the derived half to `projection/derived.ts`. Both require the caller's transaction when a prepared projection is present. CPU work is complete before locks are acquired; the transaction owns only bounded persistence and structural link resolution.
 
-```sql
-START TRANSACTION;
-SELECT projected_seq FROM note_docs WHERE note_id = ? FOR UPDATE;
--- continue only when projected_seq < :revision (or <= :revision for an idempotent reindex)
-INSERT INTO note_projections (note_id, revision, markdown, content_hash, /* … */) VALUES (/* … */) AS new
-  ON DUPLICATE KEY UPDATE revision = new.revision, markdown = new.markdown /* … */;
-REPLACE INTO note_search (note_id, vault_id, title, body_text, revision, updated_at) VALUES (/* … */);
-DELETE FROM note_links WHERE from_note_id = ?;
-INSERT INTO note_links (from_note_id, vault_id, revision, ordinal, kind, raw_target, /* … */) VALUES /* … */;
-UPDATE note_docs SET projected_seq = ? WHERE note_id = ? AND projected_seq < ?;
-COMMIT;
-```
+Publication first acquires the owner fence and then a **shared vault lock before any consistent snapshot read or child-row lock**, through `projection/lock-vault.ts`. The immutable vault id is captured before publication begins, so waiting at the gate cannot retain a snapshot from before a concurrent structural writer. Structural mutations hold the exclusive vault lock; initializers already inside such a transaction retain that stronger gate.
 
-Rules:
+The complete order is owner fence → vault shared/exclusive gate → parent `nodes` → `notes` → `note_docs` → `note_projections` → `note_projection_terms` → `note_search` → `note_links` → revisions → audit chain. A path skips relations it does not touch and preserves this order. The vault gate stabilizes target structure while publication reads its link index and writes foreign-key references; parent/term ordering alone is insufficient to provide that guarantee. Raw update appends and explicit revision checkpoints do not acquire this publication gate. The persistence writer's isolated update-log transaction still locks only `note_docs`.
 
-- **Monotonic guard.** An older revision can never overwrite a newer one; `projection.monotonic` asserts it with deliberately interleaved out-of-order writes. `projected_seq` advances last, so a crash mid-transaction leaves `projected_seq` behind the data and the next sweep redoes the work idempotently.
-- **`note_links` is replaced wholesale** for the note. Diffing would buy nothing, and `uq_links_from_ordinal` turns a stale ordinal into a hard error instead of a silent duplicate.
-- **`note_search` uses `REPLACE`**, which also covers the case where a partially completed purge removed the row.
-- The transaction touches only `note_docs` (one row lock) plus the three projection tables, so it cannot deadlock with a structural transaction (`vaults` → `nodes` → `audit_chain_heads`, A46) or with the persistence writer (`note_docs` only). `lock-order.integration` covers the three-way interleaving.
-- On worker failure the row keeps its **previous** revision (reads stay self-consistent), `status` is set to `error` or `timeout` with a structured pino event and the `iridium_projection_duration_seconds{status}` / `iridium_projection_timeouts_total` metrics, and `iridium doctor --stale-projections` lists the note. `frontmatter_error` is reserved for YAML diagnostics and is never used for pipeline errors.
+Inside the transaction, the caller verifies the captured source revision and owner fence, then:
+
+1. Lock the current projection and refuse an older revision. Live compaction requires a strictly newer revision; an explicit reindex may rebuild the same revision. A reindex also refuses to downgrade a newer stored pipeline version.
+2. Upsert `note_projections.markdown`, content hash, revision, pipeline version and timestamp with guarded row-alias assignments. The revision assignment is last so MySQL's left-to-right evaluation compares every payload field against the previous revision.
+3. Copy the prepared derived fields and status. Replace bounded folded tag/alias memberships in `note_projection_terms`.
+4. Upsert `note_search` through the configured `SearchIndex` in the same transaction. This uses `INSERT … ON DUPLICATE KEY UPDATE`, never delete-and-insert `REPLACE` semantics.
+5. Replace that note's `note_links` rows and resolve raw targets against the transaction's current vault index. The link rows, search row and source projection all carry the same revision.
+6. Complete the caller's revision/audit work where applicable and advance `note_docs.projected_seq` last, inside the same commit.
+
+`projection.monotonic.integration` and lock-order tests deliberately interleave stale writes and structural work under this vault-before-snapshot protocol. A rollback leaves all source/derived rows and `projected_seq` at their previous committed state; no separate post-commit derived writer can expose mixed revisions.
+
+A parser timeout, worker error or queue overflow **still publishes the new durable raw source and revision** with `timeout`, `error` or `pending`. Derived JSON/statistic columns are `NULL`, term/link rows are cleared, and search retains a title with an empty body. `projected_seq` can therefore equal `head_seq` while the status still selects the note for a retry (§3.7). `too_large` and `too_complex` use the same source-preserving shape but are not transient retry statuses. This differs from invalid CRDT content: `markProjectionInvalid` marks the existing projection and preserves its last valid text/revision. `frontmatter_error` remains reserved for YAML diagnostics.
 
 ### 3.6 Search snippets
 
@@ -504,7 +490,7 @@ Stage 1 — source scan (the default, no worker):
 2. The locator walks `note_projections.markdown` line by line, skipping the frontmatter block when `frontmatter_raw` is present, comparing NFC-folded lowercase substrings.
 3. The first `SNIPPET_MAX_LINES = 3` matching lines are returned; each is trimmed to `SNIPPET_MAX_CHARS = 240` centred on its first match with `…` markers, and match ranges are returned as offsets **into the returned text** so the client never re-matches.
 
-Stage 2 — mapped fallback, used only when stage 1 finds nothing although FULLTEXT matched. InnoDB matched a token in `body_text` that does not exist as a contiguous string in the source: `**ter**m`, a hard-wrapped phrase, a setext heading, a table cell, an image `alt`. The locator enqueues a `snippet` task on the projection pool; the worker re-runs `parseNote` + `toBodyText` on the stored markdown, finds the term in `bodyText`, maps it with `sourceOffsetOf`, converts it to a line with `lineOf`, and returns the same shape. Results are memoised in an in-process LRU keyed `(noteId, revision, queryHash)` (500 entries, 2 minutes) so paging a result set re-parses nothing. When stage 2 also fails, the row carries `snippet: null` and the UI shows the note title with a "match in formatted text" hint.
+Stage 2 — mapped fallback, used only when stage 1 finds nothing although FULLTEXT matched. InnoDB matched a token in `body_text` that does not exist as a contiguous string in the source, such as `**ter**m`. `SnippetBuilder.buildForRevision` enqueues `search/mapped-snippet.worker.ts` through the projection pool; the worker re-runs `parseNote` + `toBodyText` on the stored markdown, finds the term in body text, maps it with `sourceOffsetOf`, converts it to a line with `lineOf`, and returns the same source-line shape. A title-only or metadata-only hit need not yield a body snippet. Results are memoised in an in-process LRU keyed by note/revision identity, content hash, query and requested snippet length (500 entries, 2 minutes). Failure or absence of a mapped body match returns the contract's empty `snippets` array; no unrelated head-of-note text is fabricated. Parser work never moves onto the main thread.
 
 Every search row carries `revision`; the staleness signal for notes with `projected_seq < head_seq` is defined in A38 and surfaced by `09-api-reference.md` and `07-client-applications.md`.
 
@@ -514,13 +500,15 @@ Every search row carries `revision`; the staleness signal for notes with `projec
 |---|---|---|
 | `iridium reindex --vault <id>` | every live note of the vault | `REINDEX_RATE_PER_SECOND` (default 20 notes/s) |
 | `iridium reindex --stale` | `note_docs.projected_seq < head_seq`, or `note_projections.status IN ('pending','timeout','error')` | same |
-| `iridium reindex --pipeline-version` | `note_projections.pipeline_version < PIPELINE_VERSION`, oldest `projected_at` first | same |
+| `iridium reindex --pipeline-version` | missing/older pipeline projections and retry statuses, in bounded note-id keyset order | same |
 | `iridium reindex --note <id>` | one note | — |
 | maintenance job `reindex` | the `--stale` selection, hourly | same |
 
-A reindex never reads the live Y.Doc. It reads `note_projections.markdown` when `projected_seq == head_seq`; otherwise the note is loaded, so it asks the compactor for a flush first and projects the flushed text. Reindexing therefore stays a projection-layer operation that cannot disturb an editing session. Progress and cancellation go through the `jobs` row (`type='reindex'`).
+A reindex never reads or loads a live Y.Doc and does not require compaction. For a loaded note it first calls the persistence writer's `drainAccepted` to commit the already accepted prefix; an unloaded note needs no writer action. A repeatable-read capture then uses the committed source projection when its revision equals `head_seq`, or reconstructs the captured durable snapshot/update prefix through `captureStoredState`. Worker preparation happens after that read transaction and before the write transaction. The fenced publication transaction takes the shared vault gate before any consistent read or parent/document lock, checks the source revision and current projection, and refuses stale or downgraded output. New edits after the capture remain a later revision and do not mutate the captured source.
 
-On boot, `schema_meta.pipeline_version < PIPELINE_VERSION` enqueues the `--pipeline-version` job automatically. Rows upgrade in the background while reads keep serving the previous projection, because every read carries the `revision` it reflects and no consumer depends on `pipeline_version`.
+Progress and cancellation go through `jobs` (`type='reindex'`). Each query is bounded by `JOB_BATCH_SIZE`, ordered by note id and resumed with `id > cursor`; the durable cursor advances only after the unit's transaction. There is no offset pagination or oldest-`projected_at` ordering. Cancellation and ownership are checked between units and pages; throttling uses the injected monotonic clock.
+
+On boot, `schema_meta.pipeline_version < PIPELINE_VERSION` enqueues the `--pipeline-version` job automatically but leaves the marker unchanged. Only a completed unscoped rebuild with no remaining eligible old/missing/retry row may advance it (§2.13). Reads serve each row's recorded revision throughout; a transient worker failure publishes raw current source with retry status, so retries are selected by status even when `projected_seq == head_seq`.
 
 ## 4. Normalization and byte-exact restoration
 
@@ -629,6 +617,7 @@ interface NoteContext {
 }
 
 interface VaultIndex {
+  readonly vaultId: string;                           // refuses a foreign-vault index before any lookup
   noteByFoldedPath(folded: string): string | null;        // exact after folding; unique by construction
   attachmentByFoldedPath(folded: string): string | null;
   notesByFoldedBasename(folded: string): string[];        // wikilinks only
@@ -650,9 +639,9 @@ Algorithm, in order (each step returns, so earlier rules win):
 | # | Condition | Result |
 |---|---|---|
 | 1 | target is empty or whitespace only | `broken: 'empty'` |
-| 2 | target starts with `#` | `anchor` — `valid` when the fragment matches one of `headingSlugs`, or case-insensitively one of `headingTexts` (the Obsidian-style secondary rule) |
-| 3 | target matches `/^[a-z][a-z0-9+.\-]*:/i` | scheme in `{http, https, mailto}` → `external`; anything else (`javascript`, `data`, `file`, `vbscript`, `tel`, `msteams`, …) → `blocked` |
-| 4 | target contains a NUL, a raw control character, or more than 2 048 characters | `broken: 'bad_target'` |
+| 2 | trimmed target contains a NUL, a raw control character, or more than `LINK_TARGET_MAX_CHARS` (2 048 UTF-16 units) | `broken: 'bad_target'` |
+| 3 | target starts with `#` | percent-decode, remove one `user-content-` prefix and enforce `LINK_FRAGMENT_MAX_CHARS` (255 code points); `anchor` is valid when the fragment matches a slug or case-insensitively a heading text, returning the matching canonical slug |
+| 4 | target matches `/^[a-z][a-z0-9+.\-]*:/i` | scheme in `{http, https, mailto}` → `external`; anything else (`javascript`, `data`, `file`, `vbscript`, `tel`, `msteams`, …) → `blocked` |
 | 5 | otherwise it is a path reference | continue with 6 |
 | 6 | split the fragment at the **last** `#` that is not percent-encoded; percent-decode the path part with a guarded `decodeURIComponent` (malformed sequences fall back to the raw string); do **not** strip a `?` (a relative filename may legitimately contain one) | — |
 | 7 | leading `/` → resolve from the vault root; otherwise resolve against `note.parentPath` | — |
@@ -672,7 +661,7 @@ Fragments on cross-note links are recorded (`note_links.fragment`) but never val
 
 ### 5.2 `VaultIndexSnapshot`
 
-The worker-transferable form of the index, built once per batch (§3.1) and shipped by `postMessage`/piscina:
+The worker-transferable form of the index used by pure consumers and the planned browser worker. The server's committing adapter builds a bounded transaction-local snapshot instead of sending structural data through its CPU task (§3.1):
 
 ```ts
 interface VaultIndexSnapshot {
@@ -681,28 +670,28 @@ interface VaultIndexSnapshot {
   attachmentsVersion: number;
   notes: Array<[foldedPath: string, nodeId: string]>;            // sorted, deduplicated
   basenames: Array<[foldedBasename: string, nodeIds: string[]]>;
-  aliases: Array<[foldedAlias: string, nodeIds: string[]]>;      // from note_projections.fm_aliases
+  aliases: Array<[foldedAlias: string, nodeIds: string[]]>;      // folded derived alias memberships
   attachments: Array<[foldedPathHint: string, attachmentId: string]>;
 }
 ```
 
-The worker turns the arrays into `Map`s on receipt (`createVaultIndex(snapshot)`); the arrays exist because a `Map` is structured-cloneable but arrays keep the payload smaller and diffable. The server rebuilds the whole snapshot on version change (it is a single CTE and is cached).
+`createVaultIndex(snapshot)` turns arrays into private `Map`s and returns defensive candidate arrays. The server counts entries with bounded queries before allocating the snapshot: two per live note (path and basename), each alias membership, and each attachment path hint. Candidate queries are independently bounded, so a concurrent capacity change can select the indexed fallback without materializing the whole vault. Server snapshots are transaction-local, avoiding stale alias/attachment resolution across writes.
 
 Where each host's copy comes from:
 
 | Host | Initial snapshot | Maintenance |
 |---|---|---|
-| Server worker | `projection/index-snapshot.ts`, cached by `(vaultId, treeVersion, attachmentsVersion)` and shipped inside every `ProjectionTask` (§3.1) | rebuilt when either version changes |
+| Server committing adapter | `projection/index-snapshot.ts` in the source/derived write transaction, only below the entry cap | rebuilt from that transaction's current note paths, alias terms and live attachments; never cached across writes |
 | Browser preview worker | built by the client on vault open from `GET /vaults/:vaultId/nodes` (paged) plus `GET /vaults/:vaultId/attachments`, then pushed with `setVaultIndex`; the lifecycle, the paging and the query invalidation belong to `07-client-applications.md` §5.9 | `patchVaultIndex` on every vault-channel `tree-changed` event and after every attachment upload or delete; the snapshot is replayed after a worker respawn (§2.11), and a `treeVersion` gap makes the client discard its copy and request a full snapshot rather than patch forward from an unknown state |
 
-The browser copy omits `basenames` and `aliases`: those two maps serve only step 12 of §5.1, which is wikilink mode, and the preview never resolves in wikilink mode (wikilinks render as literal text in MVP, §6.1). A 20 000-note vault snapshot measures well under 4 MB in JSON even with them, which is acceptable for a per-batch transfer.
+The future browser copy sends empty `basenames` and `aliases` arrays: those maps serve wikilink mode, and the preview never resolves in that mode (wikilinks render as literal text in MVP, §6.1). Its transfer size remains part of the M4 preview budget; M2's parser experiment does not claim a measured real-vault index size.
 
 Above `VAULT_INDEX_MAX_ENTRIES` (100 000 entries) each host degrades explicitly rather than truncating silently:
 
-- **Server** — that vault switches to per-link resolution (`resolveLink` called with a lazy `VaultIndex` backed by an indexed query per lookup) and logs a capacity warning. The fallback sits behind the same `VaultIndex` interface, so no call site changes.
+- **Server** — `ProjectionIndex.resolve` switches to bounded indexed lookups and logs a capacity warning. Both the synchronous `resolveLink` driver and this asynchronous SQL driver consume the same pure `linkResolutionSteps` generator, whose yields name a path, basename, alias or attachment lookup. Expected lookup requests are data, not exceptions, and the fallback duplicates no resolution algorithm. Path lookup follows indexed parent/name segments; folded tag/alias terms use the derived membership relation and attachment hints use their folded index. No per-link whole-vault scan or path cache is introduced.
 - **Browser** — the client stops holding an index for that vault and the preview resolves by `raw_target` against `GET /notes/:noteId/links` for the open note, whose rows already carry the resolved ids at the projected revision (the response is cached per `(noteId, revision)` and invalidated by the note's `projected` message). The documented consequence is that a link *typed since the last projection* renders `broken` in such a vault until the note is projected; it is the honest degradation for a vault that large, and it needs no route that does not already exist.
 
-Both fallbacks are asserted by `links.index-fallback.integration` so the behaviour is observable rather than theoretical.
+`links.index-fallback.integration` proves the M2 server fallback on both supported MySQL lines. The browser fallback remains an M4 host obligation with the same visible revision limitation.
 
 ### 5.3 `note_links` rows
 
@@ -1390,10 +1379,10 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 
 | Corpus | Location | Contents |
 |---|---|---|
-| CommonMark | `packages/markdown/fixtures/commonmark-0.31.2.json` | the 652 spec examples, run through `remark-parse` + `remark-rehype` + sanitize; deviations recorded in a checked-in allowlist with a reason per entry |
+| CommonMark | `packages/markdown/fixtures/commonmark-0.31.2.json` | the 652 spec examples, run through the markdown-it token-to-mdast adapter, `remark-rehype` and sanitize; deviations recorded in a checked-in allowlist with a reason per entry |
 | Golden | `packages/markdown/fixtures/golden/*.md` with `.mdast.json`, `.hast.json`, `.html`, `.projection.json` | one file per feature (headings, tables, task lists, footnotes, autolinks, frontmatter variants, nested lists, code fences, images, reference links, hard breaks) |
-| Hostile | `packages/markdown/fixtures/hostile/*.md` | the XSS corpus of §2.8 plus DOM-clobbering ids, CSS injection attempts, percent/entity/Unicode scheme smuggling, RTL overrides |
-| Pathological | `packages/markdown/fixtures/pathological/*.md` | `*a_` × 20 000, 10 000 nested `>`, 1 000-deep lists, 200 000-line paragraph, 10 000 footnote refs, 200 000 `[` |
+| Hostile | `packages/markdown/fixtures/hostile/*.md` and `sources.json`; original shared bytes at `packages/testkit/src/fixtures/hostile/`, exported by the inert `@iridium/testkit-fixtures` leaf | the XSS corpus of §2.8 plus DOM-clobbering ids, CSS injection attempts, percent/entity/Unicode scheme smuggling, RTL overrides |
+| Pathological | `packages/markdown/fixtures/pathological/cases.json` | deterministic source recipes: `*a_` × 20 000, 10 000 nested `>`, 1 000-space list indent, 200 000-line paragraph, 10 001 footnote refs, 200 001 `[`; assertions distinguish prescan refusal from worker-bounded cases |
 | Obsidian sample vault | `packages/testkit/src/fixtures/vaults/obsidian-sample/` | every catalogue construct of §6.3, `.obsidian/` with `app.json` (`attachmentFolderPath`, `strictLineBreaks:false`), `plugins/`, `themes/`, `.trash/`, a `.canvas`, a `.base`, CRLF and CR files, a BOM file, a mixed-EOL file, an invalid-UTF-8 file, case-colliding siblings, a `Notes/` + `Notes.md` pair, a zip-slip archive variant, a 60 MiB attachment, an unsupported `.exe`, and a `manifest.json` |
 | Export round-trip | `packages/testkit/src/fixtures/roundtrip/` | byte-exact input/output pairs used by `markdown.roundtrip.prop` seeds and `export-roundtrip.e2e` |
 
@@ -1401,25 +1390,25 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 
 | Test | Layer | Asserts |
 |---|---|---|
-| `markdown.commonmark.spec` | unit | spec conformance with an explicit deviation allowlist |
-| `markdown.golden.spec` | unit | mdast, hast, HTML and projection outputs are byte-stable |
-| `markdown.xss.spec` | unit (hast) | every hostile fixture is inert after sanitize: no disallowed element, attribute, scheme or unprefixed id |
-| `markdown.sanitize-schema.snapshot` | unit | the resolved schema is snapshotted, so widening it is a reviewable diff |
+| `markdown.commonmark.unit` | unit | spec conformance with an explicit deviation allowlist |
+| `markdown.golden.unit` | unit | mdast, hast, HTML and projection outputs are byte-stable |
+| `markdown.xss-corpus.unit` | unit (hast) | every hostile fixture is inert after sanitize: no disallowed element, attribute, scheme or unprefixed id |
+| `markdown.sanitize-schema.unit` | unit | the resolved schema is snapshotted, so widening it is a reviewable diff |
 | `markdown.flavor-parity.unit` | unit | `obsidianCompatFlavor` contributes no remark plugin, no rehype transform and no sanitizer extension, and `createProcessor` produces identical output for both flavors over the golden corpus — the MVP consequence of G2 being answered *no* (§2.12) |
-| `markdown.pathological.spec` | unit | every pathological fixture is rejected by `prescan` or finishes inside the budget |
-| `markdown.frontmatter.spec` | unit | raw block preserved; diagnostics for bad YAML, duplicate keys, alias bombs; tag/alias normalization and caps |
+| `markdown.pathological.unit` | unit | admission recipes refuse their exact caps; emphasis remains a worker-bounded case, measured by S11 and exercised through production workers |
+| `markdown.frontmatter.unit` | unit | raw block preserved; diagnostics for bad YAML, duplicate keys, alias bombs; tag/alias normalization and caps |
 | `markdown.no-rewrite.prop` | property | `parseNote`/`project`/`toPreviewTree` never mutate the input string; no serializer is reachable |
 | `markdown.roundtrip.prop` | property | `restoreSource(normalizeSource(bytes)) === bytes` for the uniform-EOL class; idempotence for the rest (§4.3) |
 | `markdown.body-text-map.prop` | property | every non-synthetic `bodyText` offset maps to the matching source character |
 | `markdown.attachment-reference.prop` | property | reference encoding/decoding round-trips for generated file names |
 | `markdown.links.prop` | property | resolution is total (always one `ResolvedLink`), never throws, never leaves the vault, and is stable under path folding |
-| `preview.data-attributes.spec` | unit | the `'*'` attribute list of `iridiumSanitizeSchema` equals the set of `data-*` hints the `@iridium/markdown-react` overrides consume (§2.8), so `data-note-id` can never be dropped from the schema while the renderer still reads it |
+| `preview.data-attributes.unit` | unit | the sanitizer retains the declared `data-*` hint contract (§2.8); renderer consumption is checked when `@iridium/markdown-react` lands |
 | `links.anchor-rows.unit` | unit | a valid same-note anchor projects `status='resolved'` with `resolved_node_id = from_note_id`; an invalid one projects `broken`; no row ever has both target columns `NULL` while `resolved` (§5.3) |
 | `links.index-fallback.integration` | integration | above `VAULT_INDEX_MAX_ENTRIES` the server resolves per link through the lazy `VaultIndex` and the preview resolves through `GET /notes/:noteId/links`, with identical classifications for a projected note (§5.2) |
-| `markdown.obsidian-detector.spec` | unit | one case per catalogue row, including masked negatives (`#tag` in code, `[[x]]` colliding with a definition) |
-| `detector.pathological.spec` | unit | detector time is linear on the pathological corpus |
-| `markdown.pipeline-version.guard` | unit | a golden-fixture change without a `PIPELINE_VERSION` bump fails |
-| `deps.banned-imports` | unit (grep) | no `remark-stringify`, `mdast-util-to-markdown`, `gray-matter`, `markdown-it`, `shiki`, `isomorphic-dompurify`, `remark-obsidian` anywhere |
+| `obsidian.detect.unit` | unit | one case per catalogue row, including masked negatives (`#tag` in code, `[[x]]` colliding with a definition) |
+| `detector.pathological.unit` | unit | detector scanning stays bounded on the pathological corpus |
+| `markdown.pipeline-version.guard` | guard | tracked, staged, deleted and untracked parser, projector, plugin, sanitizer or golden changes require a version bump; M1 version 1 advances to M2 version 2 |
+| `deps.banned-imports` | guard | no Markdown serializer, `gray-matter`, `shiki`, `isomorphic-dompurify` or `remark-obsidian`; `markdown-it` imports are confined to the reviewed adapter boundary |
 | `guards.no-inner-html.guard` | guard (grep) | no `dangerouslySetInnerHTML` in `@iridium/markdown-react` or `@iridium/ui` |
 | `preview.worker-only.unit` | unit (grep) | no UI-thread import of the parse entry points |
 | `projection.worker-isolation.unit` | unit | the server never calls `parseNote` outside a piscina worker entry |
@@ -1487,7 +1476,7 @@ Decisions the skeleton does not settle. Ids are section-scoped for merge into `1
 | D08-08 | Link path resolution folds with `NFC` + `toLowerCase()`, matching `uq_sibling`'s `utf8mb4_0900_as_ci`; the database unique index stays the authority at import commit | siblings cannot differ only by case, so a case-insensitive lookup is unique by construction and matches what users expect from Windows/macOS vaults |
 | D08-09 | Basename and alias ("shortest path") resolution applies to wikilinks only; standard Markdown links resolve by path | CommonMark links must not change meaning because of an unrelated note elsewhere; wikilinks are Obsidian syntax and belong to the detector/report |
 | D08-10 | Cross-note fragments are recorded but never validated; only same-note anchors are checked | validating them would pull every target note's outline into every projection |
-| D08-11 | `VaultIndexSnapshot` is an array-based, structured-cloneable payload cached by `(vaultId, tree_version, attachmentsVersion)`; the browser copy is built from `GET /vaults/:vaultId/nodes` + `GET /vaults/:vaultId/attachments`, omits the wikilink-only `basenames`/`aliases` maps, and is patched from `tree-changed` and attachment events; above `VAULT_INDEX_MAX_ENTRIES` the server switches to lazy per-link resolution behind the same interface and the browser resolves through `GET /notes/:noteId/links` | one index shape for browser worker, server worker and importer, with a named source and a measured escape hatch on both sides — an unsupplied index would make every internal link in the preview `broken` |
+| D08-11 | `VaultIndexSnapshot` is an array-based structured-cloneable payload. M2's server resolves against a bounded transaction-local snapshot; above `VAULT_INDEX_MAX_ENTRIES`, the same pure resolution generator drives indexed per-target SQL queries. The planned browser copy is keyed by tree/attachment versions, comes from the paged nodes and attachment routes, omits wikilink-only maps and falls back to projected link rows at capacity | current transaction context avoids stale server alias/attachment resolution; a shared generator preserves one algorithm without exceptions or whole-vault scans |
 | D08-12 | Editor-inserted attachment references are percent-encoded relative paths (spaces as `%20`, plus `()[]#?%`); angle-bracket destinations are not used | Obsidian and most tools expect percent-encoded Markdown links; one encoding rule keeps `resolveLink` symmetric |
 | D08-13 | The Obsidian detector runs on **every** projection (not only at import); its code vocabulary is a superset of the closed import-report list; findings are capped (20 sampled per note in `obsidian_findings`, 5 per code per file and 5 000 per report) | keeps the compatibility badge live and the report vocabulary stable, with bounded JSON |
 | D08-14 | The importer reads exactly two values from `.obsidian/app.json` (`attachmentFolderPath`, `strictLineBreaks`) as wizard suggestions, and proposes `markdown_flavor = 'obsidian-compat'` when the folder exists; nothing else in `.obsidian/` is read, stored or executed | the spec forbids importing configuration as functionality, but these two settings decide whether the imported notes render as their authors saw them |
@@ -1504,9 +1493,9 @@ Decisions the skeleton does not settle. Ids are section-scoped for merge into `1
 | D08-25 | Attachment serving adds single-range support, `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`, `Referrer-Policy: no-referrer` and `Vary: Authorization`, and answers `503` (never `404`) when a row's bytes are missing | media seeking needs ranges; the extra headers close embedding and referer leaks; a `404` for missing bytes would invite a destructive cleanup |
 | D08-26 | Deletion is soft; bytes are removed only by `iridium attachments purge`, which re-checks live links, other rows sharing the hash, and retained revision markdown. `GET /admin/attachments/unreferenced` also lists orphan blobs with no row | A44 forbids heuristic GC; purging still needs a safe, auditable path, and the crash window between `put` and `insert` must be observable |
 | D08-27 | `iridium mirror` keeps its own `.iridium-mirror.json` state, only ever touches files it wrote, and refuses a non-empty directory without `--adopt` | a mirror must never delete a user's unrelated files, and must be resumable without re-writing the whole vault |
-| D08-28 | Frontmatter index normalization caps: tags ≤ 64 characters and ≤ 200 entries, aliases ≤ 255 characters and ≤ 100 entries, NFC-folded and lowercased for tags; the raw block is never rewritten | the multi-valued indexes on `fm_tags`/`fm_aliases` are declared as `CHAR(64) ARRAY` / `CHAR(255) ARRAY`, so over-long values must be dropped with a diagnostic rather than silently truncated |
-| D08-29 | The highlighting registry is a fixed set of 21 grammars with an explicit alias map and `plainText` for `mermaid`, `math`, `dataview`, `dataviewjs`, `query`, `base`, `canvas`; no auto-detection, no lazy per-language loading in MVP | bounded bundle (≈35 KB gzip), deterministic output, and unknown languages degrade to plain code instead of throwing |
-| D08-30 | The sanitizer schema replaces (never extends) `tagNames`, `attributes`, `protocols`, `ancestors` and `required`: 30 elements, no `data-*` wildcard, no `style`/`name`/`target`/`rel`, ids only under `^user-content-`, `href` limited to `http`/`https`/`mailto` and `src` to `http`/`https`, `tel:` and enterprise schemes excluded | deny-by-default against the exact element set the pipeline produces; every future widening is a reviewable diff against `markdown.sanitize-schema.snapshot` |
+| D08-28 | Frontmatter index normalization caps: tags ≤ 64 characters and ≤ 200 entries, aliases ≤ 255 characters and ≤ 100 entries, NFC-folded and lowercased for tags; the raw block is never rewritten | bounded projection JSON and folded term memberships need explicit length/count policy; over-long values are dropped with a diagnostic rather than silently truncated |
+| D08-29 | The highlighting registry is a fixed set of 21 grammars with an explicit alias map and `plainText` for `mermaid`, `math`, `dataview`, `dataviewjs`, `query`, `base`, `canvas`; no auto-detection, no lazy per-language loading in MVP | S11 measures the complete required payload; fixed lowlight registration avoids the unused common registry, keeps deterministic output, and leaves unknown languages as plain code |
+| D08-30 | The sanitizer schema replaces (never extends) `tagNames`, `attributes`, `protocols`, `ancestors` and `required`: 30 elements, no `data-*` wildcard, no `style`/`name`/`target`/`rel`, ids only under `^user-content-`, `href` limited to `http`/`https`/`mailto` and `src` to `http`/`https`, `tel:` and enterprise schemes excluded | deny-by-default against the exact element set the pipeline produces; every future widening is a reviewable diff against `markdown.sanitize-schema.unit` |
 | D08-31 | A valid same-note anchor is stored as `status='resolved'` with `resolved_node_id = from_note_id`; an anchor whose fragment matches none of the note's own headings is `broken`; every "who links here" query therefore carries `from_note_id <> resolved_node_id` | A43 closes the `note_links.status` vocabulary, so `anchor` cannot become a status, and `03-data-model.md` §9.5 requires exactly one resolved target on a `resolved` row — pointing an anchor at its own note satisfies both without a nullable-target special case in `doctor`, the backlinks query or the DTO |
 | D08-32 | The limits table of `02-system-architecture.md` §7 is the sole naming authority for `@iridium/contracts/limits.ts`; this section introduces no synonym, and `prescan` gains an explicit `MARKDOWN_SOURCE_MAX_BYTES` check on the UTF-8 byte length alongside the UTF-16 `NOTE_HARD_MAX_UTF16` check | `limits.single-source` and `limits.policy.unit` match on constant *names*, so two names for one limit make one of them an unreferenced constant and the other a compile error. The two 2 097 152 caps are genuinely different limits (bytes versus UTF-16 units); without the byte check the "2 MiB source" row of the policy had no enforcement site at all |
 | D08-33 | `note_links` stores `line` (1-based source line of the reference start, from mdast `position.start.line`) next to `start_offset`/`end_offset` | every link-facing DTO — `Link`, `affectedLinks.samples[]` — addresses source lines; deriving the line at read time would mean re-scanning `note_projections.markdown` on every backlinks, links, inbound-links and rename-impact response |

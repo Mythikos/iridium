@@ -3,7 +3,7 @@
  * fixture policy rule 2: *"A test that needs state the product cannot create is a test that has found
  * a missing product capability"*).
  *
- * Every row this module creates is created by the route or the command an operator would use:
+ * Every row enters through a real product capability:
  *
  * | What | How | Why not otherwise |
  * |---|---|---|
@@ -12,6 +12,7 @@
  * | a vault | `POST /vaults` | one transaction: the vault row, its root category and the audit event |
  * | a membership | `PUT /vaults/:vaultId/members/:userId` | the route the console uses, so the seed exercises `201`-on-create |
  * | a note | `POST /vaults/:vaultId/nodes` | the only Markdown entry point at M1, and the one `NoteService.initialize` runs behind |
+ * | M2's 20k structural fixture | server-injected `createNode` / `NoteService.initialize` | preserves owner fencing, locks, projections and audit while avoiding transport quotas during setup |
  *
  * The consequence the plan wants is that the seed is itself a smoke test: a regression in user
  * creation, membership or note creation fails every suite that seeds, at the seed, with the route's
@@ -22,6 +23,12 @@ import { signInWeb, stepUp, type WebSignIn } from '../auth/sessions.ts';
 import type { RestClient } from '../clients/rest-client.ts';
 import type { CliResult } from '../server/cli.ts';
 import { seedKernel, type KernelSeed } from './kernel.ts';
+import {
+  seedStructureDataset,
+  type StructureSeed,
+  type StructureSeedRequest,
+  type StructureNodeWriter,
+} from './structure.ts';
 
 /** A user the seed created, with the credential every fixture signs in with. */
 export interface SeededUser {
@@ -102,6 +109,8 @@ export interface SeedApi {
   email(localPart: string): string;
   /** The M1 cast, vault `V` and note `N` (10-testing-and-quality.md, `kernel()`). */
   kernel(): Promise<KernelSeed>;
+  /** The populated M2 20k-node fixture, through an injected real structural service. */
+  structure(options?: StructureSeedRequest): Promise<StructureSeed>;
 }
 
 /** A server admin plus the signed-in client the seed makes its privileged calls with. */
@@ -120,6 +129,8 @@ export interface SeedApiOptions {
   readonly password?: string;
   /** Appended to every local part, for a suite that seeds two casts on one schema. */
   readonly suffix?: string;
+  /** Server-owned in-process fixture adapter; no product imports or direct SQL enter testkit. */
+  readonly structureWriter?: StructureNodeWriter;
 }
 
 function refused(where: string, status: number, body: unknown): Error {
@@ -343,6 +354,7 @@ export function createSeedApi(options: SeedApiOptions): SeedApi {
     signIn,
     email: emailFor,
     kernel: () => seedKernel(api),
+    structure: (request) => seedStructureDataset(api, options.structureWriter, request),
   };
   return api;
 }

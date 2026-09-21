@@ -1,0 +1,100 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "element",
+      "tagName": "h1",
+      "properties": {
+        "id": "user-content-content",
+        "dataLine": 7,
+        "dataOffset": 99,
+        "dataEndOffset": 108
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "Content",
+          "position": {
+            "start": {
+              "line": 7,
+              "column": 3,
+              "offset": 101
+            },
+            "end": {
+              "line": 7,
+              "column": 10,
+              "offset": 108
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 7,
+          "column": 1,
+          "offset": 99
+        },
+        "end": {
+          "line": 7,
+          "column": 10,
+          "offset": 108
+        }
+      }
+    },
+    {
+      "type": "text",
+      "value": "\n"
+    },
+    {
+      "type": "element",
+      "tagName": "p",
+      "properties": {
+        "dataLine": 9,
+        "dataOffset": 110,
+        "dataEndOffset": 127
+      },
+      "children": [
+        {
+          "type": "text",
+          "value": "Searchable prose.",
+          "position": {
+            "start": {
+              "line": 9,
+              "column": 1,
+              "offset": 110
+            },
+            "end": {
+              "line": 9,
+              "column": 18,
+              "offset": 127
+            }
+          }
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 9,
+          "column": 1,
+          "offset": 110
+        },
+        "end": {
+          "line": 9,
+          "column": 18,
+          "offset": 127
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 10,
+      "column": 1,
+      "offset": 128
+    }
+  }
+}

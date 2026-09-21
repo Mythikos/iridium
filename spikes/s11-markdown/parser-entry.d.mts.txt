@@ -1,0 +1,72 @@
+/** Token-only entry: the same upstream rules without a renderer, linkifier or URL recoder. */
+import type {
+  Env, Token, Ruler, MarkdownIt, MarkdownItOptions, MarkdownItPreset,
+  StateCore as FullStateCore, StateBlock as FullStateBlock, StateInline as FullStateInline,
+} from './markdown-it.d.mts';
+
+export type { Env, Token, Ruler } from './markdown-it.d.mts';
+
+export interface StateCore extends Omit<FullStateCore, 'md'> { md: TokenEngine }
+export interface StateBlock extends Omit<FullStateBlock, 'md'> { md: TokenEngine }
+export interface StateInline extends Omit<FullStateInline, 'md' | 'pushPending'> {
+  md: TokenEngine;
+  pushPending(): Token;
+}
+
+export const StateCore: {
+  new(src: string, md: TokenEngine, env: Env): StateCore;
+  prototype: StateCore;
+};
+export const StateBlock: {
+  new(src: string, md: TokenEngine, env: Env, tokens: Token[]): StateBlock;
+  prototype: StateBlock;
+};
+export const StateInline: {
+  new(src: string, md: TokenEngine, env: Env, tokens: Token[]): StateInline;
+  prototype: StateInline;
+};
+
+export interface ParserCore {
+  ruler: Ruler<[StateCore], void>;
+  State: typeof StateCore;
+  process(state: StateCore): void;
+}
+export interface ParserBlock {
+  ruler: Ruler<[StateBlock, number, number, boolean], boolean>;
+  State: typeof StateBlock;
+  tokenize(state: StateBlock, startLine: number, endLine: number): void;
+  parse(src: string, md: TokenEngine, env: Env, tokens: Token[]): void;
+}
+export interface ParserInline {
+  ruler: Ruler<[StateInline, boolean], boolean>;
+  ruler2: Ruler<[StateInline], void>;
+  State: typeof StateInline;
+  skipToken(state: StateInline): void;
+  tokenize(state: StateInline): void;
+  parse(src: string, md: TokenEngine, env: Env, tokens: Token[]): void;
+}
+
+/** URLs remain data; the caller owns GFM autolinking and sanitize-last rendering. */
+export class TokenEngine {
+  inline: ParserInline;
+  block: ParserBlock;
+  core: ParserCore;
+  utils: Pick<MarkdownIt['utils'], 'unescapeAll'>;
+  helpers: {
+    parseLinkLabel(state: StateInline, start: number, disableNested?: boolean): number;
+    parseLinkDestination: MarkdownIt['helpers']['parseLinkDestination'];
+    parseLinkTitle: MarkdownIt['helpers']['parseLinkTitle'];
+  };
+  options: Required<MarkdownItOptions>;
+  constructor(options?: Omit<MarkdownItOptions, 'linkify' | 'typographer' | 'highlight'>);
+  validateLink(url: string): boolean;
+  normalizeLink(url: string): string;
+  normalizeLinkText(url: string): string;
+  set(options: MarkdownItOptions): this;
+  configure(preset: 'commonmark' | 'zero' | MarkdownItPreset): this;
+  enable(rules: string | string[], ignoreInvalid?: boolean): this;
+  disable(rules: string | string[], ignoreInvalid?: boolean): this;
+  use<Params extends unknown[]>(plugin: (md: this, ...params: Params) => void, ...params: Params): this;
+  parse(src: string, env: Env): Token[];
+  parseInline(src: string, env: Env): Token[];
+}

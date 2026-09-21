@@ -427,12 +427,18 @@ function verificationDatabase(
 ) {
   return fakeDatabase({
     script: (query) => {
-      if (query.sql.includes('from `audit_events`')) {
-        const [chain, after, limit] = query.parameters;
+      if (query.sql.includes('FROM audit_events')) {
+        const [chain, after, limit, archiveChain, archiveAfter, archiveLimit, mergeLimit] =
+          query.parameters;
         if (
-          !query.sql.includes('where `chain_id` = ? and `id` > ? order by `id` asc limit ?') ||
+          !query.sql.includes('UNION ALL') ||
+          !query.sql.includes('FROM audit_events_archive WHERE chain_id = ? AND id > ?') ||
           chain !== SERVER_CHAIN_ID ||
           limit !== 500 ||
+          archiveChain !== chain ||
+          archiveAfter !== after ||
+          archiveLimit !== limit ||
+          mergeLimit !== limit ||
           typeof after !== 'number'
         )
           throw new Error(
@@ -676,8 +682,8 @@ describe('audit.chain.unit [area:audit] signed storage and verification', () => 
         divergence: null,
       });
       expect(fake.executed.map((query) => query.parameters)).toEqual([
-        [SERVER_CHAIN_ID, 0, 500],
-        [SERVER_CHAIN_ID, 1005, 500],
+        [SERVER_CHAIN_ID, 0, 500, SERVER_CHAIN_ID, 0, 500, 500],
+        [SERVER_CHAIN_ID, 1005, 500, SERVER_CHAIN_ID, 1005, 500, 500],
         [SERVER_CHAIN_ID],
       ]);
     } finally {

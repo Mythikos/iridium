@@ -1,0 +1,8 @@
+[
+  { "id": "unbalanced-emphasis", "repeat": "*a_", "count": 20000, "status": "worker-bounded" },
+  { "id": "nested-quotes", "repeat": ">", "count": 10000, "suffix": " text", "status": "too_complex", "detail": "blockquote_depth" },
+  { "id": "nested-lists", "repeat": " ", "count": 1000, "suffix": "- item", "status": "too_complex", "detail": "list_indent" },
+  { "id": "paragraph-lines", "repeat": "text\n", "count": 200000, "status": "too_complex", "detail": "paragraph_lines" },
+  { "id": "footnotes", "repeat": "[^reference] ", "count": 10001, "status": "too_complex", "detail": "footnotes" },
+  { "id": "brackets", "repeat": "[", "count": 200001, "status": "too_complex", "detail": "brackets" }
+]

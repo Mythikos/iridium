@@ -1,16 +1,33 @@
 {
   "name": "@iridium/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "the single wire-contract package (zod 4 schemas and inferred types for REST, collab, MCP, IPC, audit, limits, ids, tokens, paths)",
   "files": [
-    "dist"
+    "dist",
+    "src/generated/desktop-ipc.d.ts"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./limits": {
+      "types": "./dist/limits.d.ts",
+      "default": "./dist/limits.js"
+    },
+    "./markdown-limits": {
+      "types": "./dist/markdown-limits.d.ts",
+      "default": "./dist/markdown-limits.js"
+    },
+    "./import-report": {
+      "types": "./dist/import-report.d.ts",
+      "default": "./dist/import-report.js"
+    },
+    "./desktop-ipc": {
+      "types": "./src/generated/desktop-ipc.d.ts"
     },
     "./package.json": "./package.json"
   },
