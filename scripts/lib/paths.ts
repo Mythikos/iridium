@@ -87,6 +87,9 @@ export const SERVER_ROOT: string = join(REPO_ROOT, 'apps', 'server');
 /** `<repo>/packages/testkit` — the package that owns msw. */
 export const TESTKIT_ROOT: string = join(REPO_ROOT, 'packages', 'testkit');
 
+/** `<repo>/packages/markdown` — the package that owns the vendored CommonMark corpus. */
+export const MARKDOWN_ROOT: string = join(REPO_ROOT, 'packages', 'markdown');
+
 /** `<repo>/packages/api-client` — the package that owns the generated `paths.d.ts`. */
 export const API_CLIENT_ROOT: string = join(REPO_ROOT, 'packages', 'api-client');
 
@@ -146,8 +149,6 @@ export const CHECK_INPUTS = {
   schemathesisExclusions: join(SERVER_ROOT, 'test', 'contract', 'schemathesis-exclusions.toml'),
   /** The MCP conformance baseline, which admits no entries at all (skeleton A51). */
   conformanceBaseline: join(SERVER_ROOT, 'test', 'mcp', 'conformance-baseline.yaml'),
-  /** Deliberate CommonMark deviations (10-testing-and-quality.md, `markdown.commonmark.unit`). */
-  commonmarkDeviations: join(TESTKIT_ROOT, 'src', 'fixtures', 'commonmark', 'deviations.json'),
   /** The k6 load baseline, committed at M8 (D10-14). */
   loadBaseline: join(SERVER_ROOT, 'test', 'load', 'baseline.json'),
 } as const;
@@ -155,5 +156,6 @@ export const CHECK_INPUTS = {
 /** The committed fixture trees whose total weight is capped at 5 MB (D10-17). */
 export const FIXTURE_ROOTS: readonly string[] = [
   join(TESTKIT_ROOT, 'src', 'fixtures'),
+  join(MARKDOWN_ROOT, 'fixtures'),
   join(SERVER_ROOT, 'test', 'fixtures'),
 ];

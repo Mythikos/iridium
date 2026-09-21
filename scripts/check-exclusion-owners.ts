@@ -4,10 +4,10 @@
  *
  * The rule is 10-testing-and-quality.md, "What blocks a merge" item 10, and decision D10-15:
  *
- * > No new entry in `apps/e2e/QUARANTINE.md`, `schemathesis-exclusions.toml`,
- * > `license-exceptions.json` or the CommonMark deviation allowlist without a linked issue and an
- * > owner (a CI step parses each file and fails on an entry missing either field). The MCP
- * > conformance baseline is not on this list because it admits no entries at all.
+ * > No new entry in `apps/e2e/QUARANTINE.md`, `schemathesis-exclusions.toml` or
+ * > `license-exceptions.json` without a linked issue and an owner (a CI step parses each file and
+ * > fails on an entry missing either field). The MCP conformance baseline is not on this list
+ * > because it admits no entries at all.
  *
  * and D10-15's extension of it: *"Every other exclusion file … follows the same owner+issue+expiry
  * rule."*
@@ -18,7 +18,6 @@
  * |---|---|
  * | `apps/server/test/contract/schemathesis-exclusions.toml` | owner, issue, expiry, reason per entry |
  * | `scripts/license-exceptions.json` | owner (`approver`), issue, expiry per entry |
- * | `packages/testkit/src/fixtures/commonmark/deviations.json` | owner, issue, expiry, reason per entry |
  * | `apps/server/test/mcp/conformance-baseline.yaml` | **no entries at all**, ever (skeleton A51) |
  *
  * `apps/e2e/QUARANTINE.md` is the fifth exclusion file and is **not** checked here.
@@ -34,12 +33,15 @@
  *
  * ## Two things this check decides, because the plan states a rule and not a path
  *
- * **The CommonMark deviation allowlist is `packages/testkit/src/fixtures/commonmark/deviations.json`.**
- * The section names the file only as "an explicit allowlist file with a reason per entry". It is
- * placed beside the corpus it annotates — `packages/testkit/src/fixtures/commonmark/spec.json`, the
- * vendored CommonMark 0.31.2 examples — because that directory is what the fixture inventory names
- * and because an allowlist that lives away from its corpus is one nobody updates when the corpus
- * moves. Fixing the path is an edit due in that section.
+ * **The CommonMark deviation allowlist is not checked here** (D10-15, amended 2026-09-21). It lives
+ * at `packages/markdown/fixtures/commonmark-deviations.json`, beside the corpus it annotates, and
+ * `markdown.commonmark.unit` owns it end to end for the same reason `scripts/check-quarantine.ts`
+ * owns the quarantine: two parsers of one register are two places to disagree about what a row is.
+ * That test enforces more than this script could — every one of the 652 examples still runs and is
+ * asserted against its documented output, a reason must cite its 08-markdown-pipeline-import-export.md
+ * section and must not read `UNREVIEWED`, an entry whose example is absent from the corpus fails,
+ * and an entry the engine no longer needs fails as stale. Nothing is excluded, so the quiet-death
+ * failure mode D10-15 exists to stop cannot arise there.
  *
  * **An absent file is zero entries, and is said out loud.** Three of the four land at later
  * milestones: the Schemathesis exclusions with the fuzz lane, the deviation allowlist with
@@ -58,7 +60,7 @@ import {
   type Finding,
 } from './lib/check.ts';
 import { isFile } from './lib/files.ts';
-import { arrayMember, isRecord, parseJson, stringMember } from './lib/json.ts';
+import { arrayMember, parseJson, stringMember } from './lib/json.ts';
 import { CHECK_INPUTS } from './lib/paths.ts';
 
 /** One entry of an exclusion file, reduced to the fields the rule is about. */
@@ -153,29 +155,6 @@ function parseLicenseExceptions(path: string): Parsed {
   };
 }
 
-/** The CommonMark deviation allowlist: `{ "deviations": [ … ] }`. */
-function parseDeviations(path: string): Parsed {
-  const parsed = parseJson(readFileSync(path, 'utf8'));
-  const list = arrayMember(parsed, 'deviations');
-  if (list === undefined) {
-    return { entries: [], unreadable: 'the file carries no `deviations` array' };
-  }
-  return {
-    entries: list.map((entry, index) => {
-      const example = isRecord(entry) ? entry['example'] : undefined;
-      return {
-        label: `deviations[${String(index)}]${
-          typeof example === 'number' ? ` (example ${String(example)})` : ''
-        }`,
-        owner: stringMember(entry, 'owner'),
-        issue: stringMember(entry, 'issue'),
-        expires: stringMember(entry, 'expires'),
-        reason: stringMember(entry, 'reason'),
-      };
-    }),
-  };
-}
-
 // ---------------------------------------------------------------------------------------------
 // The file table
 // ---------------------------------------------------------------------------------------------
@@ -205,13 +184,6 @@ const FILES: readonly ExclusionFile[] = [
     what: 'reviewed licence exceptions',
     arrivesAt: 'M0',
     parse: parseLicenseExceptions,
-    needsReason: true,
-  },
-  {
-    path: CHECK_INPUTS.commonmarkDeviations,
-    what: 'deliberate CommonMark deviations',
-    arrivesAt: 'M2, with `markdown.commonmark.unit`',
-    parse: parseDeviations,
     needsReason: true,
   },
   {

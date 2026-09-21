@@ -194,6 +194,18 @@ describe('testkit.fixtures.unit [area:testkit]', () => {
     expect(existsSync(COMMONMARK_SPEC_PATH)).toBe(true);
   });
 
+  // `@iridium/markdown` is tagged `iso` and cannot import this `node`-tagged package, so it carries
+  // its own copy of the corpus (packages/markdown/fixtures/PROVENANCE.md records why). The copy is
+  // only safe while it stays identical: a conformance run against a drifted corpus would report a
+  // pass this one never made. Prose in a provenance file cannot catch that, so it is asserted here.
+  it('keeps the boundary-mandated markdown copy of the corpus byte-identical', () => {
+    const canonical = readFileSync(COMMONMARK_SPEC_PATH);
+    const copy = readFileSync(
+      join(REPO_ROOT, 'packages', 'markdown', 'fixtures', 'commonmark-0.31.2.json'),
+    );
+    expect(copy.equals(canonical)).toBe(true);
+  });
+
   it('stays under the 5 MB committed-fixture cap', () => {
     const total = listFixtureFiles(FIXTURES_ROOT)
       .filter((f) => !f.path.endsWith('.ts'))

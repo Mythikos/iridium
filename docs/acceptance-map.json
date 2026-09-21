@@ -7266,6 +7266,17 @@
         "Inventory completeness — M1 completion regressions."
       ]
     },
+    "testkit.fixtures.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M0",
+      "project": "unit",
+      "file": "packages/testkit/src/testkit.fixtures.unit.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M0 — Committed fixture corpora reach their typed accessors rather than path literals, vendored corpora carry provenance, the version stamp is present, and the trees stay inside the 5 MB cap; from M2 the boundary-mandated packages/markdown copy of the CommonMark corpus is asserted byte-identical to the canonical testkit one.",
+      "inventories": [
+        "Inventory completeness — M1 completion regressions."
+      ]
+    },
     "testkit.origin-ws.unit": {
       "layer": "L1",
       "sinceMilestone": "M1",

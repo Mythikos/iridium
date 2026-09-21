@@ -34,6 +34,7 @@ export default defineConfig({
     '**/node_modules/**',
     // Markdown/vault fixtures are pipeline test data, never code; apps/e2e/fixtures/*.ts stays linted.
     'packages/testkit/src/fixtures/**',
+    'packages/markdown/fixtures/**',
     'apps/server/test/fixtures/**',
     // S11 emits benchmark bundles here; the authored spike harness remains linted.
     'spikes/s11-markdown/results/**',
