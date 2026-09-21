@@ -1,6 +1,6 @@
 # A1 — Monorepo toolchain: pnpm workspaces + Turborepo, TypeScript 7 native, oxlint/oxfmt, tsdown, Vite 8
 
-**Status:** Accepted (2026-09-11); amended 2026-09-13: a `spikes/*` workspace glob and the `spike` boundary tag join the layout (12-milestones.md D12-5), the catalog is defined as what the manifests declare rather than what the plan pins (knip 6 reports an unused entry), and the single-copy `overrides` list is recorded in full — `@types/node`, `fast-check` and `axe-core` alongside A14's CRDT and CodeMirror entries.
+**Status:** Accepted (2026-09-11); amended 2026-09-13: a `spikes/*` workspace glob and the `spike` boundary tag join the layout (12-milestones.md D12-5), the catalog is defined as what the manifests declare rather than what the plan pins (knip 6 reports an unused entry), and the single-copy `overrides` list is recorded in full — `@types/node`, `fast-check` and `axe-core` alongside A14's CRDT and CodeMirror entries. Amended 2026-09-21: a spike leaf a shipped patch is regenerated and re-verified from is retained until that patch retires (12-milestones.md D12-5), which is why `spikes/s11-markdown` survives the milestone that absorbed it.
 
 ## Context
 

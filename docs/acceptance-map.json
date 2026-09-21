@@ -7288,6 +7288,17 @@
         "the Location convention"
       ]
     },
+    "snippet.fallback.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "apps/server/src/search/snippet.fallback.unit.spec.ts",
+      "tag": "[area:search]",
+      "asserts": "M2 — when the mapped worker output is unavailable, refused or timed out, the source scan supplies the highlight ranges, and the builder falls back rather than failing the search",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
+      ]
+    },
     "stateless-codec.unit": {
       "layer": "L1",
       "sinceMilestone": "M1",

@@ -1468,7 +1468,7 @@ Every token-authenticated read writes one `access_log` row (C.9, partitioned mon
 | Column | Auth-relevant content |
 |---|---|
 | `surface` | `mcp` \| `rest` \| `export` |
-| `action` | `mcp.get_note`, `mcp.search_notes`, `mcp.resources.read`, `rest.notes.markdown`, `oauth.token.issue`, `oauth.token.refresh`, … |
+| `action` | `mcp.get_note`, `mcp.search_notes`, `mcp.resources.read`, `rest.notes.getMarkdown`, `oauth.token.issue`, `oauth.token.refresh`, … |
 | `token_id`, `user_id` | the credential and its owner |
 | `oauth_client_id` | the **verified** client identity for a call made with an OAuth access token, NULL for a PAT — the first identity in this plan the server established rather than accepted. `client_name` and `client_version` below stay the untrusted self-report, and the admin activity view labels the two differently ("Claude · verified connector" versus "self-reported") |
 | `note_ids JSON` | **every** note id returned by a list, search or read — the answer to "what did this agent see" |
