@@ -1328,3 +1328,65 @@ This completed supplementary run supplies the missing two-platform runtime proof
 the product tag nor image digest was moved or rebuilt. The raw logs, artifact metadata,
 downloaded identities, registry records and verified file hashes are retained under
 `reports/remote-ci/35516882462-*` and `reports/remote-ci/35518865586-*`.
+
+## Post-exit main: pre-routing problem documents and advisory lanes (2026-09-20)
+
+Two commits land on main after the image verification above:
+`5a89e770d3d5739cc152f9e4ebec4bba8c339212` answers the pre-routing refusals with RFC 9457
+documents, and `ed6220584f2a9b04a01d5b732f97ab00fa770d89` lets the two advisory nightly
+lanes reach their own assertions. Both were pushed together, so Actions started one run for
+the head commit: the security commit has no independent check run, and its evidence is the
+head tree below rather than a separate result.
+
+CI [35528064737](https://github.com/Mythikos/iridium/actions/runs/35528064737) on `ed62205`
+passes all twelve required checks.
+
+| Required check | Check-run ID | Result |
+|---|---|---|
+| `static` | [106123612214](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123612214) | Pass |
+| `unit (ubuntu-latest)` | [106123825523](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825523) | Pass |
+| `unit (windows-latest)` | [106123825567](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825567) | Pass |
+| `integration (mysql:8.4.11)` | [106123825607](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825607) | Pass |
+| `integration (mysql:9.7.2-oraclelinux9)` | [106123825538](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825538) | Pass |
+| `chaos-core (mysql:8.4.11)` | [106123825529](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825529) | Pass |
+| `chaos-core (mysql:9.7.2-oraclelinux9)` | [106123825526](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825526) | Pass |
+| `e2e-electron (ubuntu-latest)` | [106123825615](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825615) | Pass |
+| `e2e-electron (windows-latest)` | [106123825594](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825594) | Pass |
+| `e2e-electron (macos-latest)` | [106123825563](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825563) | Pass |
+| `mutation-scoped` | [106123825574](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106123825574) | Pass |
+| `merge-reports` | [106128613008](https://github.com/Mythikos/iridium/actions/runs/35528064737/job/106128613008) | Pass |
+
+`e2e-web` remains skipped until M4. The intervening docs commit `0d80126`, which records the
+completed image verification, passes the same twelve checks in
+[35519167283](https://github.com/Mythikos/iridium/actions/runs/35519167283); its `static` is
+[106100292689](https://github.com/Mythikos/iridium/actions/runs/35519167283/job/106100292689)
+and its `merge-reports` is
+[106104828617](https://github.com/Mythikos/iridium/actions/runs/35519167283/job/106104828617).
+
+The 8.4 outsider profile's two recorded content-type failures are the source of the first
+commit: HTTP 431 from an oversized header and HTTP 414 from the router's `maxParamLength`
+both answered `application/json` instead of `application/problem+json`. Fastify writes both
+before a request exists, so neither reached `problem.ts`. `security/client-errors.ts` closes
+both seams — `frameworkErrors` through the ordinary `sendProblem` path, and
+`clientErrorHandler` by hand, because it owns a raw socket and no reply, closing the
+connection afterwards because a head the parser stopped reading cannot frame what follows.
+The closed vocabulary gains `malformed_request` (400), `request_timeout` (408),
+`uri_too_long` (414) and `request_headers_too_large` (431), with their rows in
+09-api-reference.md §1.5 and the generated artefacts regenerated. Two cases in
+`security.problem.unit` write a request head to a real socket, because neither refusal is
+reachable through `app.inject`. The earlier outsider failures remain recorded as failures.
+
+The second commit repairs the harness, not the lanes' strictness. `buildServerEnv` composes a
+complete environment precisely to keep ambient operator settings out of a fixture, so it never
+passed `IRIDIUM_ALLOW_UNTESTED_MYSQL` on; every innovation-lane server refused the uncertified
+line and 93 cases failed before any MySQL 26 assertion ran. The flag describes which engine the
+whole run targets, so it now propagates the way `IRIDIUM_MYSQL_IMAGE` and `UV_THREADPOOL_SIZE`
+already do, and `extraEnv` still overrides it. `runLifecycle` drops Node 26's own Web Storage
+`ExperimentalWarning` lines and keeps everything the server writes, so a real stderr regression
+still fails; on Node 24 there are no such lines and the filter changes nothing. The seventh
+Node 26 failure, the same-user multi-session revocation observation deadline, is untouched.
+
+Nightly [35546980998](https://github.com/Mythikos/iridium/actions/runs/35546980998) is
+dispatched manually on `ed62205` at M1 scope and must supply its own terminal result. Until it
+reports, no advisory lane is described as passing, the nine recorded nightly runs stand as
+recorded, and no consecutive green history is claimed.

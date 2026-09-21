@@ -237,12 +237,13 @@ identified separately in the nightly evidence.
 - Deferred to the owner: branch protection and PR workflow until explicitly restored. Commits
   and pushes continue directly to main, and the version bot cannot open PRs.
 - Deferred to M2's API/test-harness work: full-profile signed-cursor generation, administrator
-  fixture authentication after stateful account changes, transport/router-level 431 and 414 ProblemDetails,
-  the outsider profile's one-hour completion bound, and the advisory MySQL innovation override.
+  fixture authentication after stateful account changes, transport/router-level 431 and 414 ProblemDetails
+  (closed after the tag; see "Post-tag main repairs" below), the outsider profile's one-hour completion
+  bound, and the advisory MySQL innovation override.
   Their first nightly failures are recorded, not
   relabeled as passes. D12-20 makes the full administrator/outsider fuzz profiles separate from
-  M1's required light gate. Selected full API checks [106067832605](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832605) (failure) / [106067832826](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832826) (failure) retain artifacts `10604299681`, `10604774311`. Both administrator profiles record one generated-cursor rejection and 27 authentication errors; authenticated administrator fuzz coverage is not established. The 8.4 outsider profile completes in 3060.59 seconds with two content-type failures, HTTP 431 and HTTP 414 returning application/json instead of application/problem+json. The 9.7 outsider profile reaches its 3600000 ms completion deadline and supplies no terminal pass. Cursor generation, administrator fixture recovery, transport/router ProblemDetails and the completion-bound investigation remain M2 work under D12-20; the required non-admin M1 light profiles pass separately on both engines. Innovation check [106067832718](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832718) remains failure: 93 failures, 27 passes and 291 skips retain the production MysqlUnsupportedError for MySQL 26.7.0. The advisory test override does not cross every production version check; investigation remains assigned to future harness/runtime adoption, while both required LTS engines remain separately gated.
-- Deferred until Node 26 adoption (A4/D10-19): Actual runtime check [106067832740](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832740) is failure, with 7 failures and 2742 passes. Six boot/lifecycle cases fail strict stderr assertions on Node 26 Web Storage ExperimentalWarning output. A seventh case, same-user multi-session revocation, reaches its one-second connection-close observation deadline. The runtime is advisory under A4/D10-19; both warning behavior and the observed revocation timing remain open for Node 26 adoption, with no assertion weakened and no compatibility pass claimed. Artifact `10604496352` preserves the result.
+  M1's required light gate. Selected full API checks [106067832605](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832605) (failure) / [106067832826](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832826) (failure) retain artifacts `10604299681`, `10604774311`. Both administrator profiles record one generated-cursor rejection and 27 authentication errors; authenticated administrator fuzz coverage is not established. The 8.4 outsider profile completes in 3060.59 seconds with two content-type failures, HTTP 431 and HTTP 414 returning application/json instead of application/problem+json. The 9.7 outsider profile reaches its 3600000 ms completion deadline and supplies no terminal pass. Cursor generation, administrator fixture recovery and the completion-bound investigation remain M2 work under D12-20, while transport/router ProblemDetails is closed on main after this record's tag by `5a89e770d3d5739cc152f9e4ebec4bba8c339212`; the required non-admin M1 light profiles pass separately on both engines. Innovation check [106067832718](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832718) remains failure: 93 failures, 27 passes and 291 skips retain the production MysqlUnsupportedError for MySQL 26.7.0. The advisory test override does not cross every production version check; investigation remains assigned to future harness/runtime adoption, while both required LTS engines remain separately gated.
+- Deferred until Node 26 adoption (A4/D10-19): Actual runtime check [106067832740](https://github.com/Mythikos/iridium/actions/runs/35506782276/job/106067832740) is failure, with 7 failures and 2742 passes. Six boot/lifecycle cases fail strict stderr assertions on Node 26 Web Storage ExperimentalWarning output. A seventh case, same-user multi-session revocation, reaches its one-second connection-close observation deadline. The runtime is advisory under A4/D10-19; both warning behavior and the observed revocation timing remain open for Node 26 adoption, with no assertion weakened and no compatibility pass claimed. Artifact `10604496352` preserves the result. The six stderr cases are addressed on main after the tag by `ed6220584f2a9b04a01d5b732f97ab00fa770d89`, which drops the runtime's own warning lines from the observed stderr while keeping everything the server writes; the seventh, the revocation observation deadline, is untouched and remains open. Neither is described as passing before the nightly dispatched below reports.
 - Outstanding as directed: local macOS Electron, because there is no local macOS environment;
   and a fresh local `pnpm audit`, because registry egress approval remains unavailable. Remote
   macOS and remote audit success are separate evidence and do not close these local items.
@@ -329,3 +330,38 @@ This completed supplementary run supplies the missing two-platform runtime proof
 the product tag nor image digest was moved or rebuilt. The raw logs, artifact metadata,
 downloaded identities, registry records and verified file hashes are retained under
 `reports/remote-ci/35516882462-*` and `reports/remote-ci/35518865586-*`.
+
+## Post-tag main repairs (2026-09-20)
+
+Two commits land on main after the completed image verification above. Neither moves the
+product tag, the published image digest, nor any result already recorded here: `v0.1.0`
+still identifies `f31a51fd2c3af6b3631a28fc45918245dfac34a1`.
+
+`5a89e770d3d5739cc152f9e4ebec4bba8c339212` answers the pre-routing refusals with RFC 9457
+documents. Fastify writes 414 itself when a URL exceeds `maxParamLength`, and its default
+client error handler writes 431, 408 and 400 when Node's parser refuses a head before the
+request exists; neither path has a route, so neither reached `problem.ts`. This closes the
+transport/router ProblemDetails item the dispositions above deferred to M2 — the item the
+8.4 outsider profile raised — and adds `malformed_request`, `request_timeout`,
+`uri_too_long` and `request_headers_too_large` to the closed vocabulary with their rows in
+09-api-reference.md §1.5. The outsider profile's recorded failures stand as failures; the
+repair is not backdated to them.
+
+`ed6220584f2a9b04a01d5b732f97ab00fa770d89` lets the two advisory nightly lanes reach their
+own assertions. The innovation lane's servers refused the uncertified line because
+`buildServerEnv` never propagated `IRIDIUM_ALLOW_UNTESTED_MYSQL`, so 93 cases failed before
+any MySQL 26 assertion ran; the Node 26 lane's six stderr cases failed on the runtime's own
+Web Storage `ExperimentalWarning`. Neither lane's strictness is reduced: both still fail on
+an actual incompatibility. The seventh Node 26 failure, the same-user multi-session
+revocation observation deadline, is untouched and remains open.
+
+Both commits were pushed together, so Actions started one run for the head commit. CI
+[35528064737](https://github.com/Mythikos/iridium/actions/runs/35528064737) on `ed62205`
+passes all twelve required checks; `5a89e77` has no independent check run and is proven only
+as part of that tree. Per-check IDs, the equally green docs run on `0d80126`, and the
+dispatched nightly [35546980998](https://github.com/Mythikos/iridium/actions/runs/35546980998)
+are recorded in [remote-ci.md](remote-ci.md). That nightly must supply its own terminal
+result: no advisory lane is described as passing, and the nightly history above is unchanged,
+until it reports.
+
+The local macOS Electron and fresh local audit items remain outstanding.
