@@ -1,6 +1,6 @@
 # M2 working record
 
-M2 implementation and exit validation are in progress. `CURRENT` remains M1. This is local working evidence, not an exit declaration or a remote CI result. The working tree prepares version 0.2.0 across the root and 23 workspaces; no M2 implementation commit or tag exists yet.
+M2 implementation is committed and exit validation is in progress. `CURRENT` remains M1. This is local working evidence, not an exit declaration or a remote CI result. The tree carries version 0.2.0 across the root and 23 workspaces; no `v0.2.0` tag exists.
 
 ## Implemented
 
@@ -11,21 +11,69 @@ M2 implementation and exit validation are in progress. `CURRENT` remains M1. Thi
 - Migrations 0056–0059 replace unsupported high-cardinality JSON indexes with indexed derived terms and widen raw frontmatter. Historical migrations remain unchanged. The complete selected path is inspected before any migration executes; long-running 0056 and 0059 require the operator's explicit `--allow-long-running` flag. Boot remains available for diagnostics while refusing product traffic until migration completes.
 - Publication takes the vault shared lock before its first snapshot read. Purge fences writers under a short exclusive lock, waits for disposal outside that lock, then reacquires it and revalidates. Raw durable append remains independent of the publication gate.
 
-## Local evidence through 2026-09-21 UTC
+## Landed
 
-- The final affected 8.4 lifecycle/authorization cohort passed 212 tests in 21 files, including the 30 audit/trash crash cases and real eight-worker lock-order workload. The corresponding 9.7 cohort passed 214 tests; the two extra cases were added during its run and also passed their separate 8.4 cohort. Reports live under `reports/authz/`.
-- The final content cohort passed 54 tests in eight files on 8.4 and 56 in nine files on 9.7, including the real-MySQL 200-case query property, 43 error envelopes, hostile projection, ranking, fallback snippets and immutable N−1 wire checks: `reports/m2-content-compatibility-{8.4,9.7}.json`. The ninth 9.7 file is the lock-order proof also included in the lifecycle cohort; these totals must not be added as unique tests.
-- At pipeline v2, full HTTP search over 5,000 notes measured p95 31.5823 ms on 8.4 and 28.8395 ms on 9.7, both below 200 ms. Actual worker dispatch through returned 100 KiB projection measured 31.7797 ms and 31.5112 ms respectively, below 250 ms. Raw samples and corpus hashes are retained in `reports/perf/`.
-- The 20,000-node fixture includes seven notes, six resolved links, one PNG and source-normalization metadata. Its backup-role dump was restored with the shipped MySQL client on both required database lines and verified through actual content APIs and the audit verifier. `apps/server/test/fixtures/upgrade/v0.2.0/manifest.json` records the dump and separately archived, unmodified DBA grant artifact. The v0.1.0 fixture hashes are unchanged.
-- Migration CLI/boot refusal and explicit admission passed on both database lines. Full Unicode frontmatter maxima, real indexed query plans, schema fingerprints, grants, resumed reindex/rebuild and target-lifecycle locking passed their final schema cohorts. Earlier failed runs remain available.
-- Attachment/job response coverage passed ten tests on each database line. Search throttling and revision deadline/capacity coverage passed ten on each line, including successful recovery. The REST response matrix passed 15 tests on each database line. The accumulated local OpenAPI recorder now covers all 303 documented operation/status pairs; only a fresh complete CI lane can establish the formal gate.
-- S11's original remark candidate failed the browser timing budget. The executed markdown-it fallback measured preview p95 28.8 ms, 100 KiB worker compute p95 37.127 ms and complete browser payload 119,566 gzip bytes. It preserves all 732 corpus sources and passes 1,464 emitted-browser comparisons. The patch keeps the upstream root API and shared grammar intact. Failed experiments remain in the spike evidence; the corpus is representative, not observed pilot usage. The formal note still needs the genuine implementation commit reference.
-- The production image builds and passes non-root/read-only runtime checks and explicit migration admission on both databases. This local image has commit `unknown`; it is not the release image or a publication claim. A stale access-log partition readiness placeholder found by this check is being replaced with an actual database probe.
-- Full build, native TypeScript project references, ordinary and type-aware lint, boundaries, production Knip and dependency deduplication pass. The latest unit/component/guard run passed 4,502 tests with ten conditional skips and two failures: a corrected CLI usage spacing expectation and the intentionally missing S11 implementation-commit reference. The remaining guard must pass after the implementation is committed.
-- The high-severity audit gate passes with three moderate advisories. The exact-version argparse 3.0.2 PSF-2.0 exception is prepared for owner review; it is not active and no approval or issue has been invented.
+The implementation is committed. `fba2ca7` carries the whole M2 tree; the nine commits after it
+close what a defect audit and the first fresh lane runs on that tree found. `CURRENT` remains M1 and
+no `v0.2.0` tag exists.
+
+Four of those were product defects rather than stale expectations.
+
+- `attachRequestId` ran in an `onRequest` hook registered after `under-pressure` and `rate-limit`,
+  and Fastify runs those in registration order, so a shed `503` and a limited `429` went out with no
+  `requestId` and no echoed header (ARCH-12, ARCH-15).
+- `doctor --repair-heads` declared `sql<number>` over a `GREATEST(COALESCE(MAX(...)))` that widens to
+  DECIMAL and returns from mysql2 as a string, so `head_seq !== expected` compared a number with a
+  string, held for every consistent note, and the repair reported and audited work it never needed.
+- `NODE_PATH_MAX_CHARS` is 16,387 against Node's 16,384-byte head budget, so a maximal `pathPrefix`
+  could never be sent: the published bound described a request the transport refused with `431`. The
+  budget is now `REQUEST_HEADERS_MAX_BYTES`, passed to `createServer`.
+- `tree/service.ts` shadowed the contracts `InvalidMoveReason` with a local union of three of its
+  four members, so the shadowing type could not name the `cycle` refusal the route produces.
+
+## Local evidence, 2026-09-21 UTC
+
+Everything below was run against the committed tree on this machine. None of it is a remote result.
+
+| Lane | Result |
+|---|---|
+| `unit` + `guard` + `component`, `IRIDIUM_TEST_TARGET_MILESTONE=M2` | 4,508 passed, 9 skipped, 0 failed, 223 files |
+| `integration`, `mysql:8.4.11` | 623 passed, 0 failed, 124 files |
+| `integration`, `mysql:9.7.2-oraclelinux9` | 623 passed, 0 failed, 124 files |
+| `contract`, including `schemathesis.light.contract` | 108 passed, 0 failed, 11 files |
+| `property`, `mysql:8.4.11` | 14 passed, 0 failed, 5 files |
+| `build`, `check-types`, `lint` | 45 tasks, all green |
+| `oxfmt --check`, `knip --production`, `turbo boundaries`, `pnpm dedupe --check` | all green |
+| the nine `scripts/check-*.ts` static checks | all green, licence scan included |
+| `pnpm gen` with the database step | every artefact current; kysely diff against `mysql:8.4.11` reports 37 tables, 436 columns, no difference |
+
+The Schemathesis light gate had never run against this tree. It passes now, and the failures it found
+on the way were all one shape: a rule the server enforces that the document did not publish. Where
+the rule belongs to a route released at `v0.1.0` the published shape is unchanged and the refusal is
+declared in the fuzz configuration, because A54 prices a tightened validation at an `apiVersion` bump
+and none of these changes can be observed by a client. Where the route is new at M2 the schema states
+the rule. `compat.n-minus-1` and the contract lane are green together.
+
+Five named exit tests passed without asserting a clause their §6.4 row states — the depth bound, the
+pre-trash validator, the job claim columns, the vault-status search cases and the after-thinning half
+of the unreferenced report. Each now asserts it; `hierarchy.model.prop` models depth independently,
+because the recursive CTE stops at the ceiling and a read-back would have been a clamp wearing the
+shape of an invariant.
+
+The licence scan passes. PSF-2.0 joined the allowlist on 2026-09-21 with the owner's approval, the
+way BlueOak-1.0.0 did at M0: `argparse` 3 reaches the production closure through `markdown-it`'s CLI,
+which Iridium never runs, and a per-package exception would carry an expiry that recurs on every
+dependency bump for no policy gain.
 
 ## Remaining exit work
 
-Complete live migration/readiness recovery checks, generated-artifact and final static checks, the fresh full database lanes, merged coverage, full-scope mutation, Schemathesis light and remote Linux/Windows/macOS requirements. Record the actual implementation commit, close the license decision, obtain required remote CI results and publish the tagged image with its architecture, SBOM and scanner evidence before advancing `CURRENT`.
+The `chaos` lane, merged coverage and the full-scope mutation campaign have not been measured at M2
+scope. Neither required database line has a remote result, and no remote run has seen this tree at
+all: the `ubuntu`/`windows` build matrix, macOS Electron and the three-consecutive-green nightly
+floor are all outstanding, and the nightly floor is a wait no engineering compresses. `M2-exit.md`
+and an M2 section in `remote-ci.md` are unwritten and both depend on those results. The tagged image
+with its architecture, SBOM and scanner evidence is unpublished, and `CURRENT` advances only after
+all of it.
 
-The owner requires direct commits and pushes to main. Branch protection is deferred under section 13.3 and is not an additional M2 approval gate. This record does not authorize M3 work.
+The owner requires direct commits and pushes to main. Branch protection is deferred under section
+13.3 and is not an additional M2 approval gate. This record does not authorize M3 work.
