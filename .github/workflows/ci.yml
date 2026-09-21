@@ -571,7 +571,7 @@ jobs:
           mutate="$mutate"'|apps/server/src/collab/persistence/.*\.ts'
           mutate="$mutate"'|apps/server/src/collab/(limits|owner-lease)\.ts'
           mutate="$mutate"'|apps/server/src/mcp/(cursor|verifier|rate-limit)\.ts'
-          mutate="$mutate"'|apps/server/src/tree/(names|moves|paths|rename-impact)\.ts'
+          mutate="$mutate"'|apps/server/src/tree/(mutations|names|paths|rename-impact)\.ts'
           mutate="$mutate"'|packages/contracts/src/(tokens|paths|authz|ids|limits|markdown-limits)\.ts'
           mutate="$mutate"'|packages/crdt/src/.*\.ts'
           mutate="$mutate"'|packages/markdown/src/sanitize/.*\.ts'

@@ -3042,6 +3042,18 @@
         "Inventory completeness — M1 completion regressions."
       ]
     },
+    "cli.maintenance.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/cli.maintenance.integration.spec.ts",
+      "tag": "[area:ops]",
+      "asserts": "M2 — the shipped CLI against a real deployment in both of its two postures: while a server owns the schema it submits intents that the live owner executes, auditing every new command path; with no owner it acquires the real lease itself and executes app and DDL jobs; it exits 3 when the active owner lacks the DDL credential even though the CLI holds it; it audits a queued cancellation without taking the serving lease; and a cancelled DDL job stops at its next real checkpoint rather than at an arbitrary row",
+      "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites",
+        "the Location convention"
+      ]
+    },
     "close-policy.unit": {
       "layer": "L1",
       "sinceMilestone": "M1",
@@ -3075,7 +3087,7 @@
       "asserts": "M1 — CH-10's churn half — 50 open/close cycles across 20 notes with 4 workers leave the loaded-document count at 0 with no leak and collab_documents_loaded equal to getDocumentsCount(). The admission limit itself is collab.admission-budget.integration; this file owns behaviour under churn",
       "inventories": [
         "Chaos and durability procedures (CH-10)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3083,11 +3095,11 @@
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/collab/hooks/auth.unit.spec.ts",
       "tag": "[area:collab]",
       "asserts": "M1: ticket/session identity, post-fence and stale-epoch permission revalidation, real denial distinctions, and retryable unavailable storage failures.",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "collab.awareness-identity.integration": {
@@ -3111,7 +3123,7 @@
       "tag": "[hp:HP-5]",
       "asserts": "M1 — the awareness rate cap drops rather than closes: the 11th awareness frame within one second is not broadcast to a second connection on the same document, iridium_collab_messages_total{type=\"awareness_dropped\"} increments by exactly 1, no CLOSE(7) frame is sent and no collab.limit.exceeded event is written, a Sync Update sent immediately afterwards still applies (only type 1 is filtered), a Ping(9) still gets its Pong, and a second note open on the same socket keeps its own full budget. The cap is enforced before dispatch, in the /collab plugin's socket.on('message') handler via peekFrame, which is why it is asserted here rather than among the close-reason limits of collab.limits.integration: a Hocuspocus hook can only object by throwing, and throwing closes the connection",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3157,7 +3169,7 @@
       "tag": "[hp:HP-2]",
       "asserts": "a client's Yjs clientID is stable across a socket reconnect and a server restart, so note_updates.actor_id attribution and undo scoping survive both",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3169,7 +3181,7 @@
       "tag": "[hp:HP-2]",
       "asserts": "After a durable COMMIT the test drops its result while the process survives; no early acknowledgement, terminal failure or duplicate state",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3182,7 +3194,7 @@
       "asserts": "M1 — CH-11: with FAULT.compactThrow armed, durability is unaffected (persisted arrives, the client reaches saved) while projected does not, note_docs.projected_seq is unchanged, the read routes and MCP get_note serve the last committed projection with the correct ETag and a stale indication, and /readyz stays 200 because a projection lag is not an outage. Clearing the fault and requesting flush {} brings projected_seq to head_seq with note_search and note_links written in the same transaction",
       "inventories": [
         "Chaos and durability procedures (CH-11)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3195,7 +3207,7 @@
       "asserts": "CH-12: an update carrying \\r or a formatting attribute, sent with sendRaw as a hostile or non-Iridium client would, is caught by the compaction scan — note_projections.status='invalid_content', notes.content_invalid=1, a content-invalid message on every connection, the editor read-only for that note, an audit event, and durability untouched. iridium doctor --repair-content then writes a repair update with origin='repair', clears the flag and records a revision",
       "inventories": [
         "Chaos and durability procedures (CH-12)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3219,7 +3231,7 @@
       "asserts": "CH-6: a 30-second MySQL outage behind Toxiproxy takes every client to save-failed without disconnecting one, keeps /healthz 200 and /readyz 503, never exhausts the mysql2 pool and never produces a false persisted; recovery converges all three clients to saved with no duplicated content. The reset_peer and timeout variants cover mid-statement kills and half-open connections",
       "inventories": [
         "Chaos and durability procedures (CH-6)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3281,7 +3293,7 @@
       "tag": "[area:collab]",
       "asserts": "M1 — flush {} is rate-limited per session, creates no content update, and completes the requested committed checkpoint/projection (12 §5.2).",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Server suite by area (Collaboration)",
         "the Location convention"
       ]
@@ -3302,11 +3314,11 @@
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/collab/hooks-never-reject.unit.spec.ts",
       "tag": "[hp:HP-2]",
       "asserts": "every Hocuspocus hook resolves: a store failure is reported through persist-failed and a retry, never by rejecting the hook, because a rejected onStoreDocument would drop the document and the edit with it",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "collab.initial-state-only-path.guard": {
@@ -3365,6 +3377,18 @@
         "Inventory completeness — M1 completion regressions."
       ]
     },
+    "collab.lifecycle-reconciliation.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/collab.lifecycle-reconciliation.integration.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M2 — the same boundary without the crash: with the post-COMMIT delivery withheld by a fault, an actually loaded tombstone is still closed by reconciliation within the closing grace window, so the gateway's closing set is driven by the committed row rather than by the message that announces it",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
+        "the Location convention"
+      ]
+    },
     "collab.limits.integration": {
       "layer": "L3",
       "sinceMilestone": "M1",
@@ -3398,7 +3422,7 @@
       "asserts": "CH-7: under latency, bandwidth, slicer, limit_data and reset_peer toxics on /collab, convergence still holds after draining, saveState never shows saved while a local update is unacknowledged, the provider's reconnect backoff is bounded and jittered, and every reconnect performs exactly one authorization round trip with a fresh ticket and one baseline",
       "inventories": [
         "Chaos and durability procedures (CH-7)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3422,7 +3446,7 @@
       "asserts": "CH-13: crossing the 1 000 000 UTF-16 soft cap by collaborative edit produces size-exceeded, sets notes.oversize=1 at compaction and makes the note read-only until it is reduced; the 2 097 152 hard cap is enforced before note initialization or a repair write; an oversized JSON create request first hits the independent 1 MiB body cap (413 payload_too_large), while hostile collaborative state above the hard cap is refused by the real repair CLI without changing its durable head; a single update above 1 MiB closes the connection too-large and a frame above the 2 MiB maxPayload never reaches the application",
       "inventories": [
         "Chaos and durability procedures (CH-13)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3434,7 +3458,7 @@
       "tag": "[hp:HP-2]",
       "asserts": "the boot lease: exactly one GET_LOCK(ownerLockName, 0) per boot on a dedicated connection never returned to the pool and never inside a row-locking transaction; /readyz reports collab_owner_lease; a denied lease refuses /collab with 4503 no-owner-lease and product REST requests with 503 not_ready, while operational endpoints remain available; the lease is handed over on release; RELEASE_LOCK follows the writer drain and the last unload",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Server suite by area (Collaboration)",
         "the Location convention"
       ]
@@ -3443,11 +3467,11 @@
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/collab/owner-lease.unit.spec.ts",
       "tag": "[area:collab]",
       "asserts": "canonical schema scoping, fixed-length names, dedicated-connection lifecycle, failed acquisition cleanup, and release racing acquisition",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "collab.participants.integration": {
@@ -3466,11 +3490,11 @@
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/collab/hooks/persistence.unit.spec.ts",
       "tag": "[hp:HP-2]",
       "asserts": "M1: V2 document load, baseline/store/unload semantics, exact fenced document lifetimes, and transient storage failure versus missing/corrupt state refusals.",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "collab.persistence.unit": {
@@ -3492,7 +3516,7 @@
       "tag": "[hp:HP-5]",
       "asserts": "M4 — an offline delta above YJS_UPDATE_MAX_BYTES is measured before the provider is attached, not discovered after a frame is rejected: NoteSessionRegistry measures encodeState(ydoc, 1, lastKnownServerSv).byteLength on re-attach, does not attach that document, sets oversizeDelta, increments iridium_collab_oversize_delta_total and leaves the note in the terminal too-large state with no reconnect attempt, while every other note in the same window stays saved (05-collaboration-and-durability.md D05-16). This file owns the measurement, the non-attachment and the terminal state; the Export-my-text and Discard-my-changes affordances that state offers are status-pill.transitions.component's",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3516,7 +3540,7 @@
       "asserts": "CH-15: SIGKILL at a uniformly random point in a 20-second window with 40 clients across 10 notes, 40 iterations nightly — every update acknowledged before the kill is present after the restart, marker counts are 1, assertNoteInvariants passes, text length is monotonic in the acknowledged sequence and no note is left content_invalid or oversize",
       "inventories": [
         "Chaos and durability procedures (CH-15)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3552,7 +3576,7 @@
       "asserts": "CH-16: two real server processes against one schema — the second refuses to serve documents rather than racing, writes no note_updates row and produces no persist.cas_mismatch on the owner; killing the owner lets the standby acquire the lease and serve the same note with the acknowledged content intact",
       "inventories": [
         "Chaos and durability procedures (CH-16)",
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3564,7 +3588,7 @@
       "tag": "[hp:HP-5]",
       "asserts": "M1 — a document-level close is confined to that document, which is what lets one socket carry a note and its vault: after onStateless calls connection.close({code: 4403, reason: 'protocol-error'}) the note provider's onClose sees {code: 1000, reason: 'protocol-error'} and note:<id> unloads, while the shared socket stays OPEN, vault:<id> stays loaded, and the vault provider on the same socket sends ping and receives pong afterwards with zero closes of its own. Recommended for M1 by spike S2 (docs/spikes/S02-fastify-websocket-hocuspocus.md), which observed each of these on the real server; collab.stateless-protocol.integration above asserts the refusal itself, this file its confinement",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3576,7 +3600,7 @@
       "tag": "[hp:HP-5]",
       "asserts": "M1 — a client stateless payload is refused, never ignored: an unknown t, an unknown v, a non-JSON body, a payload over 4 KiB and any client stateless frame on vault:<id> each close with reason: 'protocol-error', driven through the declared NoteClient.sendStateless(payload: unknown), with iridium_collab_hook_errors_total{hook=\"onStateless\"} === 0 after each — the close is a protocol decision, not a hook error, and the metric is what distinguishes the two",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3592,6 +3616,18 @@
         "the Location convention"
       ]
     },
+    "collab.trash-crash.chaos": {
+      "layer": "L5",
+      "sinceMilestone": "M2",
+      "project": "chaos",
+      "file": "apps/server/test/chaos/collab.trash-crash.chaos.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M2 — the trash counterpart of CH-1: SIGKILL at the committed-tombstone boundary, before any gateway or vault notification, leaves the tombstone durable, the audit chains independently verifiable and the recovered server serving the trashed state — a notification that never went out cannot be what makes a committed lifecycle change real",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
+        "the Location convention"
+      ]
+    },
     "collab.trash-during-write.integration": {
       "layer": "L3",
       "sinceMilestone": "M2",
@@ -3600,7 +3636,7 @@
       "tag": "[hp:HP-2]",
       "asserts": "M2 — the NoteTrashedDuringWrite drop, driven with store.slow:<ms>: the writer reaches state trashed, the unload completes, and every artefact matches the trash revision. With collab.unload-after-veto.integration it is what holds invariant I-10 for a trashed note, whose unload checkpoint is written from the committed log through loader.load(noteId) rather than from a live document that the drop has left ahead of the log (03-data-model.md I-10)",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3642,11 +3678,11 @@
       "layer": "L1",
       "sinceMilestone": "M1",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/collab/upgrade-cleanup.unit.spec.ts",
       "tag": "[area:collab]",
       "asserts": "M1: early HTTP refusal closes an unaccepted WebSocket upgrade even when the peer remains half-open; real TCP resets during asynchronous admission and after protocol handoff remain owned, preserve server health and release all sockets at shutdown.",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "collab.vault-channel.integration": {
@@ -3671,6 +3707,17 @@
       "inventories": [
         "Superseded spellings (canonical)",
         "the Location convention"
+      ]
+    },
+    "collab.writer.restore.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "apps/server/src/collab/persistence/writer.restore.unit.spec.ts",
+      "tag": "[area:collab]",
+      "asserts": "M2 — a revision restore is one atomic FIFO unit: client edits queued after the restore was enqueued are captured at their actual pre-restore sequence and committed with it in the same checkpoint pair, a no-op restore creates no revision and leaves a committed head unchanged while still committing the prefix it captured, and invalid content or a retired owner lease is refused before any edit is applied",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "compat.n-minus-1.integration": {
@@ -3718,7 +3765,7 @@
       "tag": "[area:content]",
       "asserts": "ETag equals note_docs.projected_seq, If-None-Match yields 304, and X-Iridium-Head-Revision is present on every content read",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3730,7 +3777,7 @@
       "tag": "[area:content]",
       "asserts": "stale: true exactly when projected_seq < head_seq; a flush {} clears it; no read route ever blocks waiting for freshness",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3738,22 +3785,22 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/content/lines-and-heading.unit.spec.ts",
       "tag": "[area:content]",
       "asserts": "line-range paging is 1-based and inclusive, clamps out-of-range requests, never splits a grapheme, and heading_title extraction matches the projection's",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "content.no-ydoc.unit": {
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/content/no-ydoc.unit.spec.ts",
       "tag": "[area:content]",
       "asserts": "the content read module's import graph contains no yjs import at all, so a read path cannot instantiate a document even by accident",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Superseded spellings (canonical)"
       ]
     },
@@ -3765,7 +3812,7 @@
       "tag": "[area:content]",
       "asserts": "every read route serves the committed projection, never the live Y.Doc (skeleton A37): with a document loaded and dirty, the bytes equal note_projections.markdown at projected_seq",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -3777,7 +3824,7 @@
       "tag": "[area:content]",
       "asserts": "REST GET /notes/:id/markdown, MCP get_note and the export manifest return byte-identical content and the same revision/stale pair for the same note",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Superseded spellings (canonical)",
         "the Location convention"
       ]
@@ -3824,6 +3871,17 @@
       "file": "packages/contracts/src/ids.unit.spec.ts",
       "tag": "[area:contracts]",
       "asserts": "UUIDv7 helpers, BINARY(16) ↔ canonical-string conversion, and that note_revisions.id and revision stay below 2^53 so JSON numbers are safe (09-api-reference.md §1). Canonical against 12-milestones.md's bare id-primitives spelling, which names the property half of this subject (section 7, \"Canonical names for the contracts primitives\")",
+      "inventories": [
+        "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
+      ]
+    },
+    "contracts.markdown-limits.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "packages/contracts/src/markdown-limits.unit.spec.ts",
+      "tag": "[area:contracts]",
+      "asserts": "M2 — the browser-required slice stays a slice: every MARKDOWN_LIMITS member is present in LIMITS at the identical value, NOTE_HARD_MAX_UTF16 included, and the slice carries no LOGIN_, OAUTH_ or WS_ key, so splitting the table for the projection worker cannot become a second source of a limit (invariant 6 of 02-system-architecture.md, guarded by limits.single-source.guard)",
       "inventories": [
         "Inventory completeness — Contracts, CRDT and shared primitives (project unit; tag [ar"
       ]
@@ -4971,6 +5029,17 @@
         "Guard tests"
       ]
     },
+    "harness.drain-clock.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:testkit]",
+      "asserts": "M2 — drainWithClock, the fixture that lets a test drive the product's injected Clock while a real drain is in flight, keeps the two kinds of time apart: an interval already overdue at a quota-aging jump fires exactly once, real I/O settles inside its own wall-clock deadline instead of having that deadline accelerated with the injected one, and a real drain failure propagates instead of being reported as completion. The name is an admitted exception — the file sits in src/ops/, which supplies a different prefix",
+      "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites"
+      ]
+    },
     "healthz.integration": {
       "layer": "L3",
       "sinceMilestone": "M1",
@@ -4986,12 +5055,12 @@
     "hierarchy.model.prop": {
       "layer": "L4",
       "sinceMilestone": "M2",
-      "project": null,
-      "file": null,
-      "tag": null,
-      "asserts": null,
+      "project": "property",
+      "file": "apps/server/test/property/hierarchy.model.prop.spec.ts",
+      "tag": "[area:tree]",
+      "asserts": "M2 — row 7's L4 model, specified in full under \"Property and model suites\": the seven tree commands are issued as real REST calls with real If-Match and optionally interleaved through fc.scheduler(), and the nine oracles hold after every command — documented status codes only, an acyclic CTE reaching every live row once, sibling-name uniqueness under utf8mb4_0900_as_ci, no self-ancestor, model/database agreement wherever the model can predict the outcome, a strictly increasing vaults.tree_version that never moves on a 409, one audit event per successful mutation with a verifying chain, CTE paths equal to the model's, and a trashed subtree that restores to exactly itself. Carries the PROP_DB budget. It also proves invalid-move-reasons, whose row in \"Specified rules outside the nine rows\" is the tag authority",
       "inventories": [
-        "named by an acceptance-map entry only"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "history-named-version.e2e": {
@@ -5141,6 +5210,41 @@
         "the Location convention"
       ]
     },
+    "jobs.policy.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:jobs]",
+      "asserts": "M2 — the pure arithmetic the DB-backed job suites cannot isolate: revisionRetentionBucket keeps every revision for 24 hours and then buckets by UTC hour and UTC day, identically on both sides of a leap day; monthPartition names the partition for a month and places its boundary on the first instant of the next one, including the December wrap; JOB_SCHEDULE anchors its daily, weekly and monthly entries to fixed UTC instants, so neither the runner's timezone nor a restart moves a due time; and removeManagedPath removes only a verified descendant of the managed root, refusing the root itself and every traversal form",
+      "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin"
+      ]
+    },
+    "jobs.retention.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/jobs.retention.integration.spec.ts",
+      "tag": "[area:jobs]",
+      "asserts": "M2 — retention driven by product writes and the injected clock rather than by pre-aged SQL: thinning keeps each distinct flushed state and the protected create revision; transfer_cleanup removes only aged files under .tmp/ and never the immutable attachment content beside them; and the session/ticket sweep expires credential rows once the clock passes their retention. Paired with jobs.policy.unit, which owns the bucket arithmetic this file exercises end to end",
+      "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin",
+        "the Location convention"
+      ]
+    },
+    "jobs.schedule.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/jobs.schedule.integration.spec.ts",
+      "tag": "[area:jobs]",
+      "asserts": "M2 — durable schedule discovery through the production plugin and the real owner lease: one tick() enqueues every entry of JOB_SCHEDULE exactly once, the reindex payload is pipelineVersion or stale according to the schema_meta.pipeline_version marker (08-markdown-pipeline-import-export.md §2.13), a second tick in the same hour enqueues nothing, and the next UTC hour enqueues exactly one further stale reindex",
+      "inventories": [
+        "Inventory completeness — Audit, access log, jobs and admin",
+        "the Location convention"
+      ]
+    },
     "jobs.scheduler.integration": {
       "layer": "L3",
       "sinceMilestone": "M2",
@@ -5243,11 +5347,11 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/links/anchor-rows.unit.spec.ts",
       "tag": "[area:links]",
-      "asserts": "M2 — the note_links row shape for same-note anchors: a valid anchor projects status='resolved' with resolved_node_id = from_note_id, an invalid one projects broken, and no row ever carries both target columns NULL while resolved (08-markdown-pipeline-import-export.md §5.3)",
+      "asserts": "M2 — the note_links row shape for same-note anchors: linkColumns projects a valid anchor as status='resolved' with resolved_node_id = from_note_id, an invalid one as broken with its fragment preserved, and no row ever carries both target columns NULL while resolved (08-markdown-pipeline-import-export.md §5.3). Amended 2026-09-21: the path was packages/markdown/src/links.anchor-rows.unit.spec.ts when the row was written, and the implementation split the subject in two — the SQL row shape belongs to the server, which owns note_links, and the resolver half it was paired with became markdown.links.anchor-rows.unit in the markdown package. The plan follows the tree because the split is the correct one: @iridium/markdown may not know the database's column names",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "links.index-fallback.integration": {
@@ -5258,7 +5362,7 @@
       "tag": "[area:links]",
       "asserts": "M2 — both documented degradations above VAULT_INDEX_MAX_ENTRIES (100 000 entries) are observable rather than theoretical: the server switches that vault to per-link resolution through a lazy VaultIndex backed by one indexed query per lookup, logs the capacity warning and classifies every link exactly as the snapshot path did; and GET /notes/:noteId/links — the route the browser preview falls back to once the client stops holding an index — returns those same classifications at the projected revision for the same note (08-markdown-pipeline-import-export.md §5.2, D08-11)",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -5270,7 +5374,7 @@
       "tag": "[area:links]",
       "asserts": "note_links rows are replaced atomically per projection, carry kind/status and offsets, and a rename updates every inbound row in the same transaction. Tagged [area:links] rather than [area:markdown] so the whole rename-impact-warning family reads as one group in the tag index — and because this file asserts the re-pointing, which is the one thing a reader can mistake for the deferred link rewriting",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -5324,12 +5428,12 @@
     "markdown.commonmark.unit": {
       "layer": "L1",
       "sinceMilestone": "M2",
-      "project": null,
-      "file": null,
-      "tag": null,
-      "asserts": null,
+      "project": "unit",
+      "file": "packages/markdown/src/markdown.commonmark.unit.spec.ts",
+      "tag": "[spec:portability-and-safety]",
+      "asserts": "M2 — row 8's L1 conformance half: all 652 CommonMark 0.31.2 examples of the vendored spec.json run, each asserted against its documented output, and the deviation allowlist excludes nothing — an entry supplies the exact HTML the policy produces instead, must cite its 08-markdown-pipeline-import-export.md §2.4/§2.5/§2.8 reason, must name an example the corpus contains, and fails the moment the engine stops needing it (D10-15's 2026-09-21 amendment)",
       "inventories": [
-        "named by an acceptance-map entry only"
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
     "markdown.flavor-parity.unit": {
@@ -5347,7 +5451,7 @@
       "layer": "L4",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "packages/markdown/src/frontmatter.prop.spec.ts",
       "tag": "[spec:portability-and-safety]",
       "asserts": "frontmatter is either parsed into frontmatter under the YAML 1.2 core schema or reported in frontmatter_error, never silently dropped; frontmatter_raw always equals the original slice byte-for-byte; a --- that is a thematic break is never treated as frontmatter. The property half of markdown.frontmatter.unit; PROP budget",
       "inventories": [
@@ -5377,6 +5481,17 @@
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
+    "markdown.links.anchor-rows.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "packages/markdown/src/markdown.links.anchor-rows.unit.spec.ts",
+      "tag": "[area:markdown]",
+      "asserts": "M2 — [area:markdown] — the resolver half of the anchor subject links.anchor-rows.unit owns in SQL: resolveLink marks a same-note anchor valid after percent-decoding and slugging, leaves a cross-note fragment unvalidated, and project indexes occurrences and unused definitions in source order without counting a literal wikilink twice (08-markdown-pipeline-import-export.md §5.3)",
+      "inventories": [
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
+      ]
+    },
     "markdown.links.prop": {
       "layer": "L4",
       "sinceMilestone": "M2",
@@ -5393,7 +5508,7 @@
       "layer": "L4",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "packages/markdown/src/no-rewrite.prop.spec.ts",
       "tag": "[spec:portability-and-safety]",
       "asserts": "parseNote(src) followed by any preview or projection operation never mutates src, and project(parseNote(src)).markdown === normalizeSource(src).text — opening or previewing a note cannot change its content (spec §3). Runs in the unit project at the PROP budget; specified under \"Markdown properties\"",
       "inventories": [
@@ -5405,7 +5520,7 @@
       "layer": "L4",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "packages/markdown/src/obsidian-detector.prop.spec.ts",
       "tag": "[spec:portability-and-safety]",
       "asserts": "the detector's findings are a function of the source only, are stable under re-running and never rewrite the source; a document with no Obsidian constructs yields an empty finding list. The property half of obsidian.detect.unit; PROP budget",
       "inventories": [
@@ -5424,24 +5539,35 @@
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
+    "markdown.parser-adapter.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "packages/markdown/src/markdown-it/adapter.unit.spec.ts",
+      "tag": "[area:markdown]",
+      "asserts": "M2 — [area:markdown] — the S11 fallback parser is a drop-in for the reviewed one: every golden fixture keeps its committed mdast and exact source positions, every CommonMark example is toStrictEqual the remark baseline, a renderer nesting cutoff drops no source, and astral symbols classify as Unicode punctuation under CommonMark 0.31.2 §2.1. The name is an admitted exception — the basename is the module (adapter), the name is the area and subject the plan cites",
+      "inventories": [
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
+      ]
+    },
     "markdown.pathological.unit": {
       "layer": "L1",
       "sinceMilestone": "M2",
-      "project": null,
-      "file": null,
-      "tag": null,
-      "asserts": null,
+      "project": "unit",
+      "file": "packages/markdown/src/markdown.pathological.unit.spec.ts",
+      "tag": "[spec:portability-and-safety]",
+      "asserts": "M2 — the denial-of-service half of the same corpus: each admission recipe is refused at its exact cap before parsing, with status, detail and line as 08-markdown-pipeline-import-export.md §2.10 states them, mdast.children empty and source untouched; UTF-8 and UTF-16 bounds are counted separately, a fence is never mistaken for nested prose, a scalar is never split across a scratch-buffer boundary, and the worker-bounded emphasis case completes inside the client budget rather than claiming pre-parse rejection",
       "inventories": [
-        "named by an acceptance-map entry only"
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
     "markdown.pipeline-version.guard": {
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "guard",
-      "file": null,
+      "file": "apps/server/test/guards/markdown.pipeline-version.guard.spec.ts",
       "tag": "[area:markdown]",
-      "asserts": "M2 — [area:markdown] — PIPELINE_VERSION is bumped in the same commit as any change under packages/markdown/src/{parse,project,sanitize}/, asserted from the git diff",
+      "asserts": "M2 — [area:markdown] — PIPELINE_VERSION is advanced in the same commit as any change under packages/markdown/src/ that can alter parsed, projected or sanitized output (08-markdown-pipeline-import-export.md §2.13) — every .ts file there except index.ts, version.ts, text-codec.d.ts and search/, counting tracked, staged, deleted and untracked implementation alike, asserted against Git history. Amended 2026-09-21: the row previously named a co-located packages/markdown/src/pipeline-version.guard.spec.ts and scoped the guard to {parse,project,sanitize}/. The guard reads Git history for the whole repository, so it belongs with the repository-wide guards, and the narrower glob contradicted §2.13 — a change to normalize.ts or restore.ts alters projected output and was outside it",
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
@@ -5484,7 +5610,7 @@
       "layer": "L4",
       "sinceMilestone": "M2",
       "project": "property",
-      "file": null,
+      "file": "apps/server/test/property/markdown.search-query.prop.spec.ts",
       "tag": "[area:search]",
       "asserts": "[area:search] — parseQuery never produces a boolean-mode string MySQL rejects and never produces an unquoted operator from user input. The one markdown property in the DB-backed property project rather than in unit, because \"MySQL rejects it\" is verified by executing the generated string; it therefore carries the PROP_DB budget",
       "inventories": [
@@ -5495,12 +5621,12 @@
     "markdown.xss-corpus.unit": {
       "layer": "L1",
       "sinceMilestone": "M2",
-      "project": null,
-      "file": null,
-      "tag": null,
-      "asserts": null,
+      "project": "unit",
+      "file": "packages/markdown/src/markdown.xss-corpus.unit.spec.ts",
+      "tag": "[spec:portability-and-safety]",
+      "asserts": "M2 — layer 1 of \"Hostile content and Electron security suites\": every hostile fixture, shared with the testkit corpus so the same bytes feed all five layers, reaches only inert sanitized hast — no element, attribute or URL scheme outside iridiumSanitizeSchema, no DOM-clobbering id/name, code spans preserved verbatim — re-checked by a second naive walker written in the test, and the final sanitizer still strips hostile output produced by a preceding flavour transform",
       "inventories": [
-        "named by an acceptance-map entry only"
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
     "mcp.auth.mcp": {
@@ -5946,11 +6072,11 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/notes/lifecycle.closing-set.unit.spec.ts",
       "tag": "[area:notes]",
       "asserts": "M2 — the closing set is left clean when a trash fails: a trash transaction made to throw by a failing withVaultLock leaves the closing set empty, so gateway.isClosing(noteId) is false and a fresh onAuthenticate on note:<id> succeeds instead of being refused note-closing. The committed path is asserted by tree.structural-concurrency.integration; this file owns the rollback, which is the case a live-server test cannot reach without a fault point",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "notes.lifecycle.unit": {
@@ -6477,7 +6603,7 @@
       "tag": "[hp:HP-1]",
       "asserts": "M1 — the writer micro-budget: a single coalesced update commits in under 15 ms at innodb_flush_log_at_trx_commit=1, asserted as a p95 over 200 commits with the 3× runner tolerance the test records; the measurement is written to reports/perf/*.jsonl",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -6508,7 +6634,7 @@
       "layer": "L1",
       "sinceMilestone": "M4",
       "project": "unit",
-      "file": null,
+      "file": "packages/markdown-react/src/worker-only.unit.spec.ts",
       "tag": "[hp:HP-4]",
       "asserts": "[hp:HP-4] — the preview renderer is reachable only through the worker entry point; the main-thread bundle contains no parser or sanitizer code",
       "inventories": [
@@ -6571,8 +6697,19 @@
       "tag": "[area:content]",
       "asserts": "M2 — the projection micro-budget: a 100 KB note projects in under 250 ms in the piscina worker, measured through the real pool rather than by calling project() directly, with the measurement written to reports/perf/*.jsonl",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
+      ]
+    },
+    "projection.pool.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "apps/server/src/projection/pool.unit.spec.ts",
+      "tag": "[area:projection]",
+      "asserts": "M2 — real piscina workers under an injected Clock and no timer sleeps: work that ignores its deadline is terminated and the next task is served on a replacement worker, running plus queued work is bounded by the limits table and overload becomes a source-preserving ProjectionQueueFull rather than a dropped projection, and a closed pool is never silently recreated",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "projection.reindex.integration": {
@@ -6628,7 +6765,7 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/projection/worker-isolation.unit.spec.ts",
       "tag": "[hp:HP-4]",
       "asserts": "[hp:HP-4] — the projection worker's module graph has no database, network or filesystem import, so a hostile note cannot reach any of them",
       "inventories": [
@@ -6905,7 +7042,7 @@
       "tag": "[area:search]",
       "asserts": "M2 — the search micro-budget: query build plus FULLTEXT over the generated corpus-5k fixture completes in under 200 ms, with the measurement written to reports/perf/*.jsonl. The fixture is shared with the k6 read-heavy scenario so the two numbers are comparable",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -6913,12 +7050,12 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
-      "tag": null,
-      "asserts": "boolean-mode operator escaping (+ - > < ( ) ~ * \" @), phrase queries, negation, 1-character tokens falling back to title LIKE, snippets anchored to real line numbers, stale: true when projected_seq < head_seq",
+      "file": "packages/markdown/src/markdown.search-query.unit.spec.ts",
+      "tag": "[area:search]",
+      "asserts": "M2 — parseQuery over the operator grammar of 09-api-reference.md: phrases with escaped quotes, negation, path:/file: parsed once each, the named error for a reserved tag:/line: operator, an unterminated quote, a missing or duplicated operator value and an empty query; toBooleanQuery never emits a boolean-mode operator drawn from user input and drops sub-2-character tokens, which queryTitleTerms then serves through the title LIKE fallback; a filter-only search yields an empty boolean query and an unrecognized name: prefix stays ordinary searchable text. The name is an admitted exception: the subject is packages/markdown/src/search/parse-query.ts, the basename states the package's own subject, and four other documents cite the test by the area that owns the behaviour. Its property half is markdown.search-query.prop, which executes the generated string against MySQL",
       "inventories": [
-        "Server suite by area (Search)",
-        "the Location convention"
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
+        "Server suite by area (Search)"
       ]
     },
     "search.ranking.integration": {
@@ -6929,7 +7066,7 @@
       "tag": "[area:search]",
       "asserts": "FULLTEXT scores include title/body matches; results order by score descending, then note id ascending, exactly as 09's keyset contract. Recency is returned as metadata and does not reorder ties. Pagination neither drops nor repeats results.",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -6941,7 +7078,7 @@
       "tag": "[area:search]",
       "asserts": "iridium reindex --vault rebuilds note_search to byte-equality with an incremental build, is resumable, and never serves a partially rebuilt index",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -6961,11 +7098,11 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/search/snippets.unit.spec.ts",
       "tag": "[area:search]",
       "asserts": "M2 — snippet windows anchor to real line numbers, never split a grapheme, and escape every markup character they carry",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "search.staleness-hint.integration": {
@@ -7090,6 +7227,18 @@
         "the Location convention"
       ]
     },
+    "seed.structure.integration": {
+      "layer": "L3",
+      "sinceMilestone": "M2",
+      "project": "integration",
+      "file": "apps/server/test/integration/seed.structure.integration.spec.ts",
+      "tag": "[area:testkit]",
+      "asserts": "M2 — the M2 structure seed and the immutable upgrade fixture (12 §6.2, D12-4): the writer seeds exactly STRUCTURE_NODE_COUNT real nodes through product paths and the populated dataset survives a round trip through the shipped mysqldump/client pair with its attachment bytes intact; and the committed previous-release fixture restores, takes the current migrations and serves its original content, links and search results, which is what makes the upgrade rehearsal a test of the shipped path rather than of a freshly seeded one",
+      "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites",
+        "the Location convention"
+      ]
+    },
     "setpw-link.integration": {
       "layer": "L3",
       "sinceMilestone": "M1",
@@ -7135,7 +7284,7 @@
       "tag": "[area:search]",
       "asserts": "a note with no FULLTEXT hit still yields a deterministic head-of-document snippet rather than an empty one",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -7275,6 +7424,17 @@
       "asserts": "M0 — Committed fixture corpora reach their typed accessors rather than path literals, vendored corpora carry provenance, the version stamp is present, and the trees stay inside the 5 MB cap; from M2 the boundary-mandated packages/markdown copy of the CommonMark corpus is asserted byte-identical to the canonical testkit one.",
       "inventories": [
         "Inventory completeness — M1 completion regressions."
+      ]
+    },
+    "testkit.markdown-fixtures.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "packages/testkit/src/markdown-fixtures.unit.spec.ts",
+      "tag": "[spec:portability-and-safety]",
+      "asserts": "M2 — the fixture manifests fail before any product path imports them: every golden hash, IRIDIUM_FIXTURE_VERSION and declared projection version is checked, ids are unique, the hostile bytes are the committed ones and the pathological descriptors are deterministic across two reads (D10-17)",
+      "inventories": [
+        "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
     },
     "testkit.origin-ws.unit": {
@@ -7616,7 +7776,7 @@
       "tag": "[spec:structural-concurrency]",
       "asserts": "exhaustive over the InvalidMoveReason union by satisfies Record<InvalidMoveReason, Case[]>: cycle, depth, cross_vault (a manager of both vaults — 409, never 404, with nodes.vault_id unchanged) and parent_not_category, on PATCH /nodes/:nodeId and on POST /nodes/:nodeId/restore, each repeated with dryRun:true",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Server suite by area (Tree)",
         "the Location convention"
       ]
@@ -7630,6 +7790,17 @@
       "asserts": "full keyboard reachability and operation (arrows, Home/End, type-ahead, F2 rename, Delete, Enter), drag-and-drop move with an invalid-drop refusal, and live tree-changed application without losing selection",
       "inventories": [
         "Client suite"
+      ]
+    },
+    "tree.notification.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": "apps/server/src/collab/tree-notification.unit.spec.ts",
+      "tag": "[area:tree]",
+      "asserts": "M2 — treeNotification degrades to an invalidation rather than to a lie: a small delta is retained with its committed treeVersion, and a change set over TREE_CHANGES_MAX nodes or over STATELESS_PAYLOAD_MAX_BYTES of UTF-8 is sent with an empty changes array at the same version, so a client that cannot be told what changed is still told that something did. The name is an admitted exception — the file sits in src/collab/, which supplies a different prefix",
+      "inventories": [
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "tree.paths.integration": {
@@ -7665,7 +7836,7 @@
       "tag": "[area:links]",
       "asserts": "the three link-warning routes against real MySQL: the impact payload equals an independent read of note_links, wouldConflict is the uq_sibling check under utf8mb4_0900_as_ci, dryRun:true writes nothing and validates identically to the write, inbound-links pages the same rows, affectedLinks on the real PATCH carries pre-rename values, the accepted rename succeeds, and every inbound-linking note's content_hash and projection are byte-identical afterwards",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "Server suite by area (Tree)",
         "the Location convention"
       ]
@@ -7674,11 +7845,11 @@
       "layer": "L1",
       "sinceMilestone": "M2",
       "project": "unit",
-      "file": null,
+      "file": "apps/server/src/tree/rename-impact.unit.spec.ts",
       "tag": "[area:links]",
       "asserts": "the pure summariseAffectedLinks(rows, subtreeNodeIds): every link form counted, byStatus a fully populated closed union, samples capped at 50 and ordered by (fromPath, id), the link and not the note as the unit of counting, the target-side-only derivation pinned, and no content in samples. In Stryker's mutate scope",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search"
+        "Inventory completeness — Collaboration, content read model and search (the Project co"
       ]
     },
     "tree.root-row.integration": {
@@ -7689,7 +7860,7 @@
       "tag": "[spec:structural-concurrency]",
       "asserts": "the per-vault root row exists exactly once, cannot be renamed, moved, trashed or purged, and every path resolution starts at it",
       "inventories": [
-        "Inventory completeness — Collaboration, content read model and search",
+        "Inventory completeness — Collaboration, content read model and search (the Project co",
         "the Location convention"
       ]
     },
@@ -7811,6 +7982,17 @@
       "inventories": [
         "E2E inventory (web)",
         "the Location convention"
+      ]
+    },
+    "wire.additive.unit": {
+      "layer": "L1",
+      "sinceMilestone": "M2",
+      "project": "unit",
+      "file": null,
+      "tag": "[area:contracts]",
+      "asserts": "M2 — the adversarial half of the compatibility contract (D10-11): the checker behind compat.n-minus-1.integration is shown to refuse real breaking edits — a removed field, a changed type, a tightened length, a narrowed const/enum, a removed path, response or required query parameter — while permitting optional additions, descriptions and widened request bounds, matching discriminator branches independently of their order and still checking fields below a recursive $ref. A rule that only ever reports \"additive\" is a rule nobody notices has stopped running",
+      "inventories": [
+        "Inventory completeness — Ops, restore, release and the seam contract suites"
       ]
     }
   }

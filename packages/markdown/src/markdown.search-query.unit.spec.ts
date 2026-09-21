@@ -1,3 +1,9 @@
+/**
+ * The query parser ships in `@iridium/markdown` but belongs to the search area, so the test name is
+ * `search.query-parser.unit` while the basename states this package's own subject. That is one of the
+ * two exceptions 10-testing-and-quality.md admits to "a test's name is its file basename", and the
+ * Inventory-completeness row for the name is what states this path (D10-21).
+ */
 import { describe, expect, it } from 'vitest';
 
 import { parseQuery, queryTitleTerms, toBooleanQuery } from './search/parse-query.ts';

@@ -25,7 +25,24 @@ export const M2_REVISION_ROUTES: readonly RouteSpec[] = [
     tag: 'revisions',
     auth: REST_ROUTE_POLICIES['revisions.list'],
     request: { params: NoteIdParams, query: ListRevisionsQuery },
-    responses: [{ status: 200, body: { kind: 'json', schema: RevisionPage } }],
+    responses: [
+      {
+        status: 200,
+        body: { kind: 'json', schema: RevisionPage },
+        // listRevisions → getRevision (10-testing-and-quality.md, "REST — OpenAPI contract").
+        // Both path parameters come from the same page row, so the pair always addresses a row
+        // this principal may read rather than a generated id that resolves to 404.
+        links: {
+          getRevision: {
+            operationId: 'revisions.get',
+            parameters: {
+              noteId: '$response.body#/items/0/noteId',
+              revisionId: '$response.body#/items/0/id',
+            },
+          },
+        },
+      },
+    ],
     errors: ['unauthenticated', 'forbidden', 'not_found', 'validation_failed', 'token_expired'],
     rateLimit: 'pat',
     summary: 'List retained checkpoints with their thinning policy, newest first.',

@@ -65,7 +65,7 @@ export interface ListRevisionsQuery {
 /** Checkpoint listing query. */
 export const ListRevisionsQuery: z.ZodType<ListRevisionsQuery> = z
   .strictObject({
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce
       .number()
       .int()

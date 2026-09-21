@@ -33,7 +33,6 @@
     "@iridium/contracts": "workspace:*",
     "@types/hast": "catalog:",
     "@types/mdast": "catalog:",
-    "comlink": "catalog:",
     "github-slugger": "catalog:",
     "hast-util-sanitize": "catalog:",
     "highlight.js": "catalog:",
@@ -47,7 +46,6 @@
     "remark-breaks": "catalog:",
     "remark-rehype": "catalog:",
     "unified": "catalog:",
-    "unist-util-visit": "catalog:",
     "vfile": "catalog:",
     "yaml": "catalog:"
   },

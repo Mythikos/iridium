@@ -2,6 +2,15 @@
 
 `pnpm-workspace.yaml` and `pnpm-lock.yaml` register these patches; frozen installs apply them.
 
+- `markdown-it@15.0.2`: the token engine is the whole of what the A42 fallback consumes, while the
+  ordinary entry drags an HTML renderer, a linkifier and a URL recoder into the graph, and the
+  complete browser worker has a gzip size gate to meet. The patch adds a shared token-only ESM entry
+  and changes no grammar algorithm: the upstream inline, block and core rules stay shared, and the
+  root API and its CommonJS and browser distributions are untouched. The proof is the S11 leaf's
+  differential check, `spikes/s11-markdown/verify-parser-patch.mjs` (1,971 root API cases and 657
+  token/environment cases against the unchanged upstream entry), with `markdown.commonmark.unit` and
+  `markdown.golden.unit` holding the consumer seam. Retire it when an equivalent upstream token entry
+  passes the semantic matrix and the complete-worker size gate (ADR0042).
 - `@fastify/websocket@11.3.0`: an earlier `onRequest` hook can reject an HTTP upgrade before
   the plugin initializes `request.ws`. Response cleanup now checks the plugin-owned raw socket
   marker, so that refusal closes its TCP connection and Fastify shutdown can finish. The plugin

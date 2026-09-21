@@ -1602,13 +1602,13 @@ Cadence policy: adopt a new Electron major within four weeks of release, never s
 
 ### A46 — Audit log: same-transaction HMAC chain per `chain_id` with locked chain heads, triggers, a closed vocabulary, and CLI verify/export/archive
 
-**Status.** Accepted (2026-09-11). **ADR file.** `docs/adr/0046-audit-log.md`.
+**Status.** Accepted (2026-09-11); **amended 2026-09-20**: M2's projection publication changed the normative lock order. The `vaults` entry is exclusive for a structural change and **shared** for projection publication, and `note_projection_terms` joins the order between `note_projections` and `note_search`. The shared gate (`lockProjectionVault()`) is taken immediately after the owner fence, before any consistent snapshot read or source-note lock, and held through COMMIT, so a publisher's target lookup serialises against rename, trash and purge while publishers stay concurrent; raw update appends and explicit revision checkpoints deliberately omit it. The amendment landed with the M2 implementation in `02-system-architecture.md` and in the ADR mirror, and was recorded here on 2026-09-21, so all three now carry the identical paragraph below. **ADR file.** `docs/adr/0046-audit-log.md`.
 
 **Context.** Spec §8 requires recording administrative and structural actions using authenticated identities and explicitly forbids treating CRDT client identifiers or self-reported cursor names as proof of authorship. Digest §6.2 verifies the industry conventions: dot-notation actions, `occurred_at`, `actor {id, type, …}`, `targets []`, `context {location, user_agent}`, append-only enforcement through insert-only database privileges, a separate schema, tenant and actor context on every row, and hash/HMAC chaining that makes tampering **detectable** (not preventable). It also records that enterprise questionnaires rank audit-log retention and export immediately after SSO and SCIM. Digest §11.26 records the granularity disagreement: a per-MCP-call audit row (Topic 3), a split between lifecycle events and a high-volume access log (Topic 6), and per-tool-call rows with returned note ids (Topic 10). The subtle correctness problem is the chain itself: computing `prev_hash` by reading the last row without a lock forks the chain under concurrency, producing two rows claiming the same predecessor — which verification then reports as tampering. A second, deeper problem is deadlock: the audit writer takes a lock inside every mutating transaction, so its lock order must be fixed relative to the vault row, the node rows, and the persistence writer.
 
 **Decision.** `AuditWriter.record(trx, event)` runs **inside the mutating transaction**: `SELECT last_id, last_hash FROM audit_chain_heads WHERE chain_id = ? FOR UPDATE` (chain `vault:<id>` for vault-scoped events, `server` otherwise), then `hash = HMAC-SHA256(AUDIT_HMAC_KEY[key_version], prev_hash || canonicalJSON(row))`, then the INSERT, then the head UPDATE.
 
-**Lock order is normative**, declared in `02-system-architecture.md` section "Lock order": owner-generation fence → `vaults` (when structural) → `nodes` → `notes` → `note_docs` → `note_updates` → `note_projections` → `note_search` → `note_links` → `note_revisions` → `trash_entries` → `audit_chain_heads`. All serving writes first hold the captured owner-generation fence. Note persistence then locks the source `nodes` row `FOR SHARE`, the parent `notes` row `FOR UPDATE`, and the `note_docs` row `FOR UPDATE`, in that order. The explicit parent locks account for the locks InnoDB also takes while checking foreign keys on updates and derived rows. The writer does not take the structural vault mutex; structural transactions take `vaults` before the same parent/document order. A joined document/node guard is not a lock-order guarantee. `lockNoteParents()` is the shared boundary for the writer, committed-state capture and reindexing. Audit heads remain last.
+**Lock order is normative**, declared in `02-system-architecture.md` section "Lock order": owner-generation fence → `vaults` (exclusive for structural changes, shared for projection publication) → `nodes` → `notes` → `note_docs` → `note_updates` → `note_projections` → `note_projection_terms` → `note_search` → `note_links` → `note_revisions` → `trash_entries` → `audit_chain_heads`. All serving writes first hold the captured owner-generation fence. Publication takes the known immutable vault id through `lockProjectionVault()` immediately afterward, before any consistent snapshot read or source-note lock, and holds that shared gate through COMMIT. This serializes target lookup with rename, trash and purge while allowing concurrent publishers. Raw update appends and explicit revision checkpoints omit the vault gate. Every note persistence path then locks the source `nodes` row `FOR SHARE`, parent `notes` row `FOR UPDATE`, and `note_docs` row `FOR UPDATE` through `lockNoteParents()`, in that order. Explicit parent locks account for foreign-key locks; joined SQL is not a lock-order guarantee. Audit heads remain last.
 
 Trash fences affected writers, locks the subtree under `withVaultLock()`, and captures its durable binary/text state as a protected `trash` revision before marking nodes deleted. It therefore may lock `note_docs` on a live node. Pending updates cannot resurrect it: the writer checks `deleted_at` under its parent lock, the gateway closes sessions after COMMIT, and authentication/load refuse trashed nodes. Purge closes the already-trashed documents and deletes children in FK-safe order under the vault mutex. `withVaultLock()` refuses a pre-existing child transaction, making a reversed entry order a named error rather than a deadlock. `lock-order.integration` runs eight real workers for thirty seconds and compares the InnoDB deadlock counter as well as transport outcomes.
 
@@ -2063,6 +2063,7 @@ Identifier forms differ by section: `D<section>-<n>` in most files, `ARCH-<n>` i
 | D03-22 | `03-data-model.md` | `system.audit.archived` is part of the closed audit vocabulary (§12.6), written on the `server` chain by the archive path with `{chain_id, from_id, to_id, rows, export_path, export_sha256}` |
 | D03-23 | `03-data-model.md` | MySQL 8.4 LTS (`mysql:8.4.11`) and MySQL 9.7 LTS (`mysql:9.7.2-oraclelinux9`) are equal required targets; 8.4.11 is the compatibility floor and the default of every unset image selector; the dialec… |
 | D03-24 | `03-data-model.md` | Two columns the OAuth design (§4A) touches deviate from the shape it would otherwise imply, and both deviations are deliberate: `access_tokens.refresh_id` carries no foreign key to… |
+| D03-25 | `03-data-model.md` | `access_log` has two producers in sequence — M2's synchronous REST observer on `onResponse`, then M3's batched `AccessLogWriter` — and its REST scope includes every authenticated refusal on any non-`system` principal, resolving nothing about the refused target; REST `action` values are `rest.` followed by the route's OpenAPI `operationId` |
 | D04-01 | `04-auth-and-access-control.md` | Per-user session cap of 20 live sessions per kind, enforced in `SessionIssuer.issue()`; the oldest by `last_seen_at` is revoked with `revoked_reason='replaced'`. A desktop login with the same… |
 | D04-02 | `04-auth-and-access-control.md` | Set-password links travel in the URL fragment (`/set-password#<token>`), and issuing a new link supersedes every outstanding link of that user by setting `expires_at = now`. |
 | D04-03 | `04-auth-and-access-control.md` | `ARGON2_CONCURRENCY` semaphore (default 4) in `auth/credentials/hasher.ts`, in addition to `UV_THREADPOOL_SIZE=8`. |
@@ -2653,3 +2654,22 @@ earlier failed release as green or supply those other proofs. Both run IDs belon
 release evidence. The original tag and image digest remain unchanged.
 
 Primary source: [Docker's GitHub Actions multi-platform image-store guidance](https://docs.docker.com/build/ci/github-actions/multi-platform/).
+
+## D12-5 amendment: the retained S11 parser-patch harness (2026-09-21)
+
+**D12-5 amendment, 2026-09-21 — one retained spike leaf.** Spike harnesses remain throwaway and
+nothing may depend on them, with one named exception. A42's executed parser fallback ships the
+pinned `patches/markdown-it@15.0.2.patch`, and `spikes/s11-markdown` is what reproduces that patch
+from verified upstream bytes and runs the upstream API and token differential checks. It does so
+with TypeScript's JavaScript AST parser, transformation factory and printer, which TypeScript 7
+does not ship, so the leaf also carries the TypeScript 6 alias as A2's third and last named
+carrier. The leaf is therefore retained as a build-time reproduction harness rather than deleted
+with M2. Nothing about its reachability changes: no product package imports it, its `spike`
+boundary tag still declares `dependents.allow: []`, `turbo boundaries` still refuses any product
+dependency on it, and `guards.mutation-lane.guard` still fails on an unreviewed fourth alias
+carrier. `spikes/s11-markdown/PARSER-PATCH.md` and `docs/spikes/S11-markdown-engine-cost.md` carry
+its maintenance rules, upstream source hashes and the condition for removing both the harness and
+the patch: an equivalent upstream token entry that passes the full semantic matrix and the
+complete-worker size gate.
+
+Full statement: D12-5 in `12-milestones.md`, "Decisions made in this section".

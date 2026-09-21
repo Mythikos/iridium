@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { Role } from '../authz.ts';
 import { VaultId } from '../ids.ts';
+import { LIMITS } from '../limits.ts';
 import { Timestamp } from '../time.ts';
 import { AdminUserSummary, DisplayName, Email, QueryBoolean, User, UserStatus } from './common.ts';
 
@@ -41,7 +42,7 @@ export const ListAdminUsersQuery: z.ZodType<ListAdminUsersQuery> = z
       })
       .optional(),
     isServerAdmin: QueryBoolean.optional(),
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(50),
   })
   .meta({ id: 'ListAdminUsersQuery' });

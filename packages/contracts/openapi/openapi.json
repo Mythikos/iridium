@@ -4966,7 +4966,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -6504,6 +6505,12 @@
                 "parameters": {
                   "noteId": "$response.body#/id"
                 }
+              },
+              "patchNode": {
+                "operationId": "nodes.update",
+                "parameters": {
+                  "nodeId": "$response.body#/id"
+                }
               }
             }
           },
@@ -6638,7 +6645,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -6757,7 +6765,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -6984,6 +6993,14 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NodePatchResult"
+                }
+              }
+            },
+            "links": {
+              "trashNode": {
+                "operationId": "nodes.trash",
+                "parameters": {
+                  "nodeId": "$response.body#/node/id"
                 }
               }
             }
@@ -7240,6 +7257,14 @@
                   "$ref": "#/components/schemas/TrashNodeResult"
                 }
               }
+            },
+            "links": {
+              "restoreNode": {
+                "operationId": "nodes.restore",
+                "parameters": {
+                  "nodeId": "$response.body#/trashEntry/nodeId"
+                }
+              }
             }
           },
           "401": {
@@ -7487,7 +7512,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -7587,7 +7613,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -7827,7 +7854,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -7968,7 +7996,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -8219,7 +8248,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -8364,7 +8394,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -8735,7 +8767,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 4096
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -8815,6 +8848,15 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RevisionPage"
+                }
+              }
+            },
+            "links": {
+              "getRevision": {
+                "operationId": "revisions.get",
+                "parameters": {
+                  "noteId": "$response.body#/items/0/noteId",
+                  "revisionId": "$response.body#/items/0/id"
                 }
               }
             }
@@ -9297,7 +9339,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -10109,7 +10153,9 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 4096,
+              "format": "iridium-cursor"
             },
             "in": "query",
             "name": "cursor",
@@ -10364,6 +10410,14 @@
               "text/markdown": {
                 "schema": {
                   "$ref": "#/components/schemas/NoteMarkdown"
+                }
+              }
+            },
+            "links": {
+              "listRevisions": {
+                "operationId": "revisions.list",
+                "parameters": {
+                  "noteId": "$request.path.noteId"
                 }
               }
             }

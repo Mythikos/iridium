@@ -114,7 +114,7 @@ export interface ListChildrenQuery {
 export const ListChildrenQuery: z.ZodType<ListChildrenQuery> = z
   .strictObject({
     parent: NodeId.optional(),
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
   })
   .meta({ id: 'ListChildrenQuery' });
@@ -161,7 +161,7 @@ export const ListNodesQuery: z.ZodType<ListNodesQuery> = z
       .default(['category', 'note']),
     recursive: QueryBoolean.default(true),
     includeTrashed: QueryBoolean.default(false),
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
   })
   .meta({ id: 'ListNodesQuery' });
@@ -351,7 +351,7 @@ export interface ListTrashQuery {
 /** Trash-page query. */
 export const ListTrashQuery: z.ZodType<ListTrashQuery> = z
   .strictObject({
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(200).default(100),
   })
   .meta({ id: 'ListTrashQuery' });
@@ -386,7 +386,7 @@ export const ListInboundLinksQuery: z.ZodType<ListInboundLinksQuery> = z
         encode: (value) => value,
       })
       .optional(),
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
   })
   .meta({ id: 'ListInboundLinksQuery' });

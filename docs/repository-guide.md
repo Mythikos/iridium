@@ -39,14 +39,14 @@ Every version is an exact pin in the `catalog:` of `pnpm-workspace.yaml`.
 - **Server**: Fastify 5.12, zod 4.6, Kysely 0.29 + mysql2 3.24, Hocuspocus 4.7, `@modelcontextprotocol/*` 2.0, pino, `@node-rs/argon2`, `@prometheus-io/client`
 - **Database**: MySQL 8.4.11 **and** 9.7.2 — equal required targets, both merge-blocking; 8.0 is refused at boot
 - **CRDT**: Yjs 13.6, lib0, y-protocols — imported only by `@iridium/crdt` (one module instance repo-wide, enforced)
-- **Client**: React 19.3, Vite 8 (Rolldown), CodeMirror 6 + y-codemirror.next, unified/remark/rehype, Base UI, TanStack Router/Query, zustand, Tailwind 4
+- **Client**: React 19.3, Vite 8 (Rolldown), CodeMirror 6 + y-codemirror.next, unified over a patched markdown-it 15.0.2 token engine with remark-rehype and rehype-sanitize last (A42), Base UI, TanStack Router/Query, zustand, Tailwind 4
 - **Desktop**: Electron 44.3, tsdown for main/preload, electron-builder for the (unsigned, zipped) 1.0 bundles
 - **Quality**: Vitest 5 (projects `unit`, `guard`, `component`, `integration`, `property`, `chaos`, `contract`, `mcp`), Playwright 1.63, fast-check 4, Testcontainers + Toxiproxy, Stryker 10 (on Vitest 4.1.11 inside `tooling/mutation` only), oxlint 1.82 + tsgolint, oxfmt, knip, Redocly, k6 2.2 for the load lane
 - **Codegen**: `pnpm gen` — OpenAPI export and lint, `openapi-typescript` client types, kysely-codegen schema diff, MCP tool schema, desktop IPC typings, msw skeleton, `docs/non-goals.json`, `docs/acceptance-map.json`
 
 ## Repository Layout
 
-pnpm workspaces `apps/*`, `packages/*`, `tooling/*`, `spikes/*`. Each workspace declares a boundary tag in its `turbo.json`; `turbo boundaries` and oxlint `no-restricted-imports` enforce the table in `docs/plan/02-system-architecture.md` ("Boundary tags and allowed dependencies").
+pnpm workspaces `apps/*`, `packages/*`, `tooling/*`, `spikes/*`, plus the one explicit path entry `packages/testkit/src/fixtures/hostile`. Each workspace declares a boundary tag in its `turbo.json`; `turbo boundaries` and oxlint `no-restricted-imports` enforce the table in `docs/plan/02-system-architecture.md` ("Boundary tags and allowed dependencies").
 
 ```
 apps/
@@ -65,6 +65,7 @@ packages/
   ui/            @iridium/ui            tag browser  the React application and the IridiumHost seam
   mcp-bridge/    @iridium/mcp-bridge    tag node     iridium-mcp stdio ⇄ Streamable HTTP proxy, bundled with the desktop app
   testkit/       @iridium/testkit       tag node     the single harness entry point (MySQL/Toxiproxy fixtures, clients, matchers, fixtures)
+  testkit/src/fixtures/hostile/ @iridium/testkit-fixtures tag iso  the hostile Markdown corpus and expectations.json as inert assets, so iso/browser tests share the bytes without the Node testkit
 tooling/
   tsconfig/, oxlint-config/            shared bases and lint fragments
   mutation/                             Stryker lane with its own TypeScript 6 alias and Vitest 4.1.11 family
@@ -72,6 +73,7 @@ tooling/
   sql/           @iridium/sql-policy    forbidden-constructs denylist and the committed schema fingerprint
 spikes/
   s04-editor-csp/                       a throwaway spike harness; tag spike — nothing may depend on it
+  s11-markdown/                         the S11 parser-packaging harness; tag spike — nothing may depend on it, and it is retained past M2 because it regenerates and re-verifies patches/markdown-it@15.0.2.patch
 docs/
   plan/  adr/  spikes/  ops/  milestones/  spec/
 scripts/                                the pnpm gen pipeline and the static CI checks (Node runs the .ts files natively)
@@ -246,7 +248,7 @@ The server reads its environment once, in `apps/server/src/config/env.ts` (`EnvS
 ## Working With the Plan
 
 - Read `docs/plan/README.md` first, then the milestone in progress in `docs/plan/12-milestones.md`; its exit criteria (§N.4; §4.6 for M0) and the cross-cutting gates (§3) are the definition of done. `docs/milestones/CURRENT` names the last exited milestone.
-- Spikes are bounded experiments with a written verdict (`docs/spikes/S<nn>-<slug>.md`, eight fixed headings, `pass` or `fail`, never `open`); spike harnesses are throwaway (D12-5) and nothing may depend on them.
+- Spikes are bounded experiments with a written verdict (`docs/spikes/S<nn>-<slug>.md`, eight fixed headings, `pass` or `fail`, never `open`); spike harnesses are throwaway (D12-5) and nothing may depend on them — except a leaf a shipped patch is regenerated and re-verified from, which is retained until that patch retires (D12-5 amended 2026-09-21; `spikes/s11-markdown` is that leaf, and it retires with `patches/markdown-it@15.0.2.patch` and the A2 alias).
 - When a finding changes a decision, amend the entry in `13-decision-log.md` (status line, dated) and mirror it in the ADR file, then the sections that repeat it; the plan is kept true, not archived.
 - Every milestone exit writes `docs/milestones/M<N>-exit.md` before its tag.
 

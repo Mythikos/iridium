@@ -36,7 +36,7 @@ export const SearchQuery: z.ZodType<SearchQuery> = z
   .strictObject({
     q: z.string().min(1).max(LIMITS.SEARCH_QUERY_MAX_CHARS),
     pathPrefix: z.string().max(LIMITS.NODE_PATH_MAX_CHARS).optional(),
-    cursor: z.string().max(4096).optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce
       .number()
       .int()

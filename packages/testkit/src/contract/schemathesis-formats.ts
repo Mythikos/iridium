@@ -34,10 +34,12 @@ const FORMAT_POLICY = {
   tokenIdLength: TOKEN_ID_LENGTH,
   tokenSecretLength: TOKEN_SECRET_LENGTH,
   tokenCrcLength: TOKEN_CRC_LENGTH,
+  maxCursorChars: LIMITS.CURSOR_MAX_CHARS,
 } as const;
 
-/** Custom format registrations for the runtime's name, ETag, line-range and CRC refinements. */
+/** Custom format registrations for the runtime's name, ETag, line-range, CRC and cursor refinements. */
 export const SCHEMATHESIS_FORMATS_HOOK: string = String.raw`
+import base64
 import binascii
 import json
 import re
@@ -166,8 +168,46 @@ _IRIDIUM_SPL_CREDENTIALS = st.tuples(
 ).map(_iridium_spl_credential)
 
 
+def _iridium_base64url(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _iridium_cursor(parts):
+    payload, signature = parts
+    body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return _iridium_base64url(body) + "." + _iridium_base64url(signature)
+
+
+# A page token is base64url(JSON payload) + "." + base64url(HMAC-SHA256) (09-api-reference.md
+# section 4.7). No strategy can forge the signature, so the value this produces is refused with
+# 422 cursor_invalid — but it is refused by the decode-and-verify path the route actually runs,
+# which is the code the corpus exists to reach, rather than by the first character of prose.
+# The payload members carry generated values of the documented shape; their vocabulary is the
+# server's and is immaterial here, because verification precedes decoding.
+_IRIDIUM_CURSOR_KEY_PARTS = st.one_of(
+    st.text(alphabet=_IRIDIUM_FORMAT_POLICY["base62Alphabet"], min_size=1, max_size=32),
+    st.integers(min_value=1, max_value=_IRIDIUM_FORMAT_POLICY["maxSafeInteger"]),
+)
+
+
+_IRIDIUM_CURSORS = st.tuples(
+    st.fixed_dictionaries({
+        "v": st.just(1),
+        "k": st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=16),
+        "a": st.lists(_IRIDIUM_CURSOR_KEY_PARTS, min_size=1, max_size=4),
+        "f": st.text(alphabet="0123456789abcdef", min_size=64, max_size=64),
+        "t": st.text(alphabet=_IRIDIUM_FORMAT_POLICY["base62Alphabet"], min_size=1, max_size=64),
+        "exp": st.integers(min_value=0, max_value=4102444800),
+    }),
+    st.binary(min_size=32, max_size=32),
+).map(_iridium_cursor).filter(
+    lambda cursor: len(cursor) <= _IRIDIUM_FORMAT_POLICY["maxCursorChars"],
+)
+
+
 schemathesis.openapi.format("iridium-node-name", _IRIDIUM_NODE_NAMES)
 schemathesis.openapi.format("iridium-strong-etag", _IRIDIUM_STRONG_ETAGS)
 schemathesis.openapi.format("iridium-line-range", _IRIDIUM_LINE_RANGES)
 schemathesis.openapi.format("iridium-credential-spl", _IRIDIUM_SPL_CREDENTIALS)
+schemathesis.openapi.format("iridium-cursor", _IRIDIUM_CURSORS)
 `;

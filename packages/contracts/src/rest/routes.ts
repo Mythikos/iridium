@@ -563,6 +563,10 @@ const NODE_ROUTES: readonly RouteSpec[] = [
         location: '/api/v1/nodes/<id>',
         links: {
           getNote: { operationId: 'notes.get', parameters: { noteId: '$response.body#/id' } },
+          // The lifecycle chain of 10-testing-and-quality.md, "REST — OpenAPI contract":
+          // createNode → patchNode → trashNode → restoreNode. Without it the stateful phase has
+          // no live node id and fuzzes PATCH/trash/restore with generated ids that all 404.
+          patchNode: { operationId: 'nodes.update', parameters: { nodeId: '$response.body#/id' } },
         },
       },
     ],
@@ -622,7 +626,20 @@ const NOTE_ROUTES: readonly RouteSpec[] = [
     auth: REST_ROUTE_POLICIES['notes.getMarkdown'],
     request: { params: NoteIdParams, query: GetMarkdownQuery },
     responses: [
-      { status: 200, body: { kind: 'markdown' }, etag: 'strong-revision-hash' },
+      {
+        status: 200,
+        body: { kind: 'markdown' },
+        etag: 'strong-revision-hash',
+        // getNoteMarkdown → listRevisions, the revision half of the declared link graph
+        // (10-testing-and-quality.md, "REST — OpenAPI contract"). The representation is
+        // text/markdown, so the note id comes from the request path rather than a JSON body.
+        links: {
+          listRevisions: {
+            operationId: 'revisions.list',
+            parameters: { noteId: '$request.path.noteId' },
+          },
+        },
+      },
       { status: 304, body: { kind: 'empty' }, etag: 'strong-revision-hash' },
     ],
     errors: [

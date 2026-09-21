@@ -159,6 +159,36 @@ export function prepareSchemathesisSchema(document: unknown, origin: string): Js
   return copy;
 }
 
+/**
+ * Every operation that accepts the signed keyset `cursor` (09-api-reference.md §1.6 and §4.7),
+ * named as the prepared schema spells it. A cursor is a capability over the listing kind, the
+ * after-key, the filter hash and the principal, so no generator can mint one the server accepts:
+ * the `iridium-cursor` strategy produces the documented structure and the route answers the
+ * documented `422 validation_failed` with `errors[0].code = 'cursor_invalid'`. That refusal is
+ * admitted here, on these operations only, so a `422` anywhere else stays a failure.
+ */
+const CURSOR_OPERATIONS: readonly string[] = [
+  'GET /api/v1/search',
+  'GET /api/v1/vaults/{vaultId}/search',
+  'GET /api/v1/vaults/{vaultId}/nodes',
+  'GET /api/v1/vaults/{vaultId}/tree',
+  'GET /api/v1/vaults/{vaultId}/trash',
+  'GET /api/v1/vaults/{vaultId}/attachments',
+  'GET /api/v1/nodes/{nodeId}/inbound-links',
+  'GET /api/v1/notes/{noteId}/backlinks',
+  'GET /api/v1/notes/{noteId}/revisions',
+  'GET /api/v1/admin/users',
+  'GET /api/v1/admin/jobs',
+  'GET /api/v1/admin/attachments/unreferenced',
+];
+
+const CURSOR_OPERATION_CONFIG = CURSOR_OPERATIONS.map(
+  (name) =>
+    `\n[[operations]]\ninclude-name = "${name}"\n` +
+    'checks.positive_data_acceptance.expected-statuses = ' +
+    '["2xx", 401, 403, 404, 409, 422, 429, "5xx"]\n',
+).join('');
+
 /** Documented business refusals; every conformance, authentication and server-error check stays on. */
 export const SCHEMATHESIS_CONFIG: string = `
 # Rate limiting is a valid refusal, including for a schema-valid request (09 section 1.8).
@@ -178,7 +208,7 @@ expected-statuses = [400, 401, 403, 404, 406, 415, 422, 428, 429]
 [[operations]]
 include-name = "POST /api/v1/auth/set-password"
 checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 410, 429, "5xx"]
-`;
+${CURSOR_OPERATION_CONFIG}`;
 
 /** Text representations are JSON Schema strings and must participate in response validation. */
 export const SCHEMATHESIS_RESPONSE_HOOK: string = String.raw`

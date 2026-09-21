@@ -110,6 +110,14 @@ const OTHER_LIMITS = {
   REST_UNAUTHENTICATED_PER_MINUTE: 60,
   /** Retained keys per REST limiter, including each independent per-route override. */
   REST_RATE_LIMIT_CACHE_MAX_ENTRIES: 5_000,
+  /**
+   * Accepted length of the opaque keyset `cursor` query parameter, in characters
+   * (09-api-reference.md section 1.6). One bound for every listing, because there is one cursor
+   * format: a signed payload whose size is set by the longest after-key any listing emits, not by
+   * the route that happens to carry it. A longer string is refused by schema validation before the
+   * signature is verified, which keeps an unbounded query string away from the HMAC path.
+   */
+  CURSOR_MAX_CHARS: 4_096,
   /** `POST /auth/sessions` budget per IP per minute. */
   LOGIN_PER_MINUTE_PER_IP: 10,
   /** Consecutive failures per `email_key|ip` before a block. */

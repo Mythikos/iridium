@@ -105,7 +105,18 @@ export const M2_TREE_ROUTES: readonly RouteSpec[] = [
     auth: REST_ROUTE_POLICIES['nodes.update'],
     request: { params: NodeIdParams, body: PatchNodeBody, headers: IfMatchHeaders },
     responses: [
-      { status: 200, body: { kind: 'json', schema: NodePatchResult }, etag: 'strong-version' },
+      {
+        status: 200,
+        body: { kind: 'json', schema: NodePatchResult },
+        etag: 'strong-version',
+        // patchNode → trashNode (10-testing-and-quality.md, "REST — OpenAPI contract").
+        links: {
+          trashNode: {
+            operationId: 'nodes.trash',
+            parameters: { nodeId: '$response.body#/node/id' },
+          },
+        },
+      },
     ],
     errors: [...STRUCTURAL_ERRORS, 'node_trashed'],
     ifMatch: 'required',
@@ -121,7 +132,19 @@ export const M2_TREE_ROUTES: readonly RouteSpec[] = [
     tag: 'nodes',
     auth: REST_ROUTE_POLICIES['nodes.trash'],
     request: { params: NodeIdParams, body: TrashNodeBody, headers: IfMatchHeaders },
-    responses: [{ status: 200, body: { kind: 'json', schema: TrashNodeResult } }],
+    responses: [
+      {
+        status: 200,
+        body: { kind: 'json', schema: TrashNodeResult },
+        // trashNode → restoreNode; the cascade root is the node restore addresses.
+        links: {
+          restoreNode: {
+            operationId: 'nodes.restore',
+            parameters: { nodeId: '$response.body#/trashEntry/nodeId' },
+          },
+        },
+      },
+    ],
     errors: [...STRUCTURAL_ERRORS, 'category_not_empty'],
     ifMatch: 'required',
     summary: 'Trash a node and, when explicitly recursive, its live descendants.',

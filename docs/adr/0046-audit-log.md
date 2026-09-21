@@ -1,6 +1,6 @@
 # A46 — Audit log: same-transaction HMAC chain per `chain_id` with locked chain heads, triggers, a closed vocabulary, and CLI verify/export/archive
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); amended 2026-09-20: M2's projection publication made the `vaults` entry of the normative lock order exclusive for a structural change and shared for projection publication, and added `note_projection_terms` between `note_projections` and `note_search`. Recorded in `docs/plan/13-decision-log.md` on 2026-09-21.
 
 ## Context
 

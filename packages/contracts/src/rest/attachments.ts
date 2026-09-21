@@ -76,7 +76,7 @@ export const ListAttachmentsQuery: z.ZodType<ListAttachmentsQuery> = z
     noteId: NoteId.optional(),
     includeReferences: QueryBoolean.default(false),
     includeDeleted: QueryBoolean.default(false),
-    cursor: z.string().optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce
       .number()
       .int()
@@ -148,7 +148,7 @@ export interface UnreferencedAttachmentsQuery {
 export const UnreferencedAttachmentsQuery: z.ZodType<UnreferencedAttachmentsQuery> = z
   .strictObject({
     vaultId: VaultId.optional(),
-    cursor: z.string().optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),
   })
   .meta({ id: 'UnreferencedAttachmentsQuery' });

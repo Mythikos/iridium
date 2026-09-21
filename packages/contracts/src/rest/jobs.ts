@@ -108,7 +108,7 @@ export const ListJobsQuery: z.ZodType<ListJobsQuery> = z
     type: JobType.optional(),
     status: JobStatus.optional(),
     vaultId: VaultId.optional(),
-    cursor: z.string().optional(),
+    cursor: z.string().max(LIMITS.CURSOR_MAX_CHARS).meta({ format: 'iridium-cursor' }).optional(),
     limit: z.coerce.number().int().min(1).max(LIMITS.JOB_LIST_MAX).default(LIMITS.JOB_LIST_DEFAULT),
   })
   .meta({ id: 'ListJobsQuery' });

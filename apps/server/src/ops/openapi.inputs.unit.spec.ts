@@ -112,6 +112,8 @@ describe('ops.openapi-inputs.unit [area:ops]', () => {
     });
     expect(links('/vaults/{vaultId}/nodes', 'post', '201')).toEqual({
       getNote: { operationId: 'notes.get', parameters: { noteId: '$response.body#/id' } },
+      // The lifecycle edge a stateful fuzz run needs to reach the M2 mutations from a create.
+      patchNode: { operationId: 'nodes.update', parameters: { nodeId: '$response.body#/id' } },
     });
     expect(links('/notes/{noteId}', 'get', '200')).toEqual({
       getMarkdown: {

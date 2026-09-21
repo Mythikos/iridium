@@ -29,7 +29,13 @@
 import { readFile } from 'node:fs/promises';
 
 import SwaggerParser from '@apidevtools/swagger-parser';
-import { isSafeNodeName, MarkdownLineRange, parseStrongEtag, parseToken } from '@iridium/contracts';
+import {
+  isSafeNodeName,
+  LIMITS,
+  MarkdownLineRange,
+  parseStrongEtag,
+  parseToken,
+} from '@iridium/contracts';
 import type { ErrorObject, ValidateFunction } from 'ajv';
 import ajvFormats from 'ajv-formats';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -154,6 +160,24 @@ function formatAjvErrors(errors: readonly ErrorObject[] | null | undefined): str
     .join('; ');
 }
 
+const BASE64URL_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * The published structure of an opaque page cursor: the payload and the signature the server's
+ * codec splits at the first separator, each base64url, within the one published bound. Content is
+ * deliberately not judged here — only the signing key can do that — so this stays the whole of
+ * what the document promises about the token (09-api-reference.md §1.6 and §4.7).
+ */
+function isCursorShaped(value: string): boolean {
+  if (value.length > LIMITS.CURSOR_MAX_CHARS) return false;
+  const separator = value.indexOf('.');
+  if (separator <= 0 || separator === value.length - 1) return false;
+  return (
+    BASE64URL_SEGMENT.test(value.slice(0, separator)) &&
+    BASE64URL_SEGMENT.test(value.slice(separator + 1))
+  );
+}
+
 /** What `SwaggerParser.bundle` accepts, without depending on `openapi-types` directly. */
 type BundleInput = Parameters<typeof SwaggerParser.bundle>[0];
 
@@ -225,6 +249,12 @@ class BundledOpenApiOracle implements OpenApiOracle {
         type: 'string',
         validate: (value: string) => MarkdownLineRange.safeParse(value).success,
       });
+      // A cursor is opaque on the wire, so the contract fixes its structure rather than its
+      // content: `base64url(payload).base64url(signature)` split at the first separator, within
+      // the one published bound (09-api-reference.md §1.6 and §4.7). Only the signing server can
+      // judge the rest, so this is exactly the part the document can promise — and registering it
+      // is what keeps the published format an assertion rather than an inert annotation.
+      ajv.addFormat('iridium-cursor', { type: 'string', validate: isCursorShaped });
       this.#options.configureAjv?.(ajv);
       ajv.addSchema(document, AJV_BASE_ID);
       return { document, operations: indexOperations(document), ajv };

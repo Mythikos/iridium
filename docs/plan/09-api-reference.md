@@ -145,7 +145,7 @@ export const ProblemDetails = z.strictObject({
 | `name_conflict` | 409 | node create/rename/move/restore, vault create/rename, attachment upload with a colliding `pathHint` | `ER_DUP_ENTRY` on `uq_sibling` / `uq_vaults_name` / `uq_attachment_path`. |
 | `invalid_move` | 409 | `PATCH /nodes/:nodeId` with `parentId`, `POST /nodes/:nodeId/restore` | Target is the node itself/a descendant, is a note, is trashed, is in another vault, or depth > 64. |
 | `category_not_empty` | 409 | `POST /nodes/:nodeId/trash` without `recursive:true` | `detail` carries the live descendant count. |
-| `node_trashed` | 409 | any structural CAS whose row is now trashed | The `UPDATE … WHERE id=? AND version=?` matched no row and the row's `deleted_at IS NOT NULL` (03-data-model.md §7.4); `current` carries the trashed `Node`. Distinct from `stale_version`, which means the version moved while the row is still live. |
+| `node_trashed` | 409 | any structural CAS whose row is now trashed, and any mutation that finds its target already trashed under the lock it holds (`PATCH /nodes/:nodeId`, `POST /notes/:noteId/revisions`, `POST /notes/:noteId/revisions/:revisionId/restore`) | The `UPDATE … WHERE id=? AND version=?` matched no row and the row's `deleted_at IS NOT NULL` (03-data-model.md §7.4); `current` carries the trashed `Node`. A mutation that instead reads `deleted_at` under a lock it already holds raises the same code and omits `current`, because it compared no validator: the tree patch under the vault's structural lock, `revisions.create` from the compaction outcome or the parent row it holds for share, and `revisions.restore` from the server-edit gate (§2.9). `404 not_found` would be the wrong answer there — this table scopes the 404 to read routes, and a writer addressing the node by id already knows it exists. Distinct from `stale_version`, which means the version moved while the row is still live. |
 | `invalid_name` | 422 | any name input | Name rules of skeleton A12 (also reported as `validation_failed` `errors[].code='invalid_name'` when part of a larger body). |
 | `email_conflict` | 409 | `POST /admin/users`, `PATCH /admin/users/:userId` | `uq_users_email_key`. |
 | `not_found` | 404 | everywhere | Non-members, unknown ids, trashed notes on read routes, thinned revisions, foreign vaults. |
@@ -814,7 +814,7 @@ Response 200: {
   }),
   dryRun: z.boolean(),
 }
-Errors: 403 forbidden · 404 not_found · 409 stale_version · 409 name_conflict · 409 invalid_move · 409 vault_archived
+Errors: 403 forbidden · 404 not_found · 409 stale_version · 409 node_trashed · 409 name_conflict · 409 invalid_move · 409 vault_archived
       · 422 validation_failed (invalid_name | no_changes) · 428 precondition_required
 ```
 
@@ -986,7 +986,7 @@ Revisions are immutable, so their representation is cacheable for a day. `:revis
 ```ts
 Request:  { label: z.string().min(1).max(200) }
 Response 201 Revision
-Errors: 403 forbidden · 404 not_found · 409 content_invalid · 409 vault_archived · 429 rate_limited (6/min per principal+note) · 503 capacity
+Errors: 403 forbidden · 404 not_found · 409 content_invalid · 409 node_trashed · 409 vault_archived · 429 rate_limited (6/min per principal+note) · 503 capacity
 ```
 
 Forces compaction of the live document (the same job `flush` enqueues, §3.4) and writes a `note_revisions` row with `kind='named'`, the label, the snapshot and the Markdown at `head_seq`. The response's `revision` therefore equals the head at the moment of naming. Audit `note.revision.named`. When the note is not loaded, the current head already has an `unload` checkpoint and the named row is written from it without loading the document.
@@ -999,7 +999,7 @@ Response 200: { restored: Revision,               // kind='restore', at the NEW 
                 preRestore: Revision,             // kind='pre_restore', capturing the content that was replaced
                 revision: z.int(),                // the new head seq
                 contentHash: z.string().length(64) }
-Errors: 403 forbidden · 403 step_up_required · 404 not_found (note or revision) · 409 content_invalid
+Errors: 403 forbidden · 403 step_up_required · 404 not_found (note or revision) · 409 content_invalid · 409 node_trashed
       · 409 note_oversized · 409 vault_archived · 503 capacity · 503 unavailable (persistence backpressure)
 ```
 
@@ -1740,7 +1740,7 @@ One table, sorted by path, for checking route coverage against `openapi.json` (t
 | GET | `/me/tokens/:tokenId/snippets` | `me.tokens.snippets` | self | — | — | — |
 | GET | `/meta` | `meta.get` | public | — | — | — |
 | GET | `/nodes/:nodeId` | `nodes.get` | `perm:vault:read` | — | — | — |
-| PATCH | `/nodes/:nodeId` | `nodes.update` | `perm:node:rename\|node:move` | — | required | — |
+| PATCH | `/nodes/:nodeId` | `nodes.update` | `perm:node:rename` | — | required | — |
 | DELETE | `/nodes/:nodeId` | `nodes.purge` | `perm:node:purge` | — | required | required |
 | GET | `/nodes/:nodeId/inbound-links` | `nodes.inboundLinks` | `perm:vault:read` | — | — | — |
 | POST | `/nodes/:nodeId/restore` | `nodes.restore` | `perm:node:restore` | — | required | — |
@@ -1757,7 +1757,7 @@ One table, sorted by path, for checking route coverage against `openapi.json` (t
 | POST | `/notes/:noteId/revisions/:revisionId/restore` | `revisions.restore` | `perm:history:restore` | — | — | required |
 | GET | `/docs` | `meta.docs` | admin \| dev | — | — | — |
 | GET | `/openapi.json` | `meta.openapi` | admin \| dev | — | — | — |
-| GET | `/search` | `search.global` | session/PAT | ★ | — | — |
+| GET | `/search` | `search.all` | session/PAT | ★ | — | — |
 | GET | `/vaults` | `vaults.list` | session/PAT | ★ | — | — |
 | POST | `/vaults` | `vaults.create` | admin | — | — | — |
 | GET | `/vaults/:vaultId` | `vaults.get` | `perm:vault:read` | ★ | — | — |
@@ -1780,6 +1780,8 @@ One table, sorted by path, for checking route coverage against `openapi.json` (t
 | GET | `/vaults/:vaultId/tree` | `tree.listChildren` | `perm:vault:read` | — | — | — |
 | GET | `/vaults/:vaultId/trash` | `trash.list` | `perm:vault:read` | — | — | — |
 | POST | `/vaults/:vaultId/unarchive` | `vaults.unarchive` | `perm:vault:archive` | — | required | required |
+
+**The `Auth` column is the declared policy, not the whole check.** Every cell is a §1.3 legend value for the single `config.auth` the route registers, because that is what `authorize()` evaluates before the handler runs and what `rest.route-index.contract` compares the cell against (D09-4). Where a handler checks a further credential or permission of its own, this table carries the declared policy and the route's own section carries the rest: `ops.metrics` states `METRICS_TOKEN` or internal CIDR in the table below because that token is checked inside the handler and the route declares `public` so the boot assertion sees a policy at all (§2.17), and `nodes.update` declares `perm:node:rename` here while §2.7 records that a body carrying `parentId` additionally requires `node:move`.
 
 **Operations outside `/api/v1`.** These are the routes whose URLs are published to third parties — quoted in metadata documents, typed into a connector dialog, or fetched by an updater — so they must not carry a path version that `apiVersion` could bump (§7.1, D09-31). They are part of the same closed enumeration: `rest.route-index.contract` asserts this table too.
 
