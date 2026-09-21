@@ -74,6 +74,12 @@ const ALLOWLIST: ReadonlySet<string> = new Set(
     // Added at M0 (2026-09-13): the Blue Oak Model License, a permissive notice licence carried by
     // glob 13 and its dependencies, which @fastify/static reaches (10-testing-and-quality.md).
     'BlueOak-1.0.0',
+    // Added at M2 (2026-09-21): the Python Software Foundation License 2.0, a permissive notice
+    // licence carried by argparse 3, which markdown-it reaches after the S11 parser fallback (A42).
+    // Iridium imports the markdown-it library entry, never its CLI, so argparse is in the closure
+    // without being in the import graph; a per-package exception with an expiry would recur on
+    // every dependency bump for no policy gain (10-testing-and-quality.md).
+    'PSF-2.0',
   ].map((id) => id.toLowerCase()),
 );
 
