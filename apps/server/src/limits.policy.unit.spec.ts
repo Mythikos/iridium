@@ -401,6 +401,11 @@ const ENFORCEMENT = {
     'apps/server/src/attachments',
     'bound retained-reference scan batches',
   ),
+  CURSOR_MAX_CHARS: at(
+    2,
+    'packages/contracts/src/rest',
+    'bound every published pagination cursor so a generated one cannot grow without limit',
+  ),
   ATTACHMENT_LIST_MAX: at(
     2,
     'packages/contracts/src/rest/attachments.ts',
