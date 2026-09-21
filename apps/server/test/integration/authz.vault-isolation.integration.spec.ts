@@ -138,7 +138,7 @@ async function expectDenialLog(
       {
         user_id: idBytes(fixture.outsider.id),
         surface: 'rest',
-        action: operationId,
+        action: `rest.${operationId}`,
         status: expected === 404 ? 'not_found' : 'denied',
         vault_id: null,
         note_ids: null,

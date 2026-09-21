@@ -17,8 +17,8 @@ import type { Database } from '../db/schema.ts';
 import { withVaultLock } from '../db/withVaultLock.ts';
 import { ProblemError } from '../security/problem.ts';
 import type { NodeRow } from './dto.ts';
+import { invalidMove } from './invalid-move.ts';
 import {
-  invalidMove,
   mutationNode,
   structuralAudit,
   updateNode,

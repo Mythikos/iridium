@@ -37,6 +37,7 @@ import type { Clock } from '../ops/clock.ts';
 import type { SearchIndexWrites } from '../search/index.ts';
 import { ProblemError } from '../security/problem.ts';
 import { NODE_COLUMNS, toNodeDto, type NoteSummaryRow, type UserRefRow } from './dto.ts';
+import { invalidMove } from './invalid-move.ts';
 import { assertChildDepth, storedNodeName } from './names.ts';
 import { derivePath, parentDepth } from './paths.ts';
 
@@ -93,16 +94,6 @@ export interface TreeServiceDeps {
   readonly clock: Clock;
   readonly audit: AuditRecorder;
   readonly notes: NoteInitializer;
-}
-
-/** The reasons a `409 invalid_move` carries on this route (§2.7). */
-type InvalidMoveReason = 'parent_not_category' | 'cross_vault' | 'depth';
-
-function invalidMove(reason: InvalidMoveReason, detail: string): ProblemError {
-  return new ProblemError('invalid_move', {
-    detail,
-    errors: [{ path: 'body.parentId', message: reason, code: reason }],
-  });
 }
 
 /** The `UserRef` rows a node read needs, by id. */

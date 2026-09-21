@@ -4,7 +4,6 @@ import {
   LIMITS,
   NodeId,
   NoteId,
-  type InvalidMoveReason,
   type Node,
   type NodePatchResult,
   type PatchNodeBody,
@@ -23,6 +22,7 @@ import { withVaultLock } from '../db/withVaultLock.ts';
 import type { SearchIndexWrites } from '../search/index.ts';
 import { ProblemError } from '../security/problem.ts';
 import type { NodeRow } from './dto.ts';
+import { invalidMove } from './invalid-move.ts';
 import { storedNodeName, tooDeep } from './names.ts';
 import { parentDepth } from './paths.ts';
 import { ancestorsContain, readNodesByIds, subtreeRows, type TreeExecutor } from './queries.ts';
@@ -59,14 +59,6 @@ export function treeChanges(nodes: readonly Node[], op: TreeChange['op']): reado
     op,
     version: node.version,
   }));
-}
-
-/** A move refusal uses the closed contract vocabulary. */
-export function invalidMove(reason: InvalidMoveReason, detail: string): ProblemError {
-  return new ProblemError('invalid_move', {
-    detail,
-    errors: [{ path: 'body.parentId', message: reason, code: reason }],
-  });
 }
 
 /** A live or trashed target, checked under the same lock as its eventual mutation. */

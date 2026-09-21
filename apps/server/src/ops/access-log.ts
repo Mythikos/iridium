@@ -21,8 +21,13 @@ export function applyRestAccessLog(app: FastifyInstance): void {
   });
   app.addHook('onResponse', async (request, reply) => {
     const principal = request.principal;
-    const action = request.routeOptions.schema?.operationId;
-    if (principal === null || principal.kind === 'system' || typeof action !== 'string') return;
+    const operationId = request.routeOptions.schema?.operationId;
+    if (principal === null || principal.kind === 'system' || typeof operationId !== 'string')
+      return;
+    // The REST half of this vocabulary is `rest.` plus the generated operation id, so a mixed page
+    // of `mcp.get_note`, `rest.notes.getMarkdown` and `oauth.token.issue` reads as one list without
+    // a second column, and the list stays closed by construction (03-data-model.md 12.6, D03-25).
+    const action = `rest.${operationId}`;
     const refused =
       reply.statusCode === 401 ||
       reply.statusCode === 403 ||
