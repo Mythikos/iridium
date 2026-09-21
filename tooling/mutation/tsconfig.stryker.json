@@ -21,6 +21,10 @@
     "../../packages/contracts/src/**/*.ts",
     "../../packages/crdt/src/**/*.ts",
     "../../packages/markdown/src/**/*.ts",
+    // The ambient `*.md?raw` module, without which the shared hostile fixtures that
+    // `packages/markdown/test` pulls in transitively cannot resolve and the checker refuses to
+    // start at all (spike S5: any dry-run error disables the whole lane).
+    "../../packages/markdown/test/raw.d.ts",
     "../../apps/server/src/auth/**/*.ts",
     "../../apps/server/src/authz/**/*.ts",
     "../../apps/server/src/oauth/**/*.ts",
@@ -32,7 +36,7 @@
     "../../apps/server/src/mcp/verifier.ts",
     "../../apps/server/src/mcp/rate-limit.ts",
     "../../apps/server/src/tree/names.ts",
-    "../../apps/server/src/tree/moves.ts",
+    "../../apps/server/src/tree/mutations.ts",
     "../../apps/server/src/tree/paths.ts",
     "../../apps/server/src/tree/rename-impact.ts"
   ]
