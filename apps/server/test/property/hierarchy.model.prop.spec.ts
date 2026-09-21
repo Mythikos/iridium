@@ -3,6 +3,7 @@ import { it } from '@fast-check/vitest';
 import {
   chainIdForVault,
   idFromBytes,
+  LIMITS,
   Node,
   type NodePatchResult,
   type RestoreNodeResult,
@@ -17,7 +18,7 @@ import { verifyChain, type AuditKeys } from '../../src/audit/chain.ts';
 import { createAuditKeys, readPromotedAuditKeyVersion } from '../../src/audit/keys.ts';
 import { idBytes } from '../../src/auth/ids.ts';
 import { derivePaths } from '../../src/tree/queries.ts';
-import { createTreeVault, treeHeaders } from '../integration/tree-test-helpers.ts';
+import { createTreeNode, createTreeVault, treeHeaders } from '../integration/tree-test-helpers.ts';
 import { startAuthServer, webClient, type AuthTestServer } from '../support/auth-app.ts';
 import { seedUser, signInWeb, type SeededUser } from '../support/seed.ts';
 interface ModelNode {
@@ -45,10 +46,19 @@ type Operation =
   | 'Trash'
   | 'Restore'
   | 'Purge';
+/** The vault that stands at the depth ceiling; the commands never touch it, so it stays valid. */
+interface Ceiling {
+  readonly vault: Vault;
+  /** The category at exactly `LIMITS.TREE_MAX_DEPTH` levels below the root. */
+  readonly deepest: string;
+  /** A live category at level 1, still at version 1 because every move onto `deepest` is refused. */
+  readonly mover: string;
+}
 keepSchema();
 let context: AuthTestServer;
 let admin: SeededUser;
 let keys: AuditKeys;
+let ceiling: Ceiling;
 let example = 0;
 beforeAll(async () => {
   context = await startAuthServer();
@@ -57,6 +67,19 @@ beforeAll(async () => {
     keyring: context.app.iridiumConfig.keys.auditHmac,
     signingVersion: await readPromotedAuditKeyVersion(context.db),
   });
+  const client = webClient(context, await signInWeb(context, admin));
+  const vault = await createTreeVault(context, client, 'Ceiling');
+  let deepest = vault.rootNodeId;
+  for (let level = 1; level <= LIMITS.TREE_MAX_DEPTH; level += 1) {
+    // eslint-disable-next-line no-await-in-loop -- each level needs its parent's committed identifier
+    const created = await createTreeNode(context, client, vault, {
+      name: `Deep ${String(level)}`,
+      parentId: deepest,
+    });
+    deepest = created.id;
+  }
+  const mover = await createTreeNode(context, client, vault, { name: 'Mover' });
+  ceiling = { vault, deepest, mover: mover.id };
 });
 afterAll(async () => {
   await context.stop();
@@ -78,6 +101,28 @@ function pathOf(model: Model, node: ModelNode): string {
   if (node.trash !== null) return node.trash.path;
   const parent = model.nodes.get(node.parent);
   return `${parent === undefined ? '' : pathOf(model, parent)}/${node.name}`;
+}
+/**
+ * Levels below the vault root, counted from the model's own adjacency.
+ *
+ * The depth is modelled rather than read back because `pathsCte` stops recursing at
+ * `parent.depth < TREE_MAX_DEPTH` (apps/server/src/tree/queries.ts), so a depth the query reports
+ * can never exceed the ceiling and asserting `<= 64` against it would prove nothing. The model is
+ * the independent oracle the §6.4 clause "depth never exceeds 64" needs.
+ */
+function depthOf(model: Model, node: ModelNode): number {
+  const parent = model.nodes.get(node.parent);
+  return parent === undefined ? 1 : depthOf(model, parent) + 1;
+}
+/** The depth a prospective parent sits at; the root row is level `0` as `parentDepth` counts it. */
+function parentDepthOf(model: Model, id: string): number {
+  const node = model.nodes.get(id);
+  return node === undefined ? 0 : depthOf(model, node);
+}
+/** Levels below a node, counting trashed descendants exactly as `subtreeRows(.., true)` does. */
+function heightOf(model: Model, node: ModelNode): number {
+  const base = depthOf(model, node);
+  return Math.max(0, ...childrenOf(model, node.id).map((child) => depthOf(model, child) - base));
 }
 function collision(model: Model, parent: string, name: string, except?: string): boolean {
   return [...model.nodes.values()].some(
@@ -102,7 +147,9 @@ async function assertModel(model: Model, real: Real): Promise<void> {
   const paths = await derivePaths(context.db, idBytes(real.vault.id), true);
   expect(paths).toHaveLength(model.nodes.size);
   expect(new Set(paths.map((row) => row.id.toString('hex'))).size).toBe(model.nodes.size);
-  const actualPaths = new Map(paths.map((row) => [idFromBytes(row.id), row.path]));
+  const derived = new Map(
+    paths.map((row) => [idFromBytes(row.id), { path: row.path, depth: row.depth }]),
+  );
   for (const row of rows) {
     const id = idFromBytes(row.id);
     if (id === model.rootId) {
@@ -126,7 +173,7 @@ async function assertModel(model: Model, real: Real): Promise<void> {
       version: node.version,
       trashed: node.trash !== null,
     });
-    expect(actualPaths.get(id)).toBe(pathOf(model, node));
+    expect(derived.get(id)).toEqual({ path: pathOf(model, node), depth: depthOf(model, node) });
   }
   const entries = await context.db
     .selectFrom('trash_entries')
@@ -157,6 +204,33 @@ async function assertModel(model: Model, real: Real): Promise<void> {
     .where('action', 'like', 'node.%')
     .execute();
   expect(audits).toHaveLength(model.treeVersion);
+}
+/**
+ * The ceiling refuses rather than clamps.
+ *
+ * A create under the deepest level and a move of a live node onto it are both `409 invalid_move`
+ * with `reason: 'depth'`, and the walk still reports the same deepest level afterwards. The fixture
+ * is built once, in `beforeAll`: `PROP_DB.maxCommands` is 60 on a pull request and each command's
+ * parent is chosen at random, so a 64-level branch is unreachable from the commands themselves,
+ * while rebuilding one inside every example would cost 64 structural writes per run and prove
+ * nothing the one chain does not.
+ */
+async function assertCeilingRefusals(client: RestClient): Promise<void> {
+  const created = await client.post(`/vaults/${ceiling.vault.id}/nodes`, {
+    json: { kind: 'category', name: 'Overflow', parentId: ceiling.deepest },
+    headers: { origin: context.origin },
+  });
+  expect(created.status).toBe(409);
+  expect(created.body).toMatchObject({ code: 'invalid_move', errors: [{ code: 'depth' }] });
+  const moved = await client.patch(`/nodes/${ceiling.mover}`, {
+    json: { parentId: ceiling.deepest },
+    headers: treeHeaders(context, 1),
+  });
+  expect(moved.status).toBe(409);
+  expect(moved.body).toMatchObject({ code: 'invalid_move', errors: [{ code: 'depth' }] });
+  const paths = await derivePaths(context.db, idBytes(ceiling.vault.id), true);
+  expect(paths).toHaveLength(LIMITS.TREE_MAX_DEPTH + 1);
+  expect(Math.max(...paths.map((row) => row.depth))).toBe(LIMITS.TREE_MAX_DEPTH);
 }
 class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
   readonly operation: Operation;
@@ -194,6 +268,9 @@ class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
     if (parent === undefined) throw new Error('The model always has a root category.');
     if (this.operation === 'CreateCategory' || this.operation === 'CreateNote') {
       const kind = this.operation === 'CreateCategory' ? 'category' : 'note';
+      // `createNode` checks the ceiling before it inserts, so depth is decided ahead of the
+      // `uq_sibling` collision the insert would raise (apps/server/src/tree/service.ts).
+      const tooDeep = parentDepthOf(model, parent) + 1 > LIMITS.TREE_MAX_DEPTH;
       const conflict = collision(model, parent, this.name);
       const response = await real.client.post(`/vaults/${real.vault.id}/nodes`, {
         json: {
@@ -205,8 +282,12 @@ class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
         headers: { origin: context.origin },
       });
       // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
-      expect(response.status).toBe(conflict ? 409 : 201);
-      if (!conflict) {
+      expect(response.status).toBe(tooDeep || conflict ? 409 : 201);
+      if (tooDeep) {
+        // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
+        expect(response.body).toMatchObject({ code: 'invalid_move', errors: [{ code: 'depth' }] });
+      }
+      if (!tooDeep && !conflict) {
         const created = Node.parse(response.body);
         model.nodes.set(created.id, {
           id: created.id,
@@ -227,6 +308,7 @@ class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
     const headers = treeHeaders(context, node.version + (this.stale ? 1 : 0));
     const descendants = childrenOf(model, node.id);
     let refused = this.stale;
+    let depthRefused = false;
     let accepted: () => void;
     let response: { readonly status: number; readonly body: unknown };
     switch (this.operation) {
@@ -243,10 +325,15 @@ class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
         break;
       }
       case 'Move': {
-        refused ||=
-          parent === node.id ||
-          descendants.some((child) => child.id === parent) ||
-          collision(model, parent, node.name, node.id);
+        const cycle = parent === node.id || descendants.some((child) => child.id === parent);
+        // `validateParent` checks the cycle first, then the ceiling, and only then does
+        // `assertSiblingAvailable` collate the name (apps/server/src/tree/mutations.ts), so a move
+        // that is neither stale nor cyclic and would land below level 64 reports `depth`.
+        depthRefused =
+          !refused &&
+          !cycle &&
+          parentDepthOf(model, parent) + 1 + heightOf(model, node) > LIMITS.TREE_MAX_DEPTH;
+        refused ||= cycle || depthRefused || collision(model, parent, node.name, node.id);
         response = await real.client.patch<NodePatchResult>(`/nodes/${node.id}`, {
           json: { parentId: parent },
           headers,
@@ -304,9 +391,14 @@ class HierarchyCommand implements fc.AsyncCommand<Model, Real> {
     }
     // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
     expect(response.status).toBe(refused ? 409 : this.operation === 'Purge' ? 204 : 200);
-    // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
-    if (refused) expect(response.body).toHaveProperty('code');
-    else {
+    if (refused) {
+      // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
+      expect(response.body).toHaveProperty('code');
+      if (depthRefused) {
+        // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test
+        expect(response.body).toMatchObject({ code: 'invalid_move', errors: [{ code: 'depth' }] });
+      }
+    } else {
       accepted();
       model.treeVersion += 1;
     }
@@ -344,6 +436,7 @@ describe('hierarchy.model.prop [area:tree] [spec:structural-concurrency]', () =>
       const vault = await createTreeVault(context, client, `Model ${String(example)}`);
       const model: Model = { nodes: new Map(), rootId: vault.rootNodeId, treeVersion: 0 };
       const real = { client, vault };
+      await assertCeilingRefusals(client);
       await fc.asyncModelRun(() => ({ model, real }), commands);
       await assertModel(model, real);
       // oxlint-disable-next-line vitest/no-standalone-expect -- fast-check invokes this model command or invariant from inside the declared property test

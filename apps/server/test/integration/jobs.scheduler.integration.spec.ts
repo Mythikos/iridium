@@ -1,11 +1,36 @@
 /** Real database claims and administrator routes; executors are production retention functions. */
-import { Job, JobPage, newId } from '@iridium/contracts';
+import { Job, JobPage, LIMITS, newId } from '@iridium/contracts';
+import type { Kysely } from 'kysely';
 import { describe, expect, it } from 'vitest';
 
+import { idBytes } from '../../src/auth/ids.ts';
+import type { Database } from '../../src/db/schema.ts';
 import { pruneUpdates } from '../../src/jobs/retention.ts';
-import { JobScheduler } from '../../src/jobs/scheduler.ts';
+import { JobScheduler, type JobContext, type JobHandler } from '../../src/jobs/scheduler.ts';
 import { appDb } from '../../src/rest/handler-context.ts';
 import { startCollab } from '../support/collab-harness.ts';
+import { ManualClock } from '../support/manual-clock.ts';
+
+/**
+ * The claim §6.2 names — `jobs.locked_by` and `jobs.locked_at` — plus the two columns that say
+ * whether it was taken twice. `Job` deliberately hides the owner ("Public metadata never includes
+ * the internal claim owner", `packages/contracts/src/rest/jobs.ts`), so the row is the only place
+ * the claim of 12-milestones.md §6.4 can be observed.
+ */
+interface ClaimRow {
+  readonly status: string;
+  readonly locked_by: string | null;
+  readonly locked_at: Date | null;
+  readonly attempts: number;
+}
+
+function readClaim(db: Kysely<Database>, jobId: string): Promise<ClaimRow> {
+  return db
+    .selectFrom('jobs')
+    .select(['status', 'locked_by', 'locked_at', 'attempts'])
+    .where('id', '=', idBytes(jobId))
+    .executeTakeFirstOrThrow();
+}
 
 describe('jobs.scheduler.integration [area:jobs]', () => {
   it('audits administrator execution, exposes progress, rejects invalid payloads and cancels only queued jobs', async () => {
@@ -79,15 +104,24 @@ describe('jobs.scheduler.integration [area:jobs]', () => {
     }
   });
   it('two independent schedulers claim one real job exactly once and active enqueue is idempotent', async () => {
-    const harness = await startCollab({ extraEnv: { JOBS_ENABLED: 'false' } });
+    const clock = new ManualClock();
+    const harness = await startCollab({ clock, extraEnv: { JOBS_ENABLED: 'false' } });
     const app = harness.application();
     const db = appDb(app);
+    // Each handler reads its own row while it is executing, so the claim is captured while it is
+    // held rather than after the scheduler has already released it (§6.4, `jobs.scheduler`).
+    const observed: { readonly processId: string; readonly claim: ClaimRow }[] = [];
     const create = (processId: string) =>
       new JobScheduler({
         database: () => db,
-        clock: app.clock,
+        clock,
         processId,
-        handlers: { update_log_prune: (context) => pruneUpdates(db, app.clock.date(), 7, context) },
+        handlers: {
+          update_log_prune: async (context: JobContext) => {
+            observed.push({ processId, claim: await readClaim(db, context.jobId) });
+            return pruneUpdates(db, clock.date(), 7, context);
+          },
+        },
         captureFence: () => app.collab.ownerLease.captureFence(),
         canRun: () => app.collab.ownerLease.held,
         audit: app.audit,
@@ -110,17 +144,122 @@ describe('jobs.scheduler.integration [area:jobs]', () => {
         second.enqueue('update_log_prune', {}, options),
       ]);
       expect(a.id).toBe(b.id);
+      const claimedAt = clock.date();
       await Promise.all([first.runQueuedOnce(), second.runQueuedOnce()]);
+      // Exactly one handler ran, and the row it ran under names that handler's process.
+      expect(observed).toHaveLength(1);
+      const winner = observed[0];
+      if (winner === undefined) throw new Error('One contender must have claimed the row.');
+      expect(['maintenance-contender-a', 'maintenance-contender-b']).toContain(winner.processId);
+      expect(winner.claim).toEqual({
+        status: 'running',
+        locked_by: winner.processId,
+        locked_at: claimedAt,
+        attempts: 1,
+      });
       const done = await first.get(a.id);
       expect(done.status).toBe('succeeded');
       expect(done.attempts).toBe(1);
       expect(done.result).toEqual({ removed: 0 });
+      // A settled job owns nothing: the claim is released with the terminal transition.
+      expect(await readClaim(db, a.id)).toEqual({
+        status: 'succeeded',
+        locked_by: null,
+        locked_at: null,
+        attempts: 1,
+      });
       const repeat = await first.enqueue('update_log_prune', {}, options);
       expect(repeat.id).not.toBe(a.id);
       expect((await first.runUntilSettled(repeat.id)).result).toEqual(done.result);
     } finally {
       await first.stop();
       await second.stop();
+      await harness.close();
+    }
+  });
+  it('holds a live claim against a second scheduler and yields it only once it has expired', async () => {
+    const clock = new ManualClock();
+    const harness = await startCollab({ clock, extraEnv: { JOBS_ENABLED: 'false' } });
+    const app = harness.application();
+    const db = appDb(app);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let holderRuns = 0;
+    let reclaimerRuns = 0;
+    const create = (processId: string, handler: JobHandler) =>
+      new JobScheduler({
+        database: () => db,
+        clock,
+        processId,
+        handlers: { update_log_prune: handler },
+        captureFence: () => app.collab.ownerLease.captureFence(),
+        canRun: () => app.collab.ownerLease.held,
+        audit: app.audit,
+        metrics: {
+          finished(type, status, durationMs) {
+            app.metrics.jobsTotal.inc({ type, status });
+            app.metrics.jobDurationSeconds.observe({ type }, durationMs / 1000);
+          },
+        },
+        onError: (error) => {
+          app.log.error({ err: error }, 'job.reclaim_test');
+        },
+      });
+    const holder = create('maintenance-holder', async (context: JobContext) => {
+      holderRuns += 1;
+      entered.resolve();
+      await release.promise;
+      return pruneUpdates(db, clock.date(), 7, context);
+    });
+    const reclaimer = create('maintenance-reclaimer', (context: JobContext) => {
+      reclaimerRuns += 1;
+      return pruneUpdates(db, clock.date(), 7, context);
+    });
+    try {
+      const job = await holder.enqueue(
+        'update_log_prune',
+        {},
+        { ownerFence: app.collab.ownerLease.captureFence() },
+      );
+      const held = holder.runQueuedOnce();
+      await entered.promise;
+      const claimedAt = clock.date();
+      expect(await readClaim(db, job.id)).toEqual({
+        status: 'running',
+        locked_by: 'maintenance-holder',
+        locked_at: claimedAt,
+        attempts: 1,
+      });
+      // A live claim is never taken: the second instance finds no candidate and runs nothing.
+      await reclaimer.runQueuedOnce();
+      expect(reclaimerRuns).toBe(0);
+      expect(await readClaim(db, job.id)).toEqual({
+        status: 'running',
+        locked_by: 'maintenance-holder',
+        locked_at: claimedAt,
+        attempts: 1,
+      });
+      // Past `JOB_LOCK_TIMEOUT_MS` the row counts as abandoned, which is the only way a second
+      // process may take it (`apps/server/src/jobs/scheduler.ts`, the `#claim` predicate).
+      clock.jump(clock.now() + LIMITS.JOB_LOCK_TIMEOUT_MS + 1_000);
+      await reclaimer.runQueuedOnce();
+      expect(reclaimerRuns).toBe(1);
+      const settled = {
+        status: 'succeeded',
+        locked_by: null,
+        locked_at: null,
+        attempts: 2,
+      };
+      expect(await readClaim(db, job.id)).toEqual(settled);
+      release.resolve();
+      await held;
+      // The dispossessed holder ran once and wrote nothing back over the row it no longer owns.
+      expect(holderRuns).toBe(1);
+      expect(await readClaim(db, job.id)).toEqual(settled);
+    } finally {
+      release.resolve();
+      await holder.stop();
+      await reclaimer.stop();
       await harness.close();
     }
   });

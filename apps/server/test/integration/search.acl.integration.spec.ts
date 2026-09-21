@@ -1,10 +1,15 @@
 /** Real full-text ranking, scope filtering and keyset boundaries over public content writes. */
-import { LIMITS, SearchPage, VaultId } from '@iridium/contracts';
+import { LIMITS, ProblemDetails, SearchPage, VaultId } from '@iridium/contracts';
 import { searchClient, type RestClient } from '@iridium/testkit';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { idBytes } from '../../src/auth/ids.ts';
-import { startAuthServer, webClient, type AuthTestServer } from '../support/auth-app.ts';
+import {
+  startAuthServer,
+  webClient,
+  webHeaders,
+  type AuthTestServer,
+} from '../support/auth-app.ts';
 import { insertMembership, seedUser, signInWeb } from '../support/seed.ts';
 import { createTreeNode, createTreeVault, treeHeaders } from './tree-test-helpers.ts';
 
@@ -20,6 +25,21 @@ beforeEach(async () => {
 afterAll(async () => {
   await context.stop();
 });
+
+/** The needle every vault-status fixture indexes, so one query spans all four vaults. */
+const NEEDLE = 'vaultstatusneedle';
+
+/** The seeded source line that carries it. */
+const NEEDLE_MARKDOWN = `${NEEDLE}\n`;
+
+/**
+ * Two RFC 9457 bodies are the same answer when they differ only in the per-request id, which is
+ * what "no discriminating body" means for the invisible statuses (04-auth-and-access-control.md F13).
+ */
+function withoutRequestId(body: unknown): Omit<ProblemDetails, 'requestId'> {
+  const { requestId: _requestId, ...rest } = ProblemDetails.parse(body);
+  return rest;
+}
 
 describe('search.acl.integration [area:search]', () => {
   it('shares the real principal budget across both search routes and recovers after its window', async () => {
@@ -126,5 +146,90 @@ describe('search.acl.integration [area:search]', () => {
     expect(revoked.status).toBe(422);
     expect((await search.query('release')).body.results).toEqual([]);
     expect(JSON.stringify(revoked.body)).not.toContain(first.id);
+  });
+
+  it('keeps an archived vault searchable read-only while importing and deleting vaults stay invisible', async () => {
+    const [archived, importing, deleting, foreign] = await Promise.all([
+      createTreeVault(context, admin, 'Archived corpus'),
+      createTreeVault(context, admin, 'Importing corpus'),
+      createTreeVault(context, admin, 'Deleting corpus'),
+      createTreeVault(context, admin, 'Foreign corpus'),
+    ]);
+    const archivedNote = await createTreeNode(context, admin, archived, {
+      kind: 'note',
+      name: 'Archived status note',
+      markdown: NEEDLE_MARKDOWN,
+    });
+    await Promise.all(
+      [importing, deleting].map((vault) =>
+        createTreeNode(context, admin, vault, {
+          kind: 'note',
+          name: `Invisible status note ${vault.name}`,
+          markdown: NEEDLE_MARKDOWN,
+        }),
+      ),
+    );
+    const member = await seedUser(context, { email: 'search-status@example.test' });
+    await Promise.all(
+      [archived, importing, deleting].map((vault) =>
+        insertMembership(
+          context.db,
+          {
+            vaultId: VaultId.parse(vault.id),
+            userId: member.id,
+            role: 'editor',
+            grantedBy: member.id,
+          },
+          context.clock.now(),
+        ),
+      ),
+    );
+    const client = webClient(context, await signInWeb(context, member));
+    const search = searchClient(client);
+    const frozen = await admin.post(`/vaults/${archived.id}/archive`, {
+      json: { confirm: true },
+      headers: treeHeaders(context, archived.version),
+    });
+    expect(frozen.status, JSON.stringify(frozen.body)).toBe(200);
+    // `importing` and `deleting` have no M2 producer — import arrives in M6 and vault deletion is a
+    // background transition — so the fixture sets the two statuses the schema defines
+    // (03-data-model.md section 5) the way authz.route-policy.integration seeds an importing vault.
+    await Promise.all(
+      (
+        [
+          ['importing', importing],
+          ['deleting', deleting],
+        ] as const
+      ).map(([status, vault]) =>
+        context.db
+          .updateTable('vaults')
+          .set({ status })
+          .where('id', '=', idBytes(vault.id))
+          .execute(),
+      ),
+    );
+    const everywhere = await search.query(NEEDLE);
+    expect(everywhere.status, JSON.stringify(everywhere.body)).toBe(200);
+    expect(everywhere.body.results.map((hit) => hit.noteId)).toEqual([archivedNote.id]);
+    expect(everywhere.body.results[0]?.vaultId).toBe(archived.id);
+    const scoped = await search.query(NEEDLE, { vaultId: archived.id });
+    expect(scoped.status, JSON.stringify(scoped.body)).toBe(200);
+    expect(scoped.body.results.map((hit) => hit.noteId)).toEqual([archivedNote.id]);
+    const write = await client.post(`/vaults/${archived.id}/nodes`, {
+      json: { kind: 'note', parentId: archived.rootNodeId, name: 'Refused while archived' },
+      headers: webHeaders(context.origin),
+    });
+    expect(write.status, JSON.stringify(write.body)).toBe(409);
+    expect(write.body).toMatchObject({ code: 'vault_archived' });
+    // The member holds an editor membership in both invisible vaults, so an answer that differed
+    // from the non-member's would make that membership observable.
+    const nonMember = await search.query(NEEDLE, { vaultId: foreign.id });
+    expect(nonMember.status).toBe(404);
+    for (const vault of [importing, deleting]) {
+      // eslint-disable-next-line no-await-in-loop -- each invisible status is compared against the same non-member answer
+      const invisible = await search.query(NEEDLE, { vaultId: vault.id });
+      expect(invisible.status).toBe(404);
+      expect(withoutRequestId(invisible.body)).toStrictEqual(withoutRequestId(nonMember.body));
+    }
   });
 });

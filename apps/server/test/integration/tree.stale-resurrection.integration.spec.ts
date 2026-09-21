@@ -1,4 +1,11 @@
-import { NoteId, type RestoreNodeResult, type TrashNodeResult } from '@iridium/contracts';
+import {
+  idFromBytes,
+  NoteId,
+  type Node,
+  type ProblemDetails,
+  type RestoreNodeResult,
+  type TrashNodeResult,
+} from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { idBytes } from '../../src/auth/ids.ts';
@@ -145,4 +152,79 @@ describe('tree.stale-resurrection.integration [spec:structural-concurrency] [hp:
       }
     },
   );
+  it('refuses a pre-trash validator on rename, move and restore into a live position', async () => {
+    const harness = await startCollab();
+    try {
+      const cast = await harness.server.seed.kernel();
+      const app = harness.application();
+      const db = app.database.dbApp;
+      if (db === null) throw new Error('The real application must own its database.');
+      const noteId = NoteId.parse(cast.note.id);
+      const destination = await cast.admin.client.post<Node>(`/vaults/${cast.vault.id}/nodes`, {
+        json: { kind: 'category', parentId: cast.vault.rootNodeId, name: 'Live destination' },
+      });
+      expect(destination.status).toBe(201);
+      const before = await cast.admin.client.get<Node>(`/nodes/${noteId}`);
+      expect(before.status).toBe(200);
+      // The validator a client is holding while the node is still live. Every write below replays
+      // exactly this one after the trash has committed (12-milestones.md §6.4, this file's row).
+      const preTrash = before.body.version;
+      const trashed = await cast.admin.client.post<TrashNodeResult>(`/nodes/${noteId}/trash`, {
+        headers: { 'if-match': `"${String(preTrash)}"` },
+        json: {},
+      });
+      expect(trashed.status).toBe(200);
+      expect(trashed.body.nodes[0]?.version).toBe(preTrash + 1);
+      const stale = { 'if-match': `"${String(preTrash)}"` };
+      const rename = await cast.admin.client.patch<ProblemDetails>(`/nodes/${noteId}`, {
+        headers: stale,
+        json: { name: 'Resurrected' },
+      });
+      const move = await cast.admin.client.patch<ProblemDetails>(`/nodes/${noteId}`, {
+        headers: stale,
+        json: { parentId: destination.body.id },
+      });
+      const restore = await cast.admin.client.post<ProblemDetails>(`/nodes/${noteId}/restore`, {
+        headers: stale,
+        json: { newParentId: destination.body.id },
+      });
+      // `mutationNode` compares the validator before it looks at `deleted_at`, so all three answer
+      // the same `409 stale_version` (apps/server/src/tree/mutations.ts).
+      for (const [operationId, response] of [
+        ['nodes.update', rename],
+        ['nodes.update', move],
+        ['nodes.restore', restore],
+      ] as const) {
+        expect(response.status).toBe(409);
+        expect(response.body).toMatchObject({ code: 'stale_version' });
+        // eslint-disable-next-line no-await-in-loop -- each refusal is checked against its own documented shape
+        await expect(response).toMatchOpenApi(operationId, 409);
+      }
+      const row = await db
+        .selectFrom('nodes')
+        .select(['parent_id', 'name', 'version', 'deleted_at'])
+        .where('id', '=', idBytes(noteId))
+        .executeTakeFirstOrThrow();
+      expect({
+        parent: idFromBytes(row.parent_id),
+        name: row.name,
+        version: row.version,
+        trashed: row.deleted_at !== null,
+      }).toEqual({
+        parent: cast.vault.rootNodeId,
+        name: cast.note.name,
+        version: preTrash + 1,
+        trashed: true,
+      });
+      expect(
+        await db
+          .selectFrom('trash_entries')
+          .select('node_id')
+          .where('node_id', '=', idBytes(noteId))
+          .execute(),
+      ).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
 });
