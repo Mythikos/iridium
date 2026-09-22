@@ -436,7 +436,7 @@ jobs:
         run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
 
       - name: Apply the migrations
-        run: pnpm --filter @iridium/server run iridium migrate up
+        run: pnpm --filter @iridium/server run iridium migrate up --allow-long-running
 
       - name: Web E2E shard ${{ matrix.shard }}/4
         run: >-
@@ -504,7 +504,7 @@ jobs:
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
 
       - name: Apply the migrations
-        run: pnpm --filter @iridium/server run iridium migrate up
+        run: pnpm --filter @iridium/server run iridium migrate up --allow-long-running
 
       - name: Electron E2E smoke (Linux, under xvfb)
         if: runner.os == 'Linux'

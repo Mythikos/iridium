@@ -252,7 +252,7 @@ jobs:
       - name: Build the web host and the server
         run: pnpm turbo run build --filter=@iridium/web --filter=@iridium/server
       - name: Apply the migrations
-        run: pnpm --filter @iridium/server run iridium migrate up
+        run: pnpm --filter @iridium/server run iridium migrate up --allow-long-running
       - name: Client budgets
         run: >-
           pnpm exec playwright test -c playwright.config.ts --project=chromium
@@ -434,7 +434,7 @@ jobs:
       - name: Build the desktop shell (unpackaged) and the server
         run: pnpm turbo run build --filter=@iridium/desktop --filter=@iridium/server
       - name: Apply the migrations
-        run: pnpm --filter @iridium/server run iridium migrate up
+        run: pnpm --filter @iridium/server run iridium migrate up --allow-long-running
       - name: Electron suite (Linux, under xvfb)
         if: runner.os == 'Linux'
         run: >-
@@ -595,7 +595,7 @@ jobs:
         if: needs.milestone.outputs.web == 'true'
       - name: Apply the migrations
         if: needs.milestone.outputs.web == 'true'
-        run: pnpm --filter @iridium/server run iridium migrate up
+        run: pnpm --filter @iridium/server run iridium migrate up --allow-long-running
       - name: Web suite, three times over
         if: needs.milestone.outputs.web == 'true'
         run: >-

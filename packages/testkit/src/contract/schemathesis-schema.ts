@@ -204,6 +204,14 @@ expected-statuses = [400, 401, 403, 404, 405, 406, 409, 415, 422, 428, 429, "5xx
 [checks.missing_required_header]
 expected-statuses = [400, 401, 403, 404, 406, 415, 422, 428, 429]
 
+# A rename preview must propose at least one of name or parentId. That is a cross-field rule over a
+# query object, and a query object is exploded into one parameter each, so no published schema can
+# carry it: the generator will ask for the preview with neither and the route answers its documented
+# 422. The body equivalents on the patch routes publish anyOf and need no entry here.
+[[operations]]
+include-name = "GET /api/v1/notes/{noteId}/rename-impact"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 429, "5xx"]
+
 # Two cross-field rules stay in their refinements because publishing them would tighten a parameter
 # released at v0.1.0, which A54 prices at an apiVersion bump for a change no client can observe:
 # only a note may carry markdown, and attachmentFolder must be a safe vault-relative path. Both

@@ -236,10 +236,10 @@ export const RenameImpactQuery: z.ZodType<RenameImpactQuery> = z
     error: 'At least one change is required.',
     params: { code: 'no_changes' },
   })
-  .meta({
-    id: 'RenameImpactQuery',
-    anyOf: [{ required: ['name'] }, { required: ['parentId'] }],
-  });
+  // No published `anyOf` here, unlike `PatchNodeBody`: a query object is exploded into one
+  // `parameters[]` entry per member, so an object-level constraint has nowhere to live in the
+  // document and is dropped silently. The refusal is declared for the fuzz profile instead.
+  .meta({ id: 'RenameImpactQuery' });
 
 /** The proposed path and collision flag accompany the same target-side link summary. */
 export interface RenameImpactResult {
