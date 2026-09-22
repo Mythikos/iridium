@@ -91,61 +91,70 @@ async function bytesOf(stream: Readable): Promise<Buffer> {
 }
 
 describe.each(IMPLEMENTATIONS)('storage-driver.contract [area:seams] $name', (implementation) => {
-  it('publishes only complete immutable bytes, deduplicates, ranges, scopes enumeration and deletes idempotently', async () => {
-    const fixture = await implementation.open(),
-      storage = fixture.storage;
-    try {
-      const small = Buffer.from('complete immutable object'),
-        smallKey = keyOf(small);
-      await storage.healthcheck();
-      const altered = Buffer.from(small);
-      altered[0] = 0;
-      await expect(
-        storage.put(smallKey, Readable.from([altered]), {
-          sizeBytes: small.length,
-          mime: 'application/octet-stream',
-        }),
-      ).rejects.toBeInstanceOf(AttachmentStorageIntegrityError);
-      expect(await storage.exists(smallKey)).toBe(false);
-      const bytes = Buffer.alloc(LIMITS.ATTACHMENT_MULTIPART_THRESHOLD_BYTES + 1, 65),
-        key = keyOf(bytes),
-        other = keyOf(bytes, OTHER);
-      const options = { sizeBytes: bytes.length, mime: 'application/octet-stream' };
-      expect(await storage.exists(key)).toBe(false);
-      await expect(storage.get(key)).rejects.toBeInstanceOf(AttachmentBytesMissingError);
-      await expect(storage.exists('../escape')).rejects.toBeInstanceOf(AttachmentStorageKeyError);
-      await expect(
-        storage.put(key, Readable.from([bytes.subarray(0, 3)]), options),
-      ).rejects.toBeInstanceOf(AttachmentStorageIntegrityError);
-      expect(await storage.exists(key)).toBe(false);
-      await Promise.all([
-        storage.put(key, Readable.from([bytes]), options),
-        storage.put(key, Readable.from([bytes]), options),
-      ]);
-      await storage.put(other, Readable.from([bytes]), options);
-      await storage.put(key, Readable.from([Buffer.from('ignore duplicate')]), {
-        sizeBytes: 16,
-        mime: 'text/plain',
-      });
-      expect(await bytesOf(await storage.get(key))).toEqual(bytes);
-      expect(
-        await bytesOf(await storage.get(key, { start: bytes.length - 2, end: bytes.length - 1 })),
-      ).toEqual(Buffer.from('AA'));
-      const scoped = [];
-      for await (const item of storage.list(VAULT)) scoped.push(item);
-      expect(scoped).toEqual([{ key, sizeBytes: bytes.length }]);
-      await storage.delete(key);
-      await storage.delete(key);
-      expect(await storage.exists(key)).toBe(false);
-      expect(await storage.exists(other)).toBe(true);
-      await expect(storage.get(key)).rejects.toBeInstanceOf(AttachmentBytesMissingError);
-      await storage.delete(other);
-      await storage.healthcheck();
-      const remaining = [];
-      for await (const item of storage.list()) remaining.push(item);
-      expect(remaining).toEqual([]);
-    } finally {
-      await fixture.close();
-    }
-  });
+  // The contract has to cross ATTACHMENT_MULTIPART_THRESHOLD_BYTES to exercise the multipart path
+  // at all, so one run moves about 24 MiB through the driver plus a full read back. That is a few
+  // seconds on a developer machine and far longer on a two-core runner sharing its I/O with the
+  // MySQL, Toxiproxy and SeaweedFS containers of the same job, where the default 60 s expired for
+  // both drivers. The budget is declared per test, the way the chaos iterations declare theirs.
+  it(
+    'publishes only complete immutable bytes, deduplicates, ranges, scopes enumeration and deletes idempotently',
+    { timeout: 300_000 },
+    async () => {
+      const fixture = await implementation.open(),
+        storage = fixture.storage;
+      try {
+        const small = Buffer.from('complete immutable object'),
+          smallKey = keyOf(small);
+        await storage.healthcheck();
+        const altered = Buffer.from(small);
+        altered[0] = 0;
+        await expect(
+          storage.put(smallKey, Readable.from([altered]), {
+            sizeBytes: small.length,
+            mime: 'application/octet-stream',
+          }),
+        ).rejects.toBeInstanceOf(AttachmentStorageIntegrityError);
+        expect(await storage.exists(smallKey)).toBe(false);
+        const bytes = Buffer.alloc(LIMITS.ATTACHMENT_MULTIPART_THRESHOLD_BYTES + 1, 65),
+          key = keyOf(bytes),
+          other = keyOf(bytes, OTHER);
+        const options = { sizeBytes: bytes.length, mime: 'application/octet-stream' };
+        expect(await storage.exists(key)).toBe(false);
+        await expect(storage.get(key)).rejects.toBeInstanceOf(AttachmentBytesMissingError);
+        await expect(storage.exists('../escape')).rejects.toBeInstanceOf(AttachmentStorageKeyError);
+        await expect(
+          storage.put(key, Readable.from([bytes.subarray(0, 3)]), options),
+        ).rejects.toBeInstanceOf(AttachmentStorageIntegrityError);
+        expect(await storage.exists(key)).toBe(false);
+        await Promise.all([
+          storage.put(key, Readable.from([bytes]), options),
+          storage.put(key, Readable.from([bytes]), options),
+        ]);
+        await storage.put(other, Readable.from([bytes]), options);
+        await storage.put(key, Readable.from([Buffer.from('ignore duplicate')]), {
+          sizeBytes: 16,
+          mime: 'text/plain',
+        });
+        expect(await bytesOf(await storage.get(key))).toEqual(bytes);
+        expect(
+          await bytesOf(await storage.get(key, { start: bytes.length - 2, end: bytes.length - 1 })),
+        ).toEqual(Buffer.from('AA'));
+        const scoped = [];
+        for await (const item of storage.list(VAULT)) scoped.push(item);
+        expect(scoped).toEqual([{ key, sizeBytes: bytes.length }]);
+        await storage.delete(key);
+        await storage.delete(key);
+        expect(await storage.exists(key)).toBe(false);
+        expect(await storage.exists(other)).toBe(true);
+        await expect(storage.get(key)).rejects.toBeInstanceOf(AttachmentBytesMissingError);
+        await storage.delete(other);
+        await storage.healthcheck();
+        const remaining = [];
+        for await (const item of storage.list()) remaining.push(item);
+        expect(remaining).toEqual([]);
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 });
