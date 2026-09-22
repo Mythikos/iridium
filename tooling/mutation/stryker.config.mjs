@@ -74,7 +74,7 @@ export default {
     'apps/server/src/collab/persistence/**/*.ts',
     'apps/server/src/collab/limits.ts',
     'apps/server/src/mcp/{cursor,verifier,rate-limit}.ts',
-    'apps/server/src/tree/{mutations,names,paths,rename-impact}.ts',
+    'apps/server/src/tree/{names,paths,rename-impact}.ts',
     'apps/server/src/collab/owner-lease.ts',
     'packages/contracts/src/{tokens,paths,authz,ids,limits,markdown-limits}.ts',
     'packages/crdt/src/**/*.ts',

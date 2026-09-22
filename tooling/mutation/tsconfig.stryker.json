@@ -36,7 +36,6 @@
     "../../apps/server/src/mcp/verifier.ts",
     "../../apps/server/src/mcp/rate-limit.ts",
     "../../apps/server/src/tree/names.ts",
-    "../../apps/server/src/tree/mutations.ts",
     "../../apps/server/src/tree/paths.ts",
     "../../apps/server/src/tree/rename-impact.ts"
   ]
