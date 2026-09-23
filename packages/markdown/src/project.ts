@@ -9,6 +9,7 @@ import { collectLinks } from './links/collect.ts';
 import { emptyObsidianCounts } from './obsidian/catalogue.ts';
 import { detectObsidianSyntax } from './obsidian/detect.ts';
 import { collectHeadings, headingTitleOf } from './outline.ts';
+import { truncateChars } from './truncate.ts';
 import type { NoteProjection, ParsedNote, ProjectOptions } from './types.ts';
 import { PIPELINE_VERSION } from './version.ts';
 
@@ -74,7 +75,7 @@ export function project(parsed: ParsedNote, text: string, options: ProjectOption
       tasks.push({ line: node.position?.start.line ?? 1, offset, checked: node.checked });
     }
     if (node.type === 'code' && node.lang) {
-      const language = node.lang.toLowerCase().slice(0, LIMITS.CODE_LANGUAGE_MAX_CHARS);
+      const language = truncateChars(node.lang.toLowerCase(), LIMITS.CODE_LANGUAGE_MAX_CHARS);
       if (!codeLangs.includes(language) && codeLangs.length < LIMITS.CODE_LANGUAGES_MAX)
         codeLangs.push(language);
     }

@@ -4,6 +4,7 @@ import type { Definition, Nodes, Root } from 'mdast';
 
 import { lineOf, lineStartsOf } from '../body-text.ts';
 import { collectWikiOccurrences } from '../obsidian/detect.ts';
+import { truncateChars } from '../truncate.ts';
 import type { RawLink } from '../types.ts';
 import { resolveLink, type NoteContext, type VaultIndex } from './resolve.ts';
 
@@ -39,7 +40,7 @@ export function collectLinks(
     links.push({
       ordinal: 0,
       kind,
-      rawTarget: rawTarget.slice(0, LIMITS.LINK_TARGET_MAX_CHARS),
+      rawTarget: truncateChars(rawTarget, LIMITS.LINK_TARGET_MAX_CHARS),
       startOffset,
       endOffset,
       line: lineOf(starts, startOffset),

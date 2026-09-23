@@ -1,6 +1,6 @@
 /** The derived half of projection/write: search and references commit with their exact source. */
 import { idFromBytes, LIMITS, NoteId, VaultId } from '@iridium/contracts';
-import type { NoteProjection } from '@iridium/markdown';
+import { truncateChars, type NoteProjection } from '@iridium/markdown';
 import type { Insertable, Transaction } from 'kysely';
 
 import type { Database, NoteLinksTable } from '../db/schema.ts';
@@ -108,7 +108,7 @@ export async function writeDerivedProjection(
       revision,
       ordinal: link.ordinal,
       kind: link.kind,
-      raw_target: Array.from(link.rawTarget).slice(0, LIMITS.LINK_TARGET_MAX_CHARS).join(''),
+      raw_target: truncateChars(link.rawTarget, LIMITS.LINK_TARGET_MAX_CHARS),
       start_offset: link.startOffset,
       end_offset: link.endOffset,
       line: link.line,

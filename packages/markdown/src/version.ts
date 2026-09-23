@@ -8,4 +8,4 @@
  */
 
 /** The version of the projection pipeline whose rows the current writer produces. */
-export const PIPELINE_VERSION = 2;
+export const PIPELINE_VERSION = 3;

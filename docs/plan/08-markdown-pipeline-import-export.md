@@ -26,7 +26,7 @@ This section is the build specification for everything that touches Markdown tex
 packages/markdown/
   package.json                     "@iridium/markdown", type: module, exports: { ".", "./search", "./schema" }; narrow "./benchmark" helpers for S11 only
   src/index.ts                     public API (below)
-  src/version.ts                   export const PIPELINE_VERSION = 2 (M1 already persisted 1)
+  src/version.ts                   export const PIPELINE_VERSION = 3 (M1 persisted 1; M2's own 2 bounded strings by UTF-16 unit)
   src/normalize.ts                 normalizeSource, detectEol
   src/restore.ts                   restoreSource
   src/prescan.ts                   prescan(text) → caps check before any parsing

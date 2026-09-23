@@ -102,6 +102,27 @@ describe('persistence.model.prop [area:collab] [spec:durable-saving] [hp:HP-1] [
       missing.dispose();
     }
   });
+  test('stores a fence language bounded between characters (seed 533595407)', async () => {
+    // The fence information is the note's only content, and it is longer than
+    // `CODE_LANGUAGE_MAX_CHARS` at an odd UTF-16 boundary. Cutting it by unit left a lone
+    // surrogate in `note_projections.code_langs`, which MySQL refuses outright, so the create
+    // answered 500 rather than storing the note (`truncate.ts`).
+    const source =
+      '```%%\u{10000}\u{10000}\u{10000}!\u{A1}\u{10000}!\u{10000}\u{10000}\u{10000}!!!\u{10000}\u{10000}\u{10000}!!!\u{10000}';
+    const markdown = normalizeSource(source).text;
+    const real = await fixture.create(markdown, source);
+    try {
+      const model = initialModel(markdown);
+      await real.writer.drain();
+      expect(projectMarkdown(real.document)).toBe(markdown);
+      assertStoreInvariants(await real.view(), model, real);
+      await assertCoalescingPreservesSemantics(real);
+      await assertLoad(real, { ...model, committed: null, pending: 1 });
+    } finally {
+      real.dispose();
+    }
+  });
+
   it.prop(
     [seed, fc.commands(persistenceCommands(text), { maxCommands: PROP_DB.maxCommands })],
     PROP_DB,

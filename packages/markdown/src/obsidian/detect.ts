@@ -5,6 +5,7 @@ import type { Nodes, Root } from 'mdast';
 
 import { lineOf, lineStartsOf } from '../body-text.ts';
 import { resolveLink } from '../links/resolve.ts';
+import { truncateChars } from '../truncate.ts';
 import type { DetectContext, ObsidianFinding, ObsidianFindings } from '../types.ts';
 import { OBSIDIAN_CATALOGUE, emptyObsidianCounts } from './catalogue.ts';
 import { parseWikilinkTarget } from './wikilink.ts';
@@ -106,7 +107,7 @@ export function detectObsidianSyntax(
       line: lineOf(starts, offset),
       offset,
       endOffset,
-      text: text.slice(offset, endOffset).slice(0, LIMITS.OBSIDIAN_FINDING_MAX_CHARS),
+      text: truncateChars(text.slice(offset, endOffset), LIMITS.OBSIDIAN_FINDING_MAX_CHARS),
       ...(detail === undefined ? {} : { detail }),
     });
   }

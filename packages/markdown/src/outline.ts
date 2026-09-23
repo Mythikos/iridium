@@ -4,6 +4,7 @@ import GithubSlugger from 'github-slugger';
 import type { Nodes, Root } from 'mdast';
 import { toString } from 'mdast-util-to-string';
 
+import { truncateChars } from './truncate.ts';
 import type { Heading } from './types.ts';
 
 /** Walks headings in document order with one fresh slugger, so repeated headings deduplicate. */
@@ -31,13 +32,5 @@ export function collectHeadings(tree: Root): Heading[] {
 export function headingTitleOf(headings: readonly Heading[]): string | null {
   const first = headings.find((heading) => heading.depth === 1);
   if (first === undefined) return null;
-  const sequences = first.text.match(/\P{M}\p{M}*|\p{M}+/gu) ?? [];
-  let title = '';
-  let size = 0;
-  for (const sequence of sequences) {
-    size += Array.from(sequence).length;
-    if (size > LIMITS.HEADING_TITLE_MAX_CODEPOINTS) break;
-    title += sequence;
-  }
-  return title;
+  return truncateChars(first.text, LIMITS.HEADING_TITLE_MAX_CODEPOINTS);
 }

@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "pipelineVersion": 2,
+  "pipelineVersion": 3,
   "contentHash": "fixture-hash",
   "sizeChars": 77,
   "lineCount": 4,

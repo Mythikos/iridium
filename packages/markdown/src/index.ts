@@ -30,6 +30,7 @@ export {
   PREVIEW_DATA_ATTRIBUTES,
 } from './sanitize/schema.ts';
 export { toBodyText, sourceOffsetOf, lineOf, lineStartsOf } from './body-text.ts';
+export { truncateChars } from './truncate.ts';
 export { detectObsidianSyntax } from './obsidian/detect.ts';
 export { parseWikilinkTarget } from './obsidian/wikilink.ts';
 export { OBSIDIAN_CATALOGUE } from './obsidian/catalogue.ts';

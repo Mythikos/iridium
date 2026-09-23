@@ -28,6 +28,41 @@ describe('markdown.pathological.unit [area:markdown] [spec:portability-and-safet
       expect(Date.now() - start).toBeLessThan(LIMITS.PROJECTION_TIMEOUT_CLIENT_MS);
     },
   );
+  it('cuts every bounded projection string between characters, never inside one', () => {
+    // `String.prototype.slice` cuts UTF-16 units, so an odd boundary splits an astral character
+    // into a lone surrogate. That is not text: MySQL answers `ER_INVALID_JSON_TEXT` for the
+    // `note_projections` JSON columns, and an ordinary note create becomes a 500
+    // (`persistence.model.prop`, seed 533595407). Every bound here counts characters.
+    const astral = '\u{10000}';
+    const odd = (characters: number): string => `x${astral.repeat(characters)}`;
+    const target = odd(LIMITS.LINK_TARGET_MAX_CHARS);
+    const language = odd(LIMITS.CODE_LANGUAGE_MAX_CHARS);
+    const highlight = odd(LIMITS.OBSIDIAN_FINDING_MAX_CHARS);
+    const fence = '```';
+    const source = [
+      `# ${odd(LIMITS.HEADING_TITLE_MAX_CODEPOINTS)}`,
+      '',
+      `[a](${target})`,
+      '',
+      `==${highlight}==`,
+      '',
+      `${fence}${language}`,
+      'code',
+      fence,
+      '',
+    ].join('\n');
+    const projection = project(parseNote(source), source, { contentHash: 'hash' });
+    expect(projection.status).toBe('ok');
+    const bounded = [
+      projection.headingTitle,
+      ...projection.codeLangs,
+      ...projection.links.map((link) => link.rawTarget),
+      ...projection.obsidian.findings.map((finding) => finding.text),
+    ].filter((value) => value !== null);
+    expect(bounded.length).toBeGreaterThan(3);
+    for (const value of bounded) expect(value.isWellFormed()).toBe(true);
+    expect(Array.from(projection.codeLangs[0] ?? '')).toHaveLength(LIMITS.CODE_LANGUAGE_MAX_CHARS);
+  });
   it('counts UTF-8 separately from UTF-16 and applies each exact boundary', () => {
     expect(prescan('é'.repeat(LIMITS.MARKDOWN_SOURCE_MAX_BYTES / 2)).status).toBe('ok');
     expect(prescan('é'.repeat(LIMITS.MARKDOWN_SOURCE_MAX_BYTES / 2) + 'a')).toMatchObject({
