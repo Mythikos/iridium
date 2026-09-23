@@ -13,7 +13,7 @@ import { describe, expect, inject, it } from 'vitest';
 import { idBytes } from '../../src/auth/ids.ts';
 import { createMaintDb } from '../../src/db/migrator.ts';
 import { expectIndependentAuditChains } from '../support/audit-chain-oracle.ts';
-import { CHAOS_RECONNECT, CRASH_ITERATIONS, waitFault } from '../support/collab-chaos.ts';
+import { CHAOS_RECONNECT, CRASH_ITERATIONS, waitCrashFault } from '../support/collab-chaos.ts';
 import { expectConverged, startCollab } from '../support/collab-harness.ts';
 
 describe('collab.trash-crash.chaos [area:collab] [hp:HP-2]', () => {
@@ -75,7 +75,8 @@ describe('collab.trash-crash.chaos [area:collab] [hp:HP-2]', () => {
             (response) => ({ response }),
             (error: unknown) => ({ error }),
           );
-        await waitFault(harness, FAULT.treeCrashAfterCommitBeforeNotify, offset);
+        // The kill is the evidence: the log line `crash()` writes races its own `SIGKILL`.
+        await waitCrashFault(harness, FAULT.treeCrashAfterCommitBeforeNotify, offset);
         await expect.poll(() => harness.server.lastExit).not.toBeNull();
         expect(harness.server.lastExit?.code).not.toBe(0);
         expect(await request).toHaveProperty('error');
