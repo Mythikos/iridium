@@ -1,11 +1,11 @@
 # M2 working record
 
-M2 implementation is committed and exit validation is in progress. `CURRENT` remains M1. This is local working evidence, not an exit declaration or a remote CI result. The tree carries version 0.2.0 across the root and 23 workspaces; no `v0.2.0` tag exists.
+M2 implementation is committed and exit validation is in progress. `CURRENT` remains M1. This is a working record, not an exit declaration; remote CI has now run this tree, and each section below says whether its evidence is remote or only this machine's. The tree carries version 0.2.0 across the root and 23 workspaces; no `v0.2.0` tag exists.
 
 ## Implemented
 
 - Vault settings/archive, structural CRUD and version checks, paths, closing-set coordination, trash/restore/purge and vault-channel notifications.
-- Pipeline v2 with source-preserving Markdown, frontmatter and links, sanitized rendering, bounded workers, committed reads, full-text search, snippets, named revisions and atomic minimal-diff restore.
+- Pipeline v3 with source-preserving Markdown, frontmatter and links, sanitized rendering, bounded workers, committed reads, full-text search, snippets, named revisions and atomic minimal-diff restore.
 - Filesystem/S3 attachments, streamed validation, ranges, deduplication, retained-history references, maintenance jobs, resumable reindex, retention, audit archive and operator commands.
 - A 62-operation REST surface, real-response OpenAPI checks and previous-release wire baselines captured from the immutable `v0.1.0` tag.
 - Migrations 0056–0059 replace unsupported high-cardinality JSON indexes with indexed derived terms and widen raw frontmatter. Historical migrations remain unchanged. The complete selected path is inspected before any migration executes; long-running 0056 and 0059 require the operator's explicit `--allow-long-running` flag. Boot remains available for diagnostics while refusing product traffic until migration completes.
@@ -13,9 +13,9 @@ M2 implementation is committed and exit validation is in progress. `CURRENT` rem
 
 ## Landed
 
-The implementation is committed. `fba2ca7` carries the whole M2 tree; the nine commits after it
-close what a defect audit and the first fresh lane runs on that tree found. `CURRENT` remains M1 and
-no `v0.2.0` tag exists.
+The implementation is committed. `fba2ca7` carries the whole M2 tree; the commits after it close
+what a defect audit, the first fresh local lanes and then the first remote runs on that tree found.
+`CURRENT` remains M1 and no `v0.2.0` tag exists.
 
 Four of those were product defects rather than stale expectations.
 
@@ -65,15 +65,71 @@ way BlueOak-1.0.0 did at M0: `argparse` 3 reaches the production closure through
 which Iridium never runs, and a per-package exception would carry an expiry that recurs on every
 dependency bump for no policy gain.
 
+## Defects the first remote lanes found (2026-09-22 to 2026-09-23)
+
+The 2026-09-21 record above was written from local runs alone. Every lane has since run remotely,
+and each red run named a real defect rather than a flaky budget. They are listed in the order they
+surfaced, because each one hid the next.
+
+- **The e2e and matrix jobs never reached their assertions.** `0056_projection_alias_lookup` and
+  `0059_projection_terms_backfill` are long-running, and five `iridium migrate up` steps across
+  `ci.yml` and `nightly.yml` did not pass `--allow-long-running`, so the workflows stopped at the
+  operator gate M2 introduced.
+- **`jobs.scheduler.integration` raced its own scheduler.** The cancel case needed a row that was
+  still queued when the cancel landed, and the run route earlier in the test wakes the scheduler,
+  whose drain claims queued rows of any handled type. An `export` row is in `JobType`, has no
+  handler at M2 and therefore cannot be claimed, which is what makes the case deterministic.
+- **Three budgets were sized for a machine that is not also hosting the lane's containers**: the
+  multipart storage-driver contract, two collaboration waits and the chaos reconnect, which now
+  shares one constant across its five call sites.
+- **A stopped fixture clock turned a purge into a hang.** `attachments.unreferenced-report` drove a
+  `ManualClock` with `jump()` alone, which fires nothing, while purge waits outside the structural
+  lock for the note's writer to reach disposal — including a backoff retry armed on that clock. One
+  lane per run expired at 120 s while the other passed in six seconds. `withPacedClock` awaits real
+  server work while injected time keeps pace with host time, the way `drainWithClock` already did
+  for shutdown. Pacing then exposed that `ManualClock` reported a fractional instant, which the
+  rate-limit store refuses outright.
+- **The administrator fuzz profile revoked its own sign-in.** `schemathesis-full` had been red every
+  night since M1: a stateful scenario links a real id out of `GET /admin/users` into
+  `POST /admin/users/{userId}/reset-password`, which replaces the password the fixture holds (A28),
+  and every case after that was an authentication error. Both operations stay in the run against
+  every other identity; only the fixture's own id is redirected onto the spare `editorC` account.
+- **A projection bound cut an astral character in half.** `persistence.model.prop` found it at 300
+  commands, seed 533595407: a fence language longer than `CODE_LANGUAGE_MAX_CHARS` ending at an odd
+  UTF-16 boundary left a lone surrogate in `note_projections.code_langs`, and MySQL refuses that
+  with `ER_INVALID_JSON_TEXT`, so an ordinary note create answered 500. `truncateChars` cuts between
+  complete combining sequences at all four bounded sites, and `PIPELINE_VERSION` advances to 3.
+- **A crash fault's own log line races its kill.** `collab.trash-crash.chaos` failed one kill
+  iteration in the nightly's chaos shard 3 and in one CI 9.7 lane, each time as `waitFault` expiring
+  with nothing but "expected false to be true". With the failure message widened to carry the
+  server's account, a local reproduction — about one iteration in twenty — showed the server had
+  exited abnormally with its last line being `fault point armed`: the fault fired, killed the
+  process, and the two lines it wrote went with the kill, which is exactly what HP-2's "no `finally`,
+  no drain, no flush" promises. A crash point is now observed by the process exiting without a clean
+  status, which nothing else in that test produces; the eight points that leave the process alive
+  keep the logged consumption.
+
 ## Remaining exit work
 
-The `chaos` lane, merged coverage and the full-scope mutation campaign have not been measured at M2
-scope. Neither required database line has a remote result, and no remote run has seen this tree at
-all: the `ubuntu`/`windows` build matrix, macOS Electron and the three-consecutive-green nightly
-floor are all outstanding, and the nightly floor is a wait no engineering compresses. `M2-exit.md`
-and an M2 section in `remote-ci.md` are unwritten and both depend on those results. The tagged image
-with its architecture, SBOM and scanner evidence is unpublished, and `CURRENT` advances only after
-all of it.
+Both required database lines now pass the complete `integration`, `contract`, `mcp` and `property`
+lanes on this machine — 140 files and 746 tests each — and the `unit`, `guard` and `component`
+projects pass 4,511 tests in 225 files. Remotely, CI run
+[35817415988](https://github.com/Mythikos/iridium/actions/runs/35817415988) on `6593ba8` is the
+first since the M2 tree landed to pass `static`, both `unit` platforms, all three `e2e-electron`
+platforms, `mutation-scoped` and **both** required `integration` lanes; its chaos result and the
+merged coverage job are recorded with the exit, not here.
+
+- The three-consecutive-green nightly floor is a wait no engineering compresses, and the count
+  cannot start before the first nightly that carries the `schemathesis-full` fix: that job and
+  `mysql-matrix-extended (schemathesis, 300)` have been red every night since M1. `mysql-innovation`
+  and `node-26` are non-blocking by 10-testing-and-quality.md and are dispositioned, not counted.
+- Merged coverage and the full-scope mutation campaign have not been re-measured since the
+  `PIPELINE_VERSION` advance.
+- `apps/server/test/fixtures/upgrade/v0.2.0/` records `pipeline_version` 2, which no released build
+  will ever write. The milestone-exit build regenerates it (12-milestones.md §3, "Upgrade fixture").
+- `M2-exit.md` and an M2 section in `remote-ci.md` are unwritten and both depend on those results.
+  The tagged image with its architecture, SBOM and scanner evidence is unpublished, and `CURRENT`
+  advances only after all of it.
 
 The owner requires direct commits and pushes to main. Branch protection is deferred under section
 13.3 and is not an additional M2 approval gate. This record does not authorize M3 work.
