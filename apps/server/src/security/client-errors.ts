@@ -18,6 +18,7 @@ import { newId, type ErrorCode } from '@iridium/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { PROBLEM_CONTENT_TYPE, sendProblem, toProblemDetails } from './problem.ts';
+import { attachRequestId, REQUEST_ID_HEADER } from './request-id.ts';
 
 /** Fastify's pre-routing framework errors, mapped to the closed vocabulary. */
 const FRAMEWORK_CODE_MAP: Readonly<Record<string, ErrorCode>> = Object.freeze({
@@ -42,8 +43,14 @@ function codeOf(error: unknown): string | null {
 /**
  * Fastify's `frameworkErrors` seam: answers a pre-routing refusal as a problem document.
  *
+ * The router refuses before the first `onRequest` hook runs, so nothing has assigned the request id
+ * yet. It is attached here the same way the security plugin's hook does, including the rule that an
+ * inbound `X-Request-Id` is honoured only from a trusted proxy. Without it the problem document went
+ * out without the `requestId` every `ProblemDetails` requires and without the echoed header
+ * (ARCH-14, ARCH-15); the full administrator fuzz profile found the 414 that way.
+ *
  * @param error The framework error Fastify refused the request with.
- * @param request The partially built request; its `requestId` is already assigned.
+ * @param request The partially built request; no hook has run on it.
  * @param reply The reply Fastify created for this refusal.
  */
 export function applyFrameworkError(
@@ -51,6 +58,7 @@ export function applyFrameworkError(
   request: FastifyRequest,
   reply: FastifyReply,
 ): void {
+  attachRequestId(request, reply, request.server.trustProxyRanges);
   const code = FRAMEWORK_CODE_MAP[codeOf(error) ?? ''] ?? 'malformed_request';
   // `sendProblem` returns the reply, which Fastify treats as thenable; this seam wants no value.
   void sendProblem(request, reply, code);
@@ -70,13 +78,17 @@ export function applyClientError(error: unknown, socket: Socket): void {
   if (raw === 'ECONNRESET' || socket.destroyed) return;
 
   const code = CLIENT_CODE_MAP[raw ?? ''] ?? 'malformed_request';
-  const body = toProblemDetails(code, newId());
+  // No request was ever parsed, so there is no inbound id to consider: one is generated, carried in
+  // the body and echoed like every other response's (ARCH-14).
+  const requestId = newId();
+  const body = toProblemDetails(code, requestId);
   const payload = JSON.stringify(body);
   // `Connection: close` because the parser stopped mid-frame: whatever follows on this socket
   // cannot be framed, so the connection is not reusable whatever the client believes.
   socket.end(
     `HTTP/1.1 ${String(body.status)} ${REASON_PHRASES[body.status] ?? 'Error'}\r\n` +
       `Content-Type: ${PROBLEM_CONTENT_TYPE}\r\n` +
+      `${REQUEST_ID_HEADER}: ${requestId}\r\n` +
       `Content-Length: ${String(Buffer.byteLength(payload))}\r\n` +
       'Connection: close\r\n\r\n' +
       payload,

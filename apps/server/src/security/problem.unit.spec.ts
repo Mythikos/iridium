@@ -81,6 +81,13 @@ async function rawRequest(origin: string, head: string): Promise<string> {
   });
 }
 
+/** The `X-Request-Id` a raw answer echoes in its head, or `null` when it echoes none. */
+function echoedRequestId(answer: string): string | null {
+  const head = answer.slice(0, answer.indexOf('\r\n\r\n'));
+  const match = /^x-request-id:\s*(\S+)\s*$/im.exec(head);
+  return match?.[1] ?? null;
+}
+
 const REQUEST_ID = newId();
 const INTERNAL_DETAIL = 'private storage failure, never sent to the client';
 
@@ -316,6 +323,11 @@ describe('security.problem.unit [area:security]', () => {
                 headers: { 'retry-after': '7', 'www-authenticate': 'Bearer' },
               }),
           );
+          // Parametric, so a segment past `maxParamLength` reaches the router's own refusal. A static
+          // path never parses a parameter, and a long one simply falls through to a 404.
+          api.get('/__probe__/param/:value', { config: { auth: { public: true } } }, async () => ({
+            reached: true,
+          }));
           api.post(
             '/__probe__/json',
             { config: { auth: { public: true } }, bodyLimit: 32 },
@@ -498,21 +510,26 @@ describe('security.problem.unit [area:security]', () => {
       expect(answer).toContain('431 Request Header Fields Too Large');
       expect(answer).toContain('application/problem+json');
       const body: unknown = JSON.parse(answer.slice(answer.indexOf('{')));
-      expect(ProblemDetails.parse(body)).toMatchObject({
-        code: 'request_headers_too_large',
-        status: 431,
-      });
+      const problem = ProblemDetails.parse(body);
+      expect(problem).toMatchObject({ code: 'request_headers_too_large', status: 431 });
+      // ARCH-14: the id the body carries is the one the response echoes.
+      expect(echoedRequestId(answer)).toBe(problem.requestId);
     });
 
     it('answers a URL the router refuses with a problem document rather than plain JSON', async () => {
-      // Past Fastify's default maxParamLength, so the router refuses before any route matches.
+      // Past Fastify's default `maxParamLength` of 100 on a parametric route, so the router refuses
+      // before any hook runs. The status is asserted exactly: this test once accepted any status of
+      // 400 or more, passed on a plain 404, and so never saw that the refusal lost its request id.
       const answer = await rawRequest(
         origin,
-        `GET /api/v1/__probe__/attachment/${'p'.repeat(200)} HTTP/1.1\r\nHost: ${NO_DATABASE_HOST}\r\nConnection: close\r\n\r\n`,
+        `GET /api/v1/__probe__/param/${'p'.repeat(200)} HTTP/1.1\r\nHost: ${NO_DATABASE_HOST}\r\nConnection: close\r\n\r\n`,
       );
+      expect(answer).toContain('414 URI Too Long');
       expect(answer).toContain('application/problem+json');
       const body: unknown = JSON.parse(answer.slice(answer.indexOf('{')));
-      expect(ProblemDetails.parse(body).status).toBeGreaterThanOrEqual(400);
+      const problem = ProblemDetails.parse(body);
+      expect(problem).toMatchObject({ code: 'uri_too_long', status: 414 });
+      expect(echoedRequestId(answer)).toBe(problem.requestId);
     });
   });
 });
