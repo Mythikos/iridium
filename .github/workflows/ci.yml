@@ -631,6 +631,12 @@ jobs:
       IRIDIUM_TEST_HOST_CONTRACT_REPORTS: reports/host-contract
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job runs the `guard` project a second time, and `markdown.pipeline-version.guard`
+          # compares the working tree against `event.before`, which a shallow checkout does not
+          # contain. It fails closed, so the whole gate stops on a missing object rather than on a
+          # finding. `static` and `mutation-scoped` fetch the history for the same reason.
+          fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
 
       # This is a fresh runner: guards import workspace exports and inspect the web/desktop
