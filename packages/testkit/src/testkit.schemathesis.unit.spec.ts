@@ -324,7 +324,7 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
     async (profile) => {
       const result = await runSchemathesis({ profile });
       const args = io.exec.mock.calls[0]?.[0] ?? [];
-      expect(args).toContain(profile === 'light' ? '50' : '500');
+      expect(args).toContain(profile === 'light' ? '50' : '250');
       expect(args).toContain('examples,coverage,fuzzing,stateful');
       expect(args).toContain('all');
       expect(args).toContain('--origin');

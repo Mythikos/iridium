@@ -2085,7 +2085,7 @@ Schemathesis 4.26.1 runs against a disposable deployment: a container-mode serve
 | Lane | Command |
 |---|---|
 | PR (`integration` job) | `schemathesis.light.contract` calls the shared `runSchemathesis` testkit runner. It provisions a fresh production image and MySQL, seeds only synthetic accounts, and runs pinned Schemathesis 4.26.1 with `--checks all --phases=examples,coverage,fuzzing,stateful --max-examples=50`; admin and test-only paths are excluded. The runner supplies an ephemeral non-admin editor desktop bearer, the correct Host, and `--origin`. The disposable schema copy resolves document/path/operation server base paths into its path keys because the pinned fuzzer otherwise applies the document base to origin-root operations. Sanitized logs and JUnit survive cleanup. |
-| Nightly (`schemathesis-full`) | `pnpm exec node scripts/run-schemathesis.ts` invokes the same runner at 500 examples, with admin routes included and a second independently seeded deployment using the outsider bearer. Both required MySQL lanes use the same runner. |
+| Nightly (`schemathesis-full`) | `pnpm exec node scripts/run-schemathesis.ts` invokes the same runner at 250 examples (D12-20, amended 2026-09-23), with admin routes included and a second independently seeded deployment using the outsider bearer. Both required MySQL lanes use the same runner. |
 
 Checks enabled: `not_a_server_error`, `status_code_conformance`, `content_type_conformance`, `response_schema_conformance`, `response_headers_conformance`, `negative_data_rejection`, `positive_data_acceptance`, `use_after_free`, `ensure_resource_availability`, `missing_required_header`, `unsupported_method`. A `5xx` is always a failure. Known-and-accepted findings live in `apps/server/test/contract/schemathesis-exclusions.toml` with a reason and an owner per entry; the file is reviewed at every milestone exit and must be empty before M8 ships.
 
@@ -2301,7 +2301,7 @@ on: { schedule: [{ cron: '0 3 * * *' }], workflow_dispatch: {} }
 | `property-long` | `IRIDIUM_PROP_RUNS=5000`, `IRIDIUM_PROP_DB_RUNS=5000`, `IRIDIUM_PROP_DB_COMMANDS=300`, `IRIDIUM_PROP_SIZE=+2`, `IRIDIUM_PROP_SOAK=1` for the 10-peer × 2 000-command convergence soak |
 | `chaos-extended` | 200 kill iterations, every toxic type, CH-15 restart-under-load, CH-14 at 200 connections |
 | `mutation` | full Stryker run over the whole mutate scope with `incremental` seeded from the cache; thresholds enforced |
-| `schemathesis-full` | `--max-examples=500`, admin routes included, plus the non-member-token isolation run |
+| `schemathesis-full` | `--max-examples=250` (D12-20, amended 2026-09-23), admin routes included, plus the non-member-token isolation run |
 | `load` | k6 (or the Node fallback) over all scenarios; budget check against `baseline.json`; weekly the 4 h soak |
 | `perf` | the blocking client-budget run plus the 4× CPU-throttled variant |
 | `backup-restore-drill` | `ops.backup-restore.drill`, `ops.restore-verify.chaos`, `ops.pitr.chaos`, `ops.key-rotation.drill`, and an `upgrade-rehearsal` step running `ops.upgrade-rehearsal.drill` against the M1-era upgrade fixtures — the five operator rehearsals share one job because each one provisions its own MySQL container and they must not contend for Docker — and it runs its five rehearsals against both required images through `IRIDIUM_MYSQL_IMAGE`, plus the two cross-line cases (`ops.cross-line-restore.drill` and the `restore.mysql_line_downgrade` case inside `ops.restore-verify.chaos`) |

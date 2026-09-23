@@ -162,7 +162,11 @@ export async function runSchemathesis(options: SchemathesisOptions): Promise<Sch
       '--phases',
       'examples,coverage,fuzzing,stateful',
       '--max-examples',
-      options.profile === 'light' ? '50' : '500',
+      // D12-20, amended 2026-09-23: 250, not 500. The administrator profile costs 127.7 min at 500
+      // against 14.0 min at 250 on one machine, because the run's own hundred thousand rows slow every
+      // later request, and a GitHub-hosted job is killed at six hours. 250 found eight of the nine
+      // findings plus one that 500 missed; 100 found two.
+      options.profile === 'light' ? '50' : '250',
       '--header',
       'X-Iridium-Client: desktop',
       '--header',
