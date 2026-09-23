@@ -122,8 +122,12 @@ projects pass 4,511 tests in 225 files. Remotely, CI run
 [35817415988](https://github.com/Mythikos/iridium/actions/runs/35817415988) on `6593ba8` is the
 first since the M2 tree landed to pass `static`, both `unit` platforms, all three `e2e-electron`
 platforms, `mutation-scoped`, **both** required `integration` lanes and **both** `chaos-core` lanes.
-Its `merge-reports` job then failed on the one finding above, which is the first time that check ran
-at all.
+Its `merge-reports` job then failed on the two findings above, each the first time that check had
+run at all. CI run
+[35823413588](https://github.com/Mythikos/iridium/actions/runs/35823413588) on `1d4652e` is green
+in every job: 706 test files with 2 skipped across the merged lanes, merged coverage of **90.4%
+statements / 83.66% branches / 91.32% functions / 91.93% lines**, all 303 documented
+`(operationId, status)` pairs exercised, and the 27 guard files passing on the merged reports.
 
 - The three-consecutive-green nightly floor is a wait no engineering compresses, and the count
   cannot start before the first nightly that carries the `schemathesis-full` fix: that job and
