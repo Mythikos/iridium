@@ -412,7 +412,7 @@ M2 is the milestone where "knowledge of a note ID must not grant access" becomes
 
 ### 6.3 Deliverables at M2 exit
 
-- `packages/markdown` complete and published within the workspace, with `PIPELINE_VERSION` 2, the sanitize schema, and the golden/CommonMark/XSS/pathological suites.
+- `packages/markdown` complete and published within the workspace, with `PIPELINE_VERSION` 3 (08-markdown-pipeline-import-export.md §2.13: version 2 never shipped and bounded three projected strings by UTF-16 unit), the sanitize schema, and the golden/CommonMark/XSS/pathological suites.
 - `apps/server/src/{tree,notes/revisions,projection,search,content/read,attachments,jobs}` complete for the MVP.
 - `packages/contracts/openapi/openapi.json` covering every route listed above, Redocly-clean, committed.
 - `docs/ops/audit-log.md` (event vocabulary, chain semantics, export formats) and `docs/runbooks/projection-backlog.md`.
