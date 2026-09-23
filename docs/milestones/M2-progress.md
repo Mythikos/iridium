@@ -99,6 +99,11 @@ surfaced, because each one hid the next.
   UTF-16 boundary left a lone surrogate in `note_projections.code_langs`, and MySQL refuses that
   with `ER_INVALID_JSON_TEXT`, so an ordinary note create answered 500. `truncateChars` cuts between
   complete combining sequences at all four bounded sites, and `PIPELINE_VERSION` advances to 3.
+- **A documented refusal nobody produced.** CI 35817415988 was the first run where every lane
+  passed, so `merge-reports` reached `check-openapi-coverage` for the first time. One of 303
+  documented `(operationId, status)` pairs had never been exercised: `tree.listChildren` 422.
+  `ListChildrenQuery` bounds `limit` at 1..500, so the refusal is real and the gap was the test
+  (D10-10).
 - **A crash fault's own log line races its kill.** `collab.trash-crash.chaos` failed one kill
   iteration in the nightly's chaos shard 3 and in one CI 9.7 lane, each time as `waitFault` expiring
   with nothing but "expected false to be true". With the failure message widened to carry the
@@ -116,8 +121,9 @@ lanes on this machine — 140 files and 746 tests each — and the `unit`, `guar
 projects pass 4,511 tests in 225 files. Remotely, CI run
 [35817415988](https://github.com/Mythikos/iridium/actions/runs/35817415988) on `6593ba8` is the
 first since the M2 tree landed to pass `static`, both `unit` platforms, all three `e2e-electron`
-platforms, `mutation-scoped` and **both** required `integration` lanes; its chaos result and the
-merged coverage job are recorded with the exit, not here.
+platforms, `mutation-scoped`, **both** required `integration` lanes and **both** `chaos-core` lanes.
+Its `merge-reports` job then failed on the one finding above, which is the first time that check ran
+at all.
 
 - The three-consecutive-green nightly floor is a wait no engineering compresses, and the count
   cannot start before the first nightly that carries the `schemathesis-full` fix: that job and
