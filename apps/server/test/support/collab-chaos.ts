@@ -23,7 +23,12 @@ export async function waitFault(
           .some(
             (line) => line.includes('"event":"fault.fired"') && line.includes(`"point":"${point}"`),
           ),
-      { timeout: 10_000 },
+      // The wait is for the product to reach the armed point and log its consumption, which means
+      // a real request reaching a real commit. On a two-core runner sharing its I/O with the rest
+      // of the lane that took longer than ten seconds, and the poll failed before any durability
+      // assertion ran. The chaos project budgets a whole iteration at 180 s, so this still fails
+      // fast; it just stops reporting a slow runner as a broken hard property.
+      { timeout: 60_000 },
     )
     .toBe(true);
 }
