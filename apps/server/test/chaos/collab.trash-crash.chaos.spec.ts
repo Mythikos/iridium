@@ -13,7 +13,7 @@ import { describe, expect, inject, it } from 'vitest';
 import { idBytes } from '../../src/auth/ids.ts';
 import { createMaintDb } from '../../src/db/migrator.ts';
 import { expectIndependentAuditChains } from '../support/audit-chain-oracle.ts';
-import { CRASH_ITERATIONS, waitFault } from '../support/collab-chaos.ts';
+import { CHAOS_RECONNECT, CRASH_ITERATIONS, waitFault } from '../support/collab-chaos.ts';
 import { expectConverged, startCollab } from '../support/collab-harness.ts';
 
 describe('collab.trash-crash.chaos [area:collab] [hp:HP-2]', () => {
@@ -130,7 +130,7 @@ describe('collab.trash-crash.chaos [area:collab] [hp:HP-2]', () => {
         const fresh = await harness.open(cast.editorB, note.id);
         expect((await fresh.waitClosed()).collabReason).toBe('note-trashed');
         const priorCloses = editor.closes.length;
-        await editor.reconnectSocket();
+        await editor.reconnectSocket(CHAOS_RECONNECT);
         // A cached ticket from the killed process is first refused as unauthorized. The client must
         // invalidate that batch, acquire a fresh ticket and reach the durable tombstone refusal.
         await expect

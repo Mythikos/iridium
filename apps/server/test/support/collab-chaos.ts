@@ -9,6 +9,14 @@ export const CRASH_ITERATIONS = NIGHTLY_CHAOS ? 200 : 20;
 export const FAULT_ITERATIONS = NIGHTLY_CHAOS ? 20 : 1;
 export const ROUTINE_ITERATIONS = NIGHTLY_CHAOS ? 5 : 1;
 
+/**
+ * A reconnect in this project follows a kill or a toxic, so the wait covers the server coming back
+ * as well as the socket. The client default of 35 s is sized for an ordinary reconnect and expired
+ * on a shared runner while the restart was still in progress; the project budgets a whole iteration
+ * at 180 s, so this still leaves half of it and fails long before the test does.
+ */
+export const CHAOS_RECONNECT = { timeoutMs: 90_000 } as const;
+
 /** Observe the product fault consumption, which precedes its delay, throw or kill. */
 export async function waitFault(
   harness: CollabHarness,

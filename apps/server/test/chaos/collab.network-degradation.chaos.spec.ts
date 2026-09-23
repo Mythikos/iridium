@@ -12,7 +12,7 @@ import {
 } from '@iridium/testkit';
 import { describe, expect, inject, it } from 'vitest';
 
-import { NIGHTLY_CHAOS } from '../support/collab-chaos.ts';
+import { CHAOS_RECONNECT, NIGHTLY_CHAOS } from '../support/collab-chaos.ts';
 import { expectConverged, startCollab } from '../support/collab-harness.ts';
 
 const cases: readonly ToxicSpec[] = [
@@ -202,7 +202,7 @@ describe('collab.network-degradation.chaos [hp:HP-5]', () => {
           baseline: observed.baseline,
           tickets: observed.tickets.length,
         }));
-        await Promise.all(clients.map((client) => client.reconnectSocket()));
+        await Promise.all(clients.map((client) => client.reconnectSocket(CHAOS_RECONNECT)));
         const recovered = await expectConverged(harness, cast.note.id, clients);
         for (const marker of markers) expect(recovered.text.split(marker)).toHaveLength(2);
         for (const [index, observed] of wire.entries()) {

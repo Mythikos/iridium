@@ -13,6 +13,7 @@ import { describe, expect, inject, it } from 'vitest';
 
 import { asStateVector } from '../../src/collab/persistence/testing/bytes.ts';
 import {
+  CHAOS_RECONNECT,
   CRASH_ITERATIONS,
   FAULT_ITERATIONS,
   NIGHTLY_CHAOS,
@@ -154,7 +155,7 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
             ),
           ).toBe(true);
           await fresh.close();
-          await Promise.all(clients.map((client) => client.reconnectSocket()));
+          await Promise.all(clients.map((client) => client.reconnectSocket(CHAOS_RECONNECT)));
           await expectConverged(harness, cast.note.id, clients);
         } finally {
           await toxic?.remove();
@@ -279,7 +280,7 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
         const fresh = await harness.open(cast.editorB, cast.note.id);
         await fresh.waitFor('saved');
         expect(fresh.text.toJSON()).toBe(durable.text);
-        await editor.reconnectSocket();
+        await editor.reconnectSocket(CHAOS_RECONNECT);
         const recovered = await expectConverged(harness, cast.note.id, [editor, fresh]);
         expect(recovered.text.split(marker)).toHaveLength(2);
         await fresh.close();
@@ -321,7 +322,7 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
         const dropped = editor.waitClosed();
         const droppedMarker = editor.marker(`drop-${String(iteration)}`);
         await dropped;
-        await editor.reconnectSocket();
+        await editor.reconnectSocket(CHAOS_RECONNECT);
         const recovered = await expectConverged(harness, cast.note.id, [editor]);
         expect(recovered.text.split(droppedMarker)).toHaveLength(2);
       } finally {
