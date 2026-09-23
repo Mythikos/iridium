@@ -10,6 +10,7 @@ import { JobScheduler, type JobContext, type JobHandler } from '../../src/jobs/s
 import { appDb } from '../../src/rest/handler-context.ts';
 import { startCollab } from '../support/collab-harness.ts';
 import { ManualClock } from '../support/manual-clock.ts';
+import { insertJob } from '../support/seed.ts';
 
 /**
  * The claim §6.2 names — `jobs.locked_by` and `jobs.locked_at` — plus the two columns that say
@@ -77,17 +78,19 @@ describe('jobs.scheduler.integration [area:jobs]', () => {
       expect(complete.result).toEqual({ removed: 0 });
       expect(complete.requestedBy?.id).toBe(cast.admin.id);
       expect((await admin.post(`/admin/jobs/${job.id}/cancel`)).status).toBe(409);
-      // JOBS_ENABLED only gates the scheduled enqueue paths. The run route above woke the
-      // scheduler, and that drain loop keeps claiming queued rows for as long as it can run, so a
-      // job enqueued now races it and REST cancel answers its documented 409 for a claimed job.
-      // Settling the scheduler first is what makes the row reliably cancellable.
-      await app.jobs.stop();
-      const queued = await app.jobs.scheduler.enqueue(
-        'revision_thinning',
-        {},
-        { ownerFence: app.collab.ownerLease.captureFence() },
+      // The row has to still be queued when the cancel lands. JOBS_ENABLED only gates the
+      // scheduled enqueue paths, and the run route above woke the scheduler, whose drain keeps
+      // claiming queued rows of any handled type — so a `revision_thinning` row races it and the
+      // route answers its documented 409 for a job that is no longer queued. The scheduler cannot
+      // simply be stopped first either: `enqueue` refuses once it is stopping. An `export` row is
+      // queued, parses as a `Job`, and has no handler at M2, so nothing can claim it. What the
+      // cancel route checks is the status, not the type.
+      const queuedId = await insertJob(
+        appDb(app),
+        { vaultId: null, requestedBy: null },
+        app.clock.now(),
       );
-      const cancelled = await admin.post(`/admin/jobs/${queued.id}/cancel`);
+      const cancelled = await admin.post(`/admin/jobs/${queuedId}/cancel`);
       expect(cancelled.status).toBe(200);
       expect(Job.parse(cancelled.body).status).toBe('cancelled');
       const page = JobPage.parse((await admin.get('/admin/jobs', { query: { limit: 1 } })).body);
