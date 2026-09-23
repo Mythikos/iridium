@@ -21,6 +21,7 @@
 
 import { signInWeb, stepUp, type WebSignIn } from '../auth/sessions.ts';
 import type { RestClient } from '../clients/rest-client.ts';
+import { waitFor } from '../harness/deadline.ts';
 import type { CliResult } from '../server/cli.ts';
 import { seedKernel, type KernelSeed } from './kernel.ts';
 import {
@@ -136,6 +137,46 @@ export interface SeedApiOptions {
 function refused(where: string, status: number, body: unknown): Error {
   return new Error(
     `@iridium/testkit: ${where} answered ${String(status)}: ${JSON.stringify(body)}`,
+  );
+}
+
+/** How long a seeding write keeps re-sending while the server answers with its busy refusal. */
+const SEED_BUSY_TIMEOUT_MS = 30_000;
+
+/** The documented `Retry-After: 1` of ARCH-24, in milliseconds. */
+const SEED_BUSY_INTERVAL_MS = 1_000;
+
+/** Whether a response is the lock-exhaustion refusal ARCH-24 documents as retriable. */
+function busy(response: { readonly status: number; readonly body: unknown }): boolean {
+  if (response.status !== 503) return false;
+  const body: unknown = response.body;
+  return typeof body === 'object' && body !== null && Reflect.get(body, 'code') === 'busy';
+}
+
+/**
+ * Sends a seeding write, re-sending while the server refuses it as busy.
+ *
+ * `503 busy` is what ARCH-24 turns an exhausted lock-wait retry into, and it carries
+ * `Retry-After: 1`: the server is telling the client the write did **not** happen and to try
+ * again. A fixture that throws instead reports a saturated runner as a broken invariant, which is
+ * how the nightly 300-command lane failed `persistence.model.prop` at run 459 of 5,000. Only
+ * `busy` is re-sent; `unavailable` leaves the outcome unknown and its documented remedy is to
+ * check the current state first, which no caller here could do safely.
+ */
+async function sendSeeded<T extends { readonly status: number; readonly body: unknown }>(
+  where: string,
+  send: () => Promise<T>,
+): Promise<T> {
+  return waitFor(
+    async () => {
+      const response = await send();
+      return busy(response) ? false : response;
+    },
+    {
+      timeoutMs: SEED_BUSY_TIMEOUT_MS,
+      intervalMs: SEED_BUSY_INTERVAL_MS,
+      description: `${where} to stop answering 503 busy while seeding`,
+    },
   );
 }
 
@@ -257,13 +298,15 @@ export function createSeedApi(options: SeedApiOptions): SeedApi {
   }): Promise<SeededUser> => {
     const as = o.admin ?? (await admin());
     const displayName = o.displayName ?? o.email.split('@')[0] ?? o.email;
-    const response = await as.client.post('/admin/users', {
-      json: {
-        email: o.email,
-        displayName,
-        isServerAdmin: o.isServerAdmin ?? false,
-      },
-    });
+    const response = await sendSeeded('POST /admin/users', () =>
+      as.client.post('/admin/users', {
+        json: {
+          email: o.email,
+          displayName,
+          isServerAdmin: o.isServerAdmin ?? false,
+        },
+      }),
+    );
     if (response.status !== 201) {
       throw refused('POST /admin/users', response.status, response.body);
     }
@@ -291,7 +334,9 @@ export function createSeedApi(options: SeedApiOptions): SeedApi {
     admin?: SeededAdmin;
   }): Promise<SeededVault> => {
     const as = o.admin ?? (await admin());
-    const response = await as.client.post('/vaults', { json: { name: o.name } });
+    const response = await sendSeeded('POST /vaults', () =>
+      as.client.post('/vaults', { json: { name: o.name } }),
+    );
     if (response.status !== 201) {
       throw refused('POST /vaults', response.status, response.body);
     }
@@ -308,7 +353,9 @@ export function createSeedApi(options: SeedApiOptions): SeedApi {
       // Memberships are granted one at a time and in the order given: a grant is a versioned row and
       // `PUT` answers `201` only for the first one, which is the case worth exercising here.
       // eslint-disable-next-line no-await-in-loop -- grants are ordered and each is one route call
-      const granted = await as.client.put(path, { json: { role } });
+      const granted = await sendSeeded(`PUT ${path}`, () =>
+        as.client.put(path, { json: { role } }),
+      );
       if (granted.status !== 201 && granted.status !== 200) {
         throw refused(`PUT ${path}`, granted.status, granted.body);
       }
@@ -326,14 +373,16 @@ export function createSeedApi(options: SeedApiOptions): SeedApi {
     const as = o.admin ?? (await admin());
     const markdown = o.markdown ?? '';
     const path = `/vaults/${o.vault.id}/nodes`;
-    const response = await as.client.post(path, {
-      json: {
-        kind: 'note',
-        parentId: o.parentId ?? o.vault.rootNodeId,
-        name: o.name,
-        markdown,
-      },
-    });
+    const response = await sendSeeded(`POST ${path}`, () =>
+      as.client.post(path, {
+        json: {
+          kind: 'note',
+          parentId: o.parentId ?? o.vault.rootNodeId,
+          name: o.name,
+          markdown,
+        },
+      }),
+    );
     if (response.status !== 201) {
       throw refused(`POST ${path}`, response.status, response.body);
     }
