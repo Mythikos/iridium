@@ -27,10 +27,18 @@ export class ManualClock implements Clock {
   #nowMs: number;
   #monotonicMs = 0;
   #nextId = 1;
+  /**
+   * The sub-millisecond remainder of the advances made so far. `now()` is an epoch millisecond,
+   * exactly as `Date.now()` is, and the server asserts that where it matters: the rate-limit store
+   * refuses a fractional instant outright. A clock paced against `performance.now()` supplies
+   * fractional deltas, so the fraction is carried here instead of reaching `#nowMs`, which keeps
+   * the reported instant whole without losing the elapsed time a run of small deltas adds up to.
+   */
+  #carryMs = 0;
   readonly #timers = new Map<number, ScheduledTimer>();
 
   constructor(start: string | number = '2026-09-13T12:00:00.000Z') {
-    this.#nowMs = typeof start === 'number' ? start : Date.parse(start);
+    this.#nowMs = Math.trunc(typeof start === 'number' ? start : Date.parse(start));
   }
 
   now(): number {
@@ -60,7 +68,7 @@ export class ManualClock implements Clock {
 
   /** Moves both clocks forward, firing every timer that becomes due, in due order. */
   async advance(ms: number): Promise<void> {
-    const target = this.#nowMs + ms;
+    const target = this.#wholeTarget(ms);
     for (;;) {
       const next = this.#nextDue(target);
       if (next === null) break;
@@ -78,7 +86,7 @@ export class ManualClock implements Clock {
 
   /** Delivers overdue timers once after a blocked event loop, at the actual elapsed clock time. */
   async stall(ms: number): Promise<void> {
-    this.jump(this.#nowMs + ms);
+    this.jump(this.#wholeTarget(ms));
     for (;;) {
       const next = this.#nextDue(this.#nowMs);
       if (next === null) return;
@@ -92,9 +100,17 @@ export class ManualClock implements Clock {
 
   /** Moves the wall clock to an instant without firing anything. */
   jump(to: string | number): void {
-    const target = typeof to === 'number' ? to : Date.parse(to);
+    const target = Math.trunc(typeof to === 'number' ? to : Date.parse(to));
     this.#monotonicMs += Math.max(0, target - this.#nowMs);
     this.#nowMs = target;
+  }
+
+  /** The whole-millisecond instant `ms` reaches, carrying whatever fraction it leaves behind. */
+  #wholeTarget(ms: number): number {
+    const total = this.#carryMs + ms;
+    const whole = Math.floor(total);
+    this.#carryMs = total - whole;
+    return this.#nowMs + whole;
   }
 
   #schedule(ms: number, fn: () => void, everyMs: number | null): TimerHandle {

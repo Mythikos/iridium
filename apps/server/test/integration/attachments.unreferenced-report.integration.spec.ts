@@ -29,6 +29,7 @@ import { captureStoredState } from '../../src/notes/committed-state.ts';
 import { appDb } from '../../src/rest/handler-context.ts';
 import { startCollab } from '../support/collab-harness.ts';
 import { ManualClock } from '../support/manual-clock.ts';
+import { withPacedClock } from '../support/paced-clock.ts';
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
@@ -38,12 +39,12 @@ const CLEAN_SOURCE = 'This note starts with no file reference at all.';
 const CLEARED_SOURCE = 'The current note no longer refers to a file.';
 
 describe('attachments.unreferenced-report.integration [area:attachments]', () => {
-  // Two report runs around a thinning pass, each a real worker scan over the retained revisions.
-  // That is a few seconds here and past the project default of 30 s on a shared runner, where the
-  // 9.7 lane expired while 8.4 did not. Budgeted per test rather than raising it for the project.
+  // Three report runs around a thinning pass, each a real worker scan over the retained revisions.
+  // That is a few seconds here and close to the project default of 30 s on a shared runner.
+  // Budgeted per test rather than raising it for the project.
   it(
     'scans retained revisions in the worker and publishes the durable job result without deleting bytes',
-    { timeout: 120_000 },
+    { timeout: 60_000 },
     async () => {
       const clock = new ManualClock(Math.floor(Date.now() / DAY) * DAY + 12 * HOUR);
       const startedAt = clock.now();
@@ -238,19 +239,26 @@ describe('attachments.unreferenced-report.integration [area:attachments]', () =>
           new Set([unused.id, otherUnused.id]),
         );
         const current = Node.parse((await admin.get(`/nodes/${note.id}`)).body);
-        const trashed = await admin.post(`/nodes/${note.id}/trash`, {
-          json: {},
-          ifMatch: current.version,
-        });
-        expect(trashed.status).toBe(200);
+        // Trash closes the note's live connections behind a grace timer, and purge waits outside
+        // the structural lock for that note's writer to reach disposal, including any backoff
+        // retry it armed. Every one of those deadlines is a `clock.after` on this fixture's clock,
+        // so both requests are awaited with injected time pacing host time (paced-clock.ts); a
+        // stopped clock would leave them armed and turn a retry into an unbounded wait.
+        const trashed = await withPacedClock(
+          clock,
+          admin.post(`/nodes/${note.id}/trash`, { json: {}, ifMatch: current.version }),
+          { description: 'the trash of the note that holds the last attachment reference' },
+        );
+        expect(trashed.status, JSON.stringify(trashed.body)).toBe(200);
         const tombstone = TrashNodeResult.parse(trashed.body).nodes.find(
           (row) => row.id === note.id,
         );
         if (tombstone === undefined) throw new Error('Trash must return its root node.');
-        const purged = await admin.del(`/nodes/${note.id}`, {
-          query: { purge: true },
-          ifMatch: tombstone.version,
-        });
+        const purged = await withPacedClock(
+          clock,
+          admin.del(`/nodes/${note.id}`, { query: { purge: true }, ifMatch: tombstone.version }),
+          { description: 'the purge that removes the last retaining source' },
+        );
         expect(purged.status, JSON.stringify(purged.body)).toBe(204);
         const afterPurge = await report();
         expect(new Set(afterPurge.items.map((item) => item.id))).toEqual(
