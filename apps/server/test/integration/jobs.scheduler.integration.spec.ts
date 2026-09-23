@@ -77,6 +77,11 @@ describe('jobs.scheduler.integration [area:jobs]', () => {
       expect(complete.result).toEqual({ removed: 0 });
       expect(complete.requestedBy?.id).toBe(cast.admin.id);
       expect((await admin.post(`/admin/jobs/${job.id}/cancel`)).status).toBe(409);
+      // JOBS_ENABLED only gates the scheduled enqueue paths. The run route above woke the
+      // scheduler, and that drain loop keeps claiming queued rows for as long as it can run, so a
+      // job enqueued now races it and REST cancel answers its documented 409 for a claimed job.
+      // Settling the scheduler first is what makes the row reliably cancellable.
+      await app.jobs.stop();
       const queued = await app.jobs.scheduler.enqueue(
         'revision_thinning',
         {},
