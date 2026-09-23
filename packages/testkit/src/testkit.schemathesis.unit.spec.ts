@@ -510,6 +510,12 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
           target: '/tmp/iridium_auth.py',
           content: expect.stringContaining('_fixture_sessions.protect(case)'),
         }),
+        expect.objectContaining({
+          target: '/tmp/iridium_auth.py',
+          // An inferred link over a nullable field renders /vaults/None; the step is discarded
+          // through the engine's own rejection, not reported as the API refusing it.
+          content: expect.stringContaining('_fixture_sessions.discard_null_path(case)'),
+        }),
       ]),
     );
   });

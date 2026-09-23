@@ -195,9 +195,13 @@ export const SCHEMATHESIS_CONFIG: string = `
 [checks.positive_data_acceptance]
 expected-statuses = ["2xx", 401, 403, 404, 409, 429, "5xx"]
 
-# The limiter runs before schema validation; a 429 refuses malformed traffic as well.
+# The limiter runs before schema validation; a 429 refuses malformed traffic as well. So do the two
+# transport bounds, which refuse before routing: a path parameter past the router's length answers
+# 414 uri_too_long and a head past REQUEST_HEADERS_MAX_BYTES answers 431 request_headers_too_large,
+# both in the closed vocabulary of 09 section 1.5. The fuzzer reaches them by generating a value
+# longer than its schema allows, which is exactly the traffic this check exists to see refused.
 [checks.negative_data_rejection]
-expected-statuses = [400, 401, 403, 404, 405, 406, 409, 415, 422, 428, 429, "5xx"]
+expected-statuses = [400, 401, 403, 404, 405, 406, 409, 414, 415, 422, 428, 429, 431, "5xx"]
 
 # Non-disclosure resolves an unknown/non-member resource before checking its version header.
 # Existing authorized resources with a missing If-Match return the documented 428.
@@ -227,6 +231,27 @@ checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 
 [[operations]]
 include-name = "PATCH /api/v1/vaults/{vaultId}"
 checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 428, 429, "5xx"]
+
+# Both membership writes refuse for what the request would leave behind, which depends on the
+# vault's current rows rather than on anything a schema can see (09-api-reference.md section 2.6).
+# The PUT is an upsert, so If-Match is optional: creating a membership needs none, and replacing
+# one answers the documented 428 without it. Both writes answer the documented 422 with the policy
+# codes self_role_change and last_manager; dependency analysis reaches the second by feeding the
+# administrator's own id from GET /auth/me into a vault it is the last manager of.
+[[operations]]
+include-name = "PUT /api/v1/vaults/{vaultId}/members/{userId}"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 428, 429, "5xx"]
+
+[[operations]]
+include-name = "DELETE /api/v1/vaults/{vaultId}/members/{userId}"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 428, 429, "5xx"]
+
+# The valid payload of a maintenance job depends on the path's job type, and OpenAPI cannot
+# discriminate a request body on a path parameter; even a oneOf over every type's payload would
+# still let one type's payload reach another. The server answers the documented 422.
+[[operations]]
+include-name = "POST /api/v1/admin/jobs/{type}/run"
+checks.positive_data_acceptance.expected-statuses = ["2xx", 401, 403, 404, 409, 422, 429, "5xx"]
 
 # Attachment admission is decided by sniffing the bytes, which no JSON Schema can describe: a
 # schema-valid multipart part may still carry a type outside the allow-list, and 12-milestones.md
