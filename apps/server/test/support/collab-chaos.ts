@@ -45,17 +45,18 @@ export async function waitFault(
       )
       .toBe(true);
   } catch (error) {
-    // "expected false to be true" says nothing about why. A request refused before it reached the
-    // point and a request still waiting for a lock look identical from here, and each occurrence
-    // otherwise costs a full lane to guess at, so the server's own account of the window goes with
-    // the failure.
-    const tail = harness.logs.slice(after).slice(-FAULT_DIAGNOSTIC_LINES).join('\n');
-    throw new Error(
-      `the armed fault ${point} never fired; the server logged ${String(
-        harness.logs.length - after,
-      )} line(s) in that window, ending:\n${tail}`,
-      { cause: error },
-    );
+    // "expected false to be true" says nothing about why, and each occurrence otherwise costs a
+    // full lane to guess at. The level is `warn`, so an empty window is itself a finding: a request
+    // that merely succeeded says nothing, and one refused or still waiting says a great deal.
+    const window = harness.logs.slice(after);
+    const shown = (window.length > 0 ? window : harness.logs).slice(-FAULT_DIAGNOSTIC_LINES);
+    const account = [
+      `the armed fault ${point} never fired`,
+      `${String(window.length)} line(s) logged after it was armed, ${String(harness.logs.length)} in all`,
+      `the server's exit is ${JSON.stringify(harness.server.lastExit)}`,
+      `its last ${String(shown.length)} line(s):`,
+    ].join('; ');
+    throw new Error(`${account}\n${shown.join('\n')}`, { cause: error });
   }
 }
 
