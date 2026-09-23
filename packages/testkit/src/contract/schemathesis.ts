@@ -90,6 +90,12 @@ export async function runSchemathesis(options: SchemathesisOptions): Promise<Sch
     const credentials = seed[principal];
     if (options.profile === 'light' && credentials.isServerAdmin)
       throw new Error('The light fuzz principal must be a non-admin editor.');
+    // The administrator profile fuzzes operations that end their target's ability to sign in, so
+    // the fixture's own identity is redirected to `editorC`: a real seeded vault editor, and the
+    // one cast member no profile ever signs in as, so both operations still reach a live account.
+    const spare = seed.editorC;
+    if (spare.id === credentials.id)
+      throw new Error('The fuzz fixture must not aim its self-revoking operations at itself.');
     const schemaResponse = await seed.admin.client.get('/openapi.json');
     if (schemaResponse.status !== 200)
       throw new Error('The isolated fuzz fixture could not read its own OpenAPI document.');
@@ -134,6 +140,8 @@ export async function runSchemathesis(options: SchemathesisOptions): Promise<Sch
             host: new URL(server.origin).host,
             email: credentials.email,
             password: credentials.password,
+            userId: credentials.id.toLowerCase(),
+            spareUserId: spare.id.toLowerCase(),
           }),
           target: '/tmp/iridium-auth.json',
         },

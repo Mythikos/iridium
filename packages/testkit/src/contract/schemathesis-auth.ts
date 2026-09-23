@@ -14,6 +14,18 @@ import schemathesis
 with open("/tmp/iridium-auth.json", encoding="utf-8") as fixture_file:
     fixture = json.load(fixture_file)
 
+# An administrator profile fuzzes the administrator surface while authenticated as one of its own
+# users, and two of those operations end that user's ability to sign in: a forced reset replaces the
+# password the fixture holds (A28), and a disable closes the account outright. Both are correct
+# server behaviour and stay in the run; only the fixture's own identity is redirected to a
+# sacrificial account, so a scenario that links a real id out of GET /admin/users still exercises
+# them. Without this, one such case ends every remaining case in an authentication failure and the
+# profile proves nothing.
+SELF_REVOKING_OPERATIONS = (
+    "/api/v1/admin/users/{userId}/disable",
+    "/api/v1/admin/users/{userId}/reset-password",
+)
+
 
 class FixtureSessionCache:
     """Own session recovery independently of Schemathesis's global 401 replay breaker."""
@@ -31,6 +43,7 @@ class FixtureSessionCache:
             "revocationInvalidations": 0,
             "wrongPassword401": 0,
             "expiredBearerInvalidations": 0,
+            "selfTargetRedirects": 0,
         }
 
     def get(self):
@@ -91,6 +104,19 @@ class FixtureSessionCache:
         self._expires = time.monotonic() + 300
         self._stats["controlLogins"] += 1
         return token
+
+    def protect(self, case):
+        """Redirect an operation that would revoke this fixture's own sign-in to a spare account."""
+        if case.operation.path not in SELF_REVOKING_OPERATIONS:
+            return
+        parameters = case.path_parameters or {}
+        target = parameters.get("userId")
+        if not isinstance(target, str) or target.lower() != fixture["userId"]:
+            return
+        parameters["userId"] = fixture["spareUserId"]
+        case.path_parameters = parameters
+        with self._lock:
+            self._stats["selfTargetRedirects"] += 1
 
     def observe(self, case, response):
         request = response.request
@@ -158,6 +184,13 @@ class FixtureAuth:
 
     def set(self, case, data, context):
         case.headers["Authorization"] = "Bearer " + data
+
+
+@schemathesis.hook
+def before_call(context, case, kwargs):
+    # Every phase reaches this hook with its final case, including a stateful transition whose
+    # path parameter came from a link rather than from the data-generation pipeline.
+    _fixture_sessions.protect(case)
 
 
 @schemathesis.hook

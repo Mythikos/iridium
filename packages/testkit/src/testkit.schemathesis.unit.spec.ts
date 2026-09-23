@@ -99,6 +99,12 @@ beforeEach(() => {
       password: 'synthetic-editor-password',
       isServerAdmin: false,
     },
+    editorC: {
+      id: 'editorC',
+      email: 'editorC@iridium.test',
+      password: 'synthetic-editor-c-password',
+      isServerAdmin: false,
+    },
     outsider: {
       id: 'outsider',
       email: 'outsider@iridium.test',
@@ -413,6 +419,8 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
             host: '127.0.0.1:4007',
             email: 'editor@iridium.test',
             password: 'synthetic-editor-password',
+            userId: 'editor',
+            spareUserId: 'editorc',
           }),
         },
       ]),
@@ -474,6 +482,36 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
     expect(result.output).toBe(proofOutput('[REDACTED]'));
     for (const call of io.writeFile.mock.calls)
       expect(String(call[1])).not.toContain('synthetic-editor-password');
+  });
+
+  it('keeps the administrator profile from fuzzing away the identity it signs in with', async () => {
+    await runSchemathesis({ profile: 'full', principal: 'admin' });
+    expect(io.copy.mock.calls[0]?.[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: '/tmp/iridium-auth.json',
+          // The spare is a real seeded account, so both operations still run against a live user.
+          content: expect.stringContaining('"userId":"admin","spareUserId":"editorc"'),
+        }),
+        expect.objectContaining({
+          target: '/tmp/iridium_auth.py',
+          // Named operations only, redirected in `before_call` so a stateful link is covered too.
+          content: expect.stringContaining('"/api/v1/admin/users/{userId}/reset-password"'),
+        }),
+        expect.objectContaining({
+          target: '/tmp/iridium_auth.py',
+          content: expect.stringContaining('"/api/v1/admin/users/{userId}/disable"'),
+        }),
+        expect.objectContaining({
+          target: '/tmp/iridium_auth.py',
+          content: expect.stringContaining('def before_call(context, case, kwargs):'),
+        }),
+        expect.objectContaining({
+          target: '/tmp/iridium_auth.py',
+          content: expect.stringContaining('_fixture_sessions.protect(case)'),
+        }),
+      ]),
+    );
   });
 
   it.each(TOKEN_KINDS)('redacts %s credentials from both retained reports', async (kind) => {
