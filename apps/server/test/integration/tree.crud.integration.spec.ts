@@ -259,6 +259,19 @@ describe('tree.crud.integration [area:tree]', () => {
     expect(await treeVersion(vault.id)).toBe(before + 1);
   });
 
+  it('refuses a listing page outside the declared bound', async () => {
+    // `tree.listChildren` documents a 422 and `ListChildrenQuery` bounds `limit` at 1..500, so the
+    // refusal is real; D10-10 makes a documented response nobody produces a defect either way.
+    const vault = await freshVault('Tree Listing Bound');
+    const refused = await adminClient.get<{ code?: string }>(`/vaults/${vault.id}/tree`, {
+      query: { limit: 0 },
+      headers: webHeaders(context.origin),
+    });
+    expect(refused.status).toBe(422);
+    await expect(refused).toMatchOpenApi('tree.listChildren', 422);
+    expect(refused.body.code).toBe('validation_failed');
+  });
+
   it('refuses an unknown parent as `not_found`', async () => {
     const vault = await freshVault('Tree Unknown Parent');
     const refused = await adminClient.post(`/vaults/${vault.id}/nodes`, {
