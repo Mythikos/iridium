@@ -139,7 +139,7 @@ export const M2_ATTACHMENT_ROUTES: readonly RouteSpec[] = [
     auth: REST_ROUTE_POLICIES['admin.attachments.unreferenced'],
     request: { query: UnreferencedAttachmentsQuery },
     responses: [{ status: 200, body: { kind: 'json', schema: UnreferencedAttachmentPage } }],
-    errors: ['unauthenticated', 'forbidden', 'validation_failed', 'unavailable'],
+    errors: ['unauthenticated', 'forbidden', 'validation_failed', 'not_found'],
     summary: 'Read the last completed report of attachments unused by live or retained content.',
   },
 ];

@@ -29,6 +29,7 @@ import { captureStoredState } from '../../src/notes/committed-state.ts';
 import { appDb } from '../../src/rest/handler-context.ts';
 import { startCollab } from '../support/collab-harness.ts';
 import { ManualClock } from '../support/manual-clock.ts';
+import { registerRecordingOpenApiMatcher } from '../support/openapi-coverage.ts';
 import { withPacedClock } from '../support/paced-clock.ts';
 
 const MINUTE = 60_000;
@@ -37,6 +38,9 @@ const DAY = 86_400_000;
 /** Neither clean state may contain the attachment's basename: the scan is conservative text. */
 const CLEAN_SOURCE = 'This note starts with no file reference at all.';
 const CLEARED_SOURCE = 'The current note no longer refers to a file.';
+
+// Registered at collection time; see `support/openapi-coverage.ts` for why it cannot go in a hook.
+registerRecordingOpenApiMatcher();
 
 describe('attachments.unreferenced-report.integration [area:attachments]', () => {
   // Three report runs around a thinning pass, each a real worker scan over the retained revisions.
@@ -71,9 +75,14 @@ describe('attachments.unreferenced-report.integration [area:attachments]', () =>
         const absent = await admin.get('/admin/attachments/unreferenced', {
           query: { vaultId: cast.vault.id },
         });
-        expect(absent.status).toBe(503);
-        expect(absent.body).toMatchObject({ code: 'unavailable', retryAfterMs: 1000 });
-        expect(absent.headers.get('retry-after')).toBe('1');
+        // Before any report exists there is nothing to return: a missing resource, not an
+        // unavailable service. No Retry-After, since retrying cannot create the report, and
+        // no-store so a cached 404 cannot outlive the first report.
+        expect(absent.status).toBe(404);
+        await expect(absent).toMatchOpenApi('admin.attachments.unreferenced', 404);
+        expect(absent.body).toMatchObject({ code: 'not_found' });
+        expect(absent.headers.get('retry-after')).toBeNull();
+        expect(absent.headers.get('cache-control')).toBe('no-store');
         const uploader = attachmentClient(editor);
         const retained = AttachmentUploaded.parse(
           (

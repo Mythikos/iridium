@@ -227,11 +227,13 @@ export async function readAttachmentReport(
     .orderBy('id', 'desc')
     .limit(1)
     .executeTakeFirst();
+  // No completed report is a resource that does not exist yet, not a service that is down: the
+  // report is produced only by the attachment_unreferenced_report job, so retrying cannot bring it
+  // into being. `not_found`, like a thinned revision (09 section 1.5), with no Retry-After.
   if (job === undefined)
-    throw new ProblemError('unavailable', {
+    throw new ProblemError('not_found', {
       detail:
-        'No completed attachment report exists. Run the attachment_unreferenced_report maintenance job first.',
-      retryAfterMs: 1000,
+        'No completed attachment report exists for this scope. Run the attachment_unreferenced_report maintenance job first.',
     });
   if (job.itemsType !== 'ARRAY') throw new AttachmentReportDataError(idFromBytes(job.id));
   const jobId = idFromBytes(job.id);

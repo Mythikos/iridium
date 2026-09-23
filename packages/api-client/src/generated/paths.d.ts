@@ -1780,8 +1780,8 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `validation_failed` — Some fields need attention */
-            readonly 422: {
+            /** @description `not_found` — Not found */
+            readonly 404: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
@@ -1789,8 +1789,8 @@ export interface operations {
                     readonly "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description `unavailable` — Temporarily unavailable */
-            readonly 503: {
+            /** @description `validation_failed` — Some fields need attention */
+            readonly 422: {
                 headers: {
                     readonly [name: string]: unknown;
                 };

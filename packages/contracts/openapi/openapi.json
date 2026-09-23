@@ -10224,8 +10224,8 @@
               }
             }
           },
-          "422": {
-            "description": "`validation_failed` — Some fields need attention",
+          "404": {
+            "description": "`not_found` — Not found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10234,8 +10234,8 @@
               }
             }
           },
-          "503": {
-            "description": "`unavailable` — Temporarily unavailable",
+          "422": {
+            "description": "`validation_failed` — Some fields need attention",
             "content": {
               "application/problem+json": {
                 "schema": {
