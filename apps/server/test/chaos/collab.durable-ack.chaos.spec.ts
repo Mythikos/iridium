@@ -91,8 +91,16 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
           const acknowledged = Promise.any(
             clients.map((client) =>
               client.waitForAck(before.head + 1, {
-                // Nightly latency applies to every SQL round trip, before the crash boundary.
-                timeoutMs: NIGHTLY_CHAOS ? 90_000 : 30_000,
+                // Nightly latency applies to every SQL round trip, before the crash boundary, and
+                // the budget is derived from it rather than chosen. The toxic above adds up to
+                // 2,000 ms plus 200 ms of jitter per round trip; one persistence transaction is
+                // roughly eight of them (owner fence, `note_docs` lock, the update insert, the head
+                // update, the audit write, COMMIT), so an attempt costs up to ~18 s, and ARCH-24
+                // retries a lock-wait timeout three times before it gives up. Four attempts is
+                // therefore ~70 s of legitimate work before the ack is even written, which left 90 s
+                // no margin at all: the 2026-09-23 nightly lost six of 696 iterations to it, five of
+                // them without the kill fault ever firing.
+                timeoutMs: NIGHTLY_CHAOS ? 150_000 : 30_000,
               }),
             ),
           );
@@ -162,7 +170,7 @@ describe('collab.durable-ack.chaos [hp:HP-1] [hp:HP-2]', () => {
           await harness.close();
         }
       },
-      180_000,
+      NIGHTLY_CHAOS ? 300_000 : 180_000,
     );
   });
 
