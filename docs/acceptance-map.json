@@ -5567,7 +5567,7 @@
       "project": "unit",
       "file": "packages/markdown/src/markdown.pathological.unit.spec.ts",
       "tag": "[spec:portability-and-safety]",
-      "asserts": "M2 — the denial-of-service half of the same corpus: each admission recipe is refused at its exact cap before parsing, with status, detail and line as 08-markdown-pipeline-import-export.md §2.10 states them, mdast.children empty and source untouched; UTF-8 and UTF-16 bounds are counted separately, a fence is never mistaken for nested prose, a scalar is never split across a scratch-buffer boundary, and the worker-bounded emphasis case completes inside the client budget rather than claiming pre-parse rejection",
+      "asserts": "M2 — the denial-of-service half of the same corpus: each admission recipe is refused at its exact cap before parsing, with status, detail and line as 08-markdown-pipeline-import-export.md §2.10 states them, mdast.children empty and source untouched; UTF-8 and UTF-16 bounds are counted separately, a fence is never mistaken for nested prose, a scalar is never split across a scratch-buffer boundary, every bounded projection string (fence language, raw link target, detector finding text, heading title) is cut between complete characters rather than UTF-16 units, and the worker-bounded emphasis case completes inside the client budget rather than claiming pre-parse rejection",
       "inventories": [
         "Inventory completeness — Markdown pipeline, transfer and Obsidian (08-markdown-pipeli"
       ]
