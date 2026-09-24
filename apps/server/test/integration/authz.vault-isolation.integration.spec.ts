@@ -209,14 +209,23 @@ async function proveIsolation(
   }
   const realMedianMs = median(realLatencies);
   const absentMedianMs = median(absentLatencies);
-  const ratio = Math.max(realMedianMs, absentMedianMs) / Math.min(realMedianMs, absentMedianMs);
+  // Each pair is taken back to back in alternating order so that noise on the runner falls on both
+  // members; the comparison is therefore made per pair. The ratio of the two sides' own medians
+  // discards that pairing, and a burst covering six of one side's eleven samples but five of the
+  // other's put one median inside the burst and the other outside it: 2.44 on CI for pairs whose
+  // median ratio was 1.13. The paired median cancels shared noise and still rises with any work an
+  // existing foreign row costs that a missing one does not, in every pair.
+  const pairedRatio = median(
+    realLatencies.map((onReal, index) => onReal / (absentLatencies[index] ?? onReal)),
+  );
+  const ratio = Math.max(pairedRatio, 1 / pairedRatio);
   await appendFile(
     resolve(REPORT_DIRECTORY, 'vault-isolation.jsonl'),
-    `${JSON.stringify({ image: inject('iridiumMysql').image, surface, operationId, expected, realLatencies, absentLatencies, realMedianMs, absentMedianMs, ratio })}\n`,
+    `${JSON.stringify({ image: inject('iridiumMysql').image, surface, operationId, expected, realLatencies, absentLatencies, realMedianMs, absentMedianMs, pairedRatio, ratio })}\n`,
   );
   expect(
     ratio,
-    `${operationId}: real ${realMedianMs} ms, missing ${absentMedianMs} ms`,
+    `${operationId}: paired real/missing ${pairedRatio}; medians real ${realMedianMs} ms, missing ${absentMedianMs} ms`,
   ).toBeLessThanOrEqual(2);
   expect(await authorizationRowCounts(context)).toStrictEqual(counts);
 }
