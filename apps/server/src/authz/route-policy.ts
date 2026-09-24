@@ -58,6 +58,8 @@ import {
   createAuthorizer,
   createMembershipLookup,
   type Authorizer,
+  type MemberForAuthz,
+  type VaultForAuthz,
 } from './authorize.ts';
 import { InProcessAuthzBus, type AuthzBus } from './bus.ts';
 import { EpochTable } from './epochs.ts';
@@ -396,10 +398,21 @@ function requiredId(container: unknown, name: string): string {
   return id;
 }
 
-/** What a resolver answers: the vault, and the node row a `node:`/`note:` route already read. */
+/**
+ * The caller's standing in a vault, read in the same statement that resolved the row naming it, so
+ * `authorize()` decides from these rows without a lookup of its own.
+ */
+interface Access {
+  readonly vault: VaultForAuthz;
+  readonly member: MemberForAuthz | null;
+}
+
+/** What a resolver answers: the vault, the node row a `node:`/`note:` route read, and access. */
 interface Resolution {
   readonly vaultId: VaultId;
   readonly node: ResolvedNode | null;
+  /** `null` for a vault named by the request itself, which `authorize()` looks up in one read. */
+  readonly access: Access | null;
 }
 
 /** One resolver per `VaultFrom` member (section 6.2 step 3). */
@@ -409,22 +422,65 @@ type VaultResolver = (
   principal: CallerPrincipal,
 ) => Promise<Resolution>;
 
-/** `node:params.nodeId` and `note:params.noteId`: one lookup the handler reuses through `resolvedNode`. */
+/** The vault and membership columns every id resolver selects beside its own row. */
+interface AccessColumns {
+  readonly status: VaultStatus | null;
+  readonly mcp_enabled: boolean | null;
+  readonly role: Role | null;
+  readonly member_version: number | null;
+}
+
+/** The access a joined row carries, or `null` when the row names no vault that exists. */
+function accessFrom(vaultId: VaultId, row: AccessColumns): Access | null {
+  if (row.status === null || row.mcp_enabled === null) return null;
+  return {
+    vault: { id: vaultId, status: row.status, mcp_enabled: row.mcp_enabled },
+    member:
+      row.role === null || row.member_version === null
+        ? null
+        : { role: row.role, version: row.member_version },
+  };
+}
+
+/**
+ * A foreign id and an unknown id must cost the same (04-auth-and-access-control.md section 5.4,
+ * T4). Resolving the row and then authorizing it made a foreign id two statements and an unknown
+ * id one, and `authz.vault-isolation.integration` measured that as more than twice the latency on
+ * a loaded runner. Each id resolver therefore joins its row to the vault and to the caller's
+ * membership in one statement, which leaves `authorize()` nothing to read.
+ */
 async function resolveNode(
   view: PolicyView,
   db: Kysely<Database>,
+  principal: CallerPrincipal,
   parameter: 'nodeId' | 'noteId',
   notesOnly: boolean,
 ): Promise<Resolution> {
   const id = requiredId(view.params, parameter);
   const row = await db
-    .selectFrom('nodes')
-    .select(['vault_id', 'kind', 'deleted_at'])
-    .where('id', '=', idBytes(id))
+    .selectFrom('nodes as r')
+    .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+    .leftJoin('vault_members as vm', (join) =>
+      join.onRef('vm.vault_id', '=', 'r.vault_id').on('vm.user_id', '=', idBytes(principal.userId)),
+    )
+    .select([
+      'r.vault_id',
+      'r.kind',
+      'r.deleted_at',
+      'v.status',
+      'v.mcp_enabled',
+      'vm.role',
+      'vm.version as member_version',
+    ])
+    .where('r.id', '=', idBytes(id))
     .executeTakeFirst();
   if (row === undefined || (notesOnly && row.kind !== 'note')) throw notFound();
   const vaultId = vaultIdFromBytes(row.vault_id);
-  return { vaultId, node: { vaultId, kind: row.kind, deletedAt: row.deleted_at } };
+  return {
+    vaultId,
+    node: { vaultId, kind: row.kind, deletedAt: row.deleted_at },
+    access: accessFrom(vaultId, row),
+  };
 }
 
 /**
@@ -435,40 +491,68 @@ const VAULT_RESOLVERS: Readonly<Record<VaultFrom, VaultResolver>> = {
   'params.vaultId': async (view) => ({
     vaultId: VaultId.parse(requiredId(view.params, 'vaultId')),
     node: null,
+    access: null,
   }),
   'body.vaultId': async (view) => ({
     vaultId: VaultId.parse(requiredId(view.body, 'vaultId')),
     node: null,
+    access: null,
   }),
-  'node:params.nodeId': (view, db) => resolveNode(view, db, 'nodeId', false),
-  'note:params.noteId': (view, db) => resolveNode(view, db, 'noteId', true),
-  'attachment:params.attachmentId': async (view, db) => {
+  'node:params.nodeId': (view, db, principal) => resolveNode(view, db, principal, 'nodeId', false),
+  'note:params.noteId': (view, db, principal) => resolveNode(view, db, principal, 'noteId', true),
+  'attachment:params.attachmentId': async (view, db, principal) => {
     const id = requiredId(view.params, 'attachmentId');
     const row = await db
-      .selectFrom('attachments')
-      .select('vault_id')
-      .where('id', '=', idBytes(id))
+      .selectFrom('attachments as r')
+      .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+      .leftJoin('vault_members as vm', (join) =>
+        join
+          .onRef('vm.vault_id', '=', 'r.vault_id')
+          .on('vm.user_id', '=', idBytes(principal.userId)),
+      )
+      .select([
+        'r.vault_id',
+        'v.status',
+        'v.mcp_enabled',
+        'vm.role',
+        'vm.version as member_version',
+      ])
+      .where('r.id', '=', idBytes(id))
       .executeTakeFirst();
     if (row === undefined) throw notFound();
     const vaultId = vaultIdFromBytes(row.vault_id);
     // The attachment routes are nested under the vault: a mismatch is a foreign row (section 6.2).
     const routeVault = memberId(view.params, 'vaultId');
     if (routeVault !== null && routeVault !== vaultId) throw notFound();
-    return { vaultId, node: null };
+    return { vaultId, node: null, access: accessFrom(vaultId, row) };
   },
   'job:params.jobId': async (view, db, principal) => {
     const id = requiredId(view.params, 'jobId');
     const row = await db
-      .selectFrom('jobs')
-      .select(['vault_id', 'requested_by'])
-      .where('id', '=', idBytes(id))
+      .selectFrom('jobs as r')
+      .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+      .leftJoin('vault_members as vm', (join) =>
+        join
+          .onRef('vm.vault_id', '=', 'r.vault_id')
+          .on('vm.user_id', '=', idBytes(principal.userId)),
+      )
+      .select([
+        'r.vault_id',
+        'r.requested_by',
+        'v.status',
+        'v.mcp_enabled',
+        'vm.role',
+        'vm.version as member_version',
+      ])
+      .where('r.id', '=', idBytes(id))
       .executeTakeFirst();
     if (row === undefined || row.vault_id === null) throw notFound();
     // Section 6.8: the requester, or a server admin, may watch a job; anyone else sees nothing.
     const requester = row.requested_by === null ? null : userIdFromBytes(row.requested_by);
     const isAdmin = principal.kind === 'user' && principal.isServerAdmin;
     if (!isAdmin && requester !== principal.userId) throw notFound();
-    return { vaultId: vaultIdFromBytes(row.vault_id), node: null };
+    const vaultId = vaultIdFromBytes(row.vault_id);
+    return { vaultId, node: null, access: accessFrom(vaultId, row) };
   },
 };
 
@@ -568,6 +652,9 @@ export async function applyRoutePolicy(
   const resolved = await VAULT_RESOLVERS[auth.vaultFrom](view, db, principal);
   const detailed = await view.authorizeDetailed(principal, auth.permission, {
     vaultId: resolved.vaultId,
+    ...(resolved.access === null
+      ? {}
+      : { vault: resolved.access.vault, member: resolved.access.member }),
     requireStepUp,
     allowArchived: auth.allowArchived === true,
     surface: 'rest',

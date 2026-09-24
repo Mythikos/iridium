@@ -84,6 +84,19 @@ const ADMIN_USERS: RouteAuth = { serverAdmin: true, permission: 'server:users' }
 const VAULT_READ: RouteAuth = { permission: 'note:read', vaultFrom: 'params.vaultId' };
 const BODY_IMPORT: RouteAuth = { permission: 'import:commit', vaultFrom: 'body.vaultId' };
 
+/** The vault and membership columns an id resolver reads beside its own row. */
+const ACCESS_COLUMNS = { status: 'active', mcp_enabled: true, role: 'viewer', member_version: 1 };
+
+/** The scope a resolved id hands `authorize()`: its rows pre-loaded, so it reads nothing itself. */
+const RESOLVED_SCOPE = {
+  vaultId: VAULT,
+  vault: { id: VAULT, status: 'active', mcp_enabled: true },
+  member: { role: 'viewer', version: 1 },
+  requireStepUp: false,
+  allowArchived: false,
+  surface: 'rest',
+};
+
 const ALLOW_VAULT: DetailedDecision = {
   decision: 'allow',
   vault: { id: VAULT, status: 'archived', mcp_enabled: true },
@@ -376,7 +389,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       const deletedAt = new Date(NOW_MS);
       const built = view({ params: { nodeId: id, noteId: id } });
       const sql = deps(true, () => ({
-        rows: [{ vault_id: idBytes(VAULT), kind, deleted_at: deletedAt }],
+        rows: [{ vault_id: idBytes(VAULT), kind, deleted_at: deletedAt, ...ACCESS_COLUMNS }],
       }));
       const work = applyRoutePolicy(built.view, { permission: 'note:read', vaultFrom }, sql.deps);
       const outcome = await work.catch((error: unknown) => {
@@ -388,30 +401,35 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
           ? { vault: { id: VAULT }, resolvedNode: { vaultId: VAULT, kind, deletedAt } }
           : { code: 'not_found' },
       );
-      expect(built.scopes).toEqual(
-        allowed
-          ? [{ vaultId: VAULT, requireStepUp: false, allowArchived: false, surface: 'rest' }]
-          : [],
-      );
+      expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `vault_id`, `kind`, `deleted_at` from `nodes` where `id` = ?',
-          parameters: [idBytes(id)],
+          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          parameters: [idBytes(USER.userId), idBytes(id)],
         },
       ]);
     },
   );
 
   it.each(['node:params.nodeId', 'note:params.noteId'] as const)(
-    'refuses an absent %s row before authorization',
+    'refuses an absent %s row before authorization, in the one statement a foreign row costs',
     async (vaultFrom) => {
       const built = view({ params: { nodeId: VAULT, noteId: VAULT } });
+      const sql = deps();
       expect(
         await refusal(
-          applyRoutePolicy(built.view, { permission: 'note:read', vaultFrom }, deps().deps),
+          applyRoutePolicy(built.view, { permission: 'note:read', vaultFrom }, sql.deps),
         ),
       ).toBe('not_found');
       expect(built.scopes).toEqual([]);
+      // A foreign id reads this same statement and is refused by `authorize()` from its rows, so
+      // neither answer costs a second query the other does not (04 section 5.4, T4).
+      expect(sql.fake.executed).toEqual([
+        {
+          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          parameters: [idBytes(USER.userId), idBytes(VAULT)],
+        },
+      ]);
     },
   );
 
@@ -427,7 +445,8 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
         },
       });
       const sql = deps(true, () => ({
-        rows: shape === 'missing attachment' ? [] : [{ vault_id: idBytes(VAULT) }],
+        rows:
+          shape === 'missing attachment' ? [] : [{ vault_id: idBytes(VAULT), ...ACCESS_COLUMNS }],
       }));
       const work = applyRoutePolicy(
         built.view,
@@ -442,15 +461,11 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       expect(outcome).toMatchObject(
         allowed ? { vault: { id: VAULT }, resolvedNode: null } : { code: 'not_found' },
       );
-      expect(built.scopes).toEqual(
-        allowed
-          ? [{ vaultId: VAULT, requireStepUp: false, allowArchived: false, surface: 'rest' }]
-          : [],
-      );
+      expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `vault_id` from `attachments` where `id` = ?',
-          parameters: [idBytes(attachmentId)],
+          sql: 'select `r`.`vault_id`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `attachments` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          parameters: [idBytes(USER.userId), idBytes(attachmentId)],
         },
       ]);
     },
@@ -479,6 +494,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
           {
             vault_id: idBytes(VAULT),
             requested_by: requester === null ? null : idBytes(requester),
+            ...ACCESS_COLUMNS,
           },
         ],
       }));
@@ -498,15 +514,11 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       expect(outcome).toMatchObject(
         allowed ? { vault: { id: VAULT }, resolvedNode: null } : { code: 'not_found' },
       );
-      expect(built.scopes).toEqual(
-        allowed
-          ? [{ vaultId: VAULT, requireStepUp: false, allowArchived: false, surface: 'rest' }]
-          : [],
-      );
+      expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `vault_id`, `requested_by` from `jobs` where `id` = ?',
-          parameters: [idBytes(jobId)],
+          sql: 'select `r`.`vault_id`, `r`.`requested_by`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `jobs` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          parameters: [idBytes(principal.userId), idBytes(jobId)],
         },
       ]);
     },
@@ -565,7 +577,19 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
         if (query.sql.includes('from `sessions`'))
           return { rows: [{ ...session, last_authenticated_at: state.lastAuthenticatedAt }] };
         if (query.sql.includes('from `nodes`'))
-          return { rows: [{ vault_id: idBytes(VAULT), kind: 'note', deleted_at: null }] };
+          return {
+            rows: [
+              {
+                vault_id: idBytes(VAULT),
+                kind: 'note',
+                deleted_at: null,
+                status: 'active',
+                mcp_enabled: true,
+                role: state.role,
+                member_version: state.role === null ? null : 1,
+              },
+            ],
+          };
         if (query.sql.includes('from `vaults` as `v`'))
           return {
             rows: [
