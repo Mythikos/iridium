@@ -129,12 +129,20 @@ in every job: 706 test files with 2 skipped across the merged lanes, merged cove
 statements / 83.66% branches / 91.32% functions / 91.93% lines**, all 303 documented
 `(operationId, status)` pairs exercised, and the 27 guard files passing on the merged reports.
 
-- The three-consecutive-green nightly floor is a wait no engineering compresses, and the count
-  cannot start before the first nightly that carries the `schemathesis-full` fix: that job and
-  `mysql-matrix-extended (schemathesis, 300)` have been red every night since M1. `mysql-innovation`
-  and `node-26` are non-blocking by 10-testing-and-quality.md and are dispositioned, not counted.
-- Merged coverage and the full-scope mutation campaign have not been re-measured since the
-  `PIPELINE_VERSION` advance.
+- Nightly health (12-milestones.md section 3) is a rule against a job staying red, not a required
+  streak of passes: a job red for three consecutive runs blocks the exit until it is green. An
+  earlier revision of this record called it a three-green floor; that was wrong. `schemathesis-full`
+  and `mysql-matrix-extended (schemathesis, 300)` have been red every night since M1 and so block M2
+  until one run passes them. Their fixes are in `071d96e`, and the M2 rehearsal
+  [35940812349](https://github.com/Mythikos/iridium/actions/runs/35940812349) was dispatched on
+  2026-09-24 to prove them, as M1's exit relied on its own manual rehearsal. `mysql-innovation` and
+  `node-26` carry `continue-on-error` and are dispositioned, not counted.
+- Merged coverage and the full-scope mutation campaign have both been re-measured since the
+  `PIPELINE_VERSION` advance: coverage in every CI `merge-reports` job from
+  [35823413588](https://github.com/Mythikos/iridium/actions/runs/35823413588) on (90.4% statements),
+  and the full-scope campaign in nightly
+  [35835692071](https://github.com/Mythikos/iridium/actions/runs/35835692071/job/107098477330) at
+  **72.82%** against the M2 break threshold of 70.
 - `apps/server/test/fixtures/upgrade/v0.2.0/` records `pipeline_version` 2, which no released build
   will ever write. The milestone-exit build regenerates it (12-milestones.md §3, "Upgrade fixture").
 - `M2-exit.md` and an M2 section in `remote-ci.md` are unwritten and both depend on those results.
