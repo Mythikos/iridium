@@ -125,8 +125,23 @@ surfaced, because each one hid the next.
   and scanned every live node once per node reached: 15 s at 4,880 notes on both lines. The five
   descendant walks now name `ix_nodes_vault_parent` in their recursive member with MySQL's
   `JOIN_INDEX` hint, and the same walk takes 10 ms. `tree.descent-plan.integration` plans each walk
-  on both lines; with the hint removed, all seven cases fail on 8.4.11 and six on 9.7.2; `tree.paths.integration`'s 10,000-node budget had not
-  caught it because its generated tree is branched (03-data-model.md §6.3).
+  on both lines; with the hint removed, all seven cases fail on 8.4.11 and six on 9.7.2.
+  `tree.paths.integration`'s 10,000-node budget had not caught it because its generated tree is
+  branched (03-data-model.md §6.3).
+- **The administrator fuzz profile aborted its own stateful phase.** Dropping a case whose path
+  parameter was a recorded JSON null by raising `reject()` from `before_call` was reported as a hook
+  error, because Schemathesis wraps what a hook raises, and the stateful phase stopped in both
+  full-profile lanes. A `filter_case` hook now drops those cases before they are drawn (`3df7614`).
+  The same run found that authorization refuses a mutation on an archived vault as `409
+  vault_archived` before any handler reads `If-Match`, which `missing_required_header` now admits.
+- **Two CI failures were test timing, not product behaviour.** `collab.network-degradation.chaos`
+  bound its child to a port the chaos global setup had reserved and released in the kernel's
+  ephemeral range, so another socket could take it first (`EADDRINUSE 127.0.0.1:32771`);
+  `reserveFixturePort` now picks a port below that range (`5cfb250`).
+  `collab.live-revocation.integration` timed its one-second budget from the request, although
+  04-auth-and-access-control.md §8.8 sets it from COMMIT, and the mutation's pre-COMMIT drain of
+  the user's pending writes alone exceeded a second on a loaded runner; each case now times from
+  the `AuthzBus` publication that follows COMMIT (`d7685af`).
 
 ## Remaining exit work
 
@@ -147,10 +162,17 @@ statements / 83.66% branches / 91.32% functions / 91.93% lines**, all 303 docume
   streak of passes: a job red for three consecutive runs blocks the exit until it is green. An
   earlier revision of this record called it a three-green floor; that was wrong. `schemathesis-full`
   and `mysql-matrix-extended (schemathesis, 300)` have been red every night since M1 and so block M2
-  until one run passes them. Their fixes are in `071d96e`, and the M2 rehearsal
-  [35940812349](https://github.com/Mythikos/iridium/actions/runs/35940812349) was dispatched on
-  2026-09-24 to prove them, as M1's exit relied on its own manual rehearsal. `mysql-innovation` and
-  `node-26` carry `continue-on-error` and are dispositioned, not counted.
+  until one run passes them. The first M2 rehearsal,
+  [35940812349](https://github.com/Mythikos/iridium/actions/runs/35940812349) on `071d96e`, passed
+  `milestone`, all three `e2e-electron-full` platforms, `mutation`, `property-long`, `flake-hunt`,
+  `node-26`, three of four `chaos-extended` shards and all four matrix chaos shards. Every red job
+  named a defect with its own fix above: both Schemathesis lanes (`3df7614`), the matrix property
+  lane (`663724e`), and `chaos-extended (1)`, whose image build timed out downloading from
+  repo.mysql.com (`bf7ae14`). A second rehearsal,
+  [35958526463](https://github.com/Mythikos/iridium/actions/runs/35958526463), runs on `663724e` to
+  prove them, as M1's exit relied on its own manual rehearsal. `mysql-innovation` and `node-26`
+  carry `continue-on-error` and are dispositioned, not counted; `mysql-innovation` fails only
+  `db-grants` on MySQL 26.7.
 - Merged coverage and the full-scope mutation campaign have both been re-measured since the
   `PIPELINE_VERSION` advance: coverage in every CI `merge-reports` job from
   [35823413588](https://github.com/Mythikos/iridium/actions/runs/35823413588) on (90.4% statements),
