@@ -76,20 +76,26 @@ FROM base AS mysql-client
 ARG MYSQL_CLIENT_VERSION=9.7.2-1.el9
 ARG MYSQL_GPG_URL=https://repo.mysql.com/RPM-GPG-KEY-mysql-2025
 ARG MYSQL_GPG_FINGERPRINT=BCA43417C3B485DD128EC6D4B7B3B788A8D3785C
+# `fetch` retries: repo.mysql.com is the one external host this build depends on, and curl gives up
+# on the first failure, after its default 300 s connect timeout, which is how a stalled TLS handshake
+# failed a nightly job. Retrying cannot admit a different file: the key is checked against its pinned
+# fingerprint and the RPM against its pinned sha256 and its signature below. APT, npm and pnpm already
+# retry their own fetches.
 RUN apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg rpm rpm2cpio cpio; \
+    fetch() { curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 30 "$@"; }; \
     case "$(dpkg --print-architecture)" in \
       amd64) mysql_arch=x86_64; mysql_sha256=888efdbf8f63750686377e520bf2e3df2e98c1cfb5b1cb21ebc8ce65e359b0c5 ;; \
       arm64) mysql_arch=aarch64; mysql_sha256=fdc782f9080d6b42715faa8530f48823a90a5b1f90f1ea354a4f67ebef311b0d ;; \
       *) echo 'unsupported MySQL client architecture'; exit 1 ;; \
     esac; \
-    curl -fsSL "$MYSQL_GPG_URL" -o /tmp/mysql-key.asc; \
+    fetch "$MYSQL_GPG_URL" -o /tmp/mysql-key.asc; \
     fingerprint="$(gpg --show-keys --with-colons /tmp/mysql-key.asc | awk -F: '/^fpr:/ { print $10; exit }')"; \
     test "$fingerprint" = "$MYSQL_GPG_FINGERPRINT" \
       || { echo "mysql key fingerprint is $fingerprint, expected $MYSQL_GPG_FINGERPRINT"; exit 1; }; \
     mkdir -p /mysql-client/usr/lib/sysimage/rpm; \
     rpmkeys --dbpath /mysql-client/usr/lib/sysimage/rpm --import /tmp/mysql-key.asc; \
-    curl -fsSL "https://repo.mysql.com/yum/mysql-9.7-community/el/9/$mysql_arch/mysql-community-client-$MYSQL_CLIENT_VERSION.$mysql_arch.rpm" \
+    fetch "https://repo.mysql.com/yum/mysql-9.7-community/el/9/$mysql_arch/mysql-community-client-$MYSQL_CLIENT_VERSION.$mysql_arch.rpm" \
       -o /tmp/mysql-client.rpm; \
     echo "$mysql_sha256  /tmp/mysql-client.rpm" | sha256sum --check --strict; \
     rpmkeys --dbpath /mysql-client/usr/lib/sysimage/rpm --checksig /tmp/mysql-client.rpm > /tmp/mysql-rpm-verification; \
