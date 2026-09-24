@@ -163,11 +163,13 @@ jobs:
           name: mutation
           path: tooling/mutation/reports/
 
-  # `--max-examples=500`, admin routes included (against a throwaway deployment), plus the
-  # non-member-token isolation run. Schemathesis 4.26.1 owns black-box OpenAPI fuzzing.
+  # `--max-examples=250` (D12-20), admin routes included (against a throwaway deployment), plus the
+  # non-member-token isolation run. Schemathesis 4.26.1 owns black-box OpenAPI fuzzing. The timeout
+  # exceeds both profiles' 120-minute deadlines and the image build, so the runner's own deadline,
+  # which reports how far the fuzzer got, always fires before the job is killed.
   schemathesis-full:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 270
     env:
       IRIDIUM_MYSQL_IMAGE: 'mysql:8.4.11'
     steps:

@@ -8,7 +8,7 @@ import type { StartedNetwork, StartedTestContainer } from 'testcontainers';
 
 import { assertSchemaName } from '../env/mysql.ts';
 import { startTestEnv } from '../env/start-test-env.ts';
-import { withDeadline } from '../harness/deadline.ts';
+import { WaitTimeoutError, withDeadline } from '../harness/deadline.ts';
 import { REPO_ROOT } from '../paths.ts';
 import { startServer, type TestServer } from '../server/start-server.ts';
 import { SCHEMATHESIS_AUTH_HOOK } from './schemathesis-auth.ts';
@@ -22,6 +22,9 @@ import {
 /** Reviewed official 4.26.1 image; the digest prevents a mutable tag changing the fuzzer. */
 export const SCHEMATHESIS_IMAGE =
   'ghcr.io/schemathesis/schemathesis:4.26.1@sha256:19efd31fe0c2d637373de159cc00f45326e94ba29f5afeffce2519451880defe';
+
+/** Where the fuzzer's own output accumulates inside its container while it runs. */
+const FUZZER_LOG = '/tmp/schemathesis-run.log';
 
 /** PR light coverage or the nightly full and non-member profiles. */
 export type SchemathesisOptions =
@@ -165,8 +168,8 @@ export async function runSchemathesis(options: SchemathesisOptions): Promise<Sch
       // D12-20, amended 2026-09-23: 250, not 500, because 500 cannot finish inside a GitHub-hosted
       // job's six hours. The cost is re-authentication, not the count itself: the fuzzer revokes its
       // own session and each recovery is a control login held to the production limiter, so 500 took
-      // 127.7 min at 9.1 logins a minute and 250 took 14.0 and 32.0 min on two runs. 250 found eight
-      // of 500's nine findings plus one it missed; 100 found two.
+      // 127.7 min at 9.1 logins a minute. 250 found eight of 500's nine findings plus one it missed;
+      // 100 found two.
       options.profile === 'light' ? '50' : '250',
       '--header',
       'X-Iridium-Client: desktop',
@@ -184,9 +187,32 @@ export async function runSchemathesis(options: SchemathesisOptions): Promise<Sch
       'true',
       '--no-color',
     ];
-    const result = await withDeadline(fuzzer.exec(args), {
-      timeoutMs: options.profile === 'light' ? 900_000 : 3_600_000,
-      description: `Schemathesis ${options.profile} ${principal} completion`,
+    // The run writes to a file inside the container and prints it on completion, so a run that
+    // outlives its deadline can still say how far it got: a bare timeout had discarded every phase
+    // and count the fuzzer had reported.
+    const running = fuzzer;
+    // D12-20, amended 2026-09-24: a complete administrator profile, stateful phase included, took
+    // 54 min on a hosted runner and passed 60 on the slower line, so a full profile gets twice that.
+    const timeoutMs = options.profile === 'light' ? 900_000 : 7_200_000;
+    const description = `Schemathesis ${options.profile} ${principal} completion`;
+    const result = await withDeadline(
+      running.exec([
+        '/bin/sh',
+        '-c',
+        `"$@" > ${FUZZER_LOG} 2>&1; status=$?; cat ${FUZZER_LOG}; exit $status`,
+        'schemathesis-run',
+        ...args,
+      ]),
+      { timeoutMs, description },
+    ).catch(async (error: unknown) => {
+      if (!(error instanceof WaitTimeoutError)) throw error;
+      const partial = await running.exec(['tail', '-n', '200', FUZZER_LOG]);
+      throw new WaitTimeoutError(
+        description,
+        timeoutMs,
+        new Error(`the fuzzer's output so far:
+${redact(partial.output, credentials.password)}`),
+      );
     });
     const loginSources = await env.admin.rows(
       `SELECT DISTINCT INET6_NTOA(ip) FROM ${assertSchemaName(env.mysql.templateSchema)}.sessions WHERE device_name = 'schemathesis'`,
