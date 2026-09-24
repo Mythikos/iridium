@@ -5,7 +5,7 @@
     "docs/plan/12-milestones.md"
   ],
   "description": "The acceptance map `guards.acceptance-map.guard` reads. `entries` is the guard's unit of work: one `{rowId | hpId | ruleId, layer, sinceMilestone, tests[]}` per required layer, with `gating: true` on the layer that retires a row for 1.0. `tests` resolves every test name the plan uses to a layer, a milestone, a project, a file and a requirement tag; `scripts/check-test-name-references.ts` fails on any name in `plan/` or `docs/` that is not a key of it.",
-  "currentMilestone": "M1",
+  "currentMilestone": "M2",
   "milestones": [
     "M0",
     "M1",

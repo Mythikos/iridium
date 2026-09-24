@@ -1390,3 +1390,40 @@ Nightly [35546980998](https://github.com/Mythikos/iridium/actions/runs/355469809
 dispatched manually on `ed62205` at M1 scope and must supply its own terminal result. Until it
 reports, no advisory lane is described as passing, the nine recorded nightly runs stand as
 recorded, and no consecutive green history is claimed.
+
+## M2 exit landing (2026-09-21 to 2026-09-24)
+
+The M2 tree landed in `fba2ca7`. Its first remote runs, the defects they found and the repairs are
+recorded in [M2-progress.md](M2-progress.md) and, from 2026-09-24, in
+[M2-exit.md](M2-exit.md) ("Review findings and remote repairs"); this section keeps the order of
+the remote evidence.
+
+- CI [35817415988](https://github.com/Mythikos/iridium/actions/runs/35817415988) on `6593ba8` was
+  the first run of the M2 tree to pass every required lane, and its `merge-reports` then ran for
+  the first time and found the two gaps M2-progress.md records. CI
+  [35823413588](https://github.com/Mythikos/iridium/actions/runs/35823413588) on `1d4652e` was the
+  first run green in every job.
+- The first M2 rehearsal, [35940812349](https://github.com/Mythikos/iridium/actions/runs/35940812349)
+  on `071d96e`, named the fuzz hook error (`3df7614`), the descendant-walk plan (`663724e`) and a
+  repo.mysql.com download timeout already retried by `bf7ae14`. The second,
+  [35958526463](https://github.com/Mythikos/iridium/actions/runs/35958526463) on `663724e`, turned
+  `mysql-matrix-extended (schemathesis, 300)` green for the first time since M1; its
+  `schemathesis-full` reached the harness deadline, which a complete stateful phase outgrows
+  (`1e43aae`).
+- Between them, CI on `bf7ae14` and `3df7614` each failed one 9.7 lane on timing that was the test's,
+  not the product's: a chaos port taken in the ephemeral range (`5cfb250`) and live revocation timed
+  from the request (`d7685af`). Those failures went unnoticed until the next push, because each push
+  cancels the previous push's in-progress CI.
+- Scheduled nightly [35972887539](https://github.com/Mythikos/iridium/actions/runs/35972887539) on
+  `5798fed` passed every required job, both Schemathesis lanes included; `mysql-innovation` is
+  advisory. The third rehearsal, [36010848566](https://github.com/Mythikos/iridium/actions/runs/36010848566)
+  on `1e43aae`, passed both Schemathesis lanes at M2 scope under the new budget. Its `flake-hunt`
+  found the isolation timing statistic (`177915f`, `46352e4`).
+- The CI exit rehearsal [36010966534](https://github.com/Mythikos/iridium/actions/runs/36010966534)
+  on `1e43aae` produced the `v0.2.0` upgrade fixture committed in `bd14186`.
+- CI on `bd14186` failed `merge-reports` on the `authz/**` 100% coverage gate (`f6cae7b`). CI on
+  `f6cae7b` failed `integration (mysql:8.4.11)` twice: first on a projection budget outlier (295 ms
+  against a range of 50–153 ms over two days, 86 ms on re-run; the budget is unchanged), then on the
+  isolation statistic (`46352e4`).
+- CI [36031452149](https://github.com/Mythikos/iridium/actions/runs/36031452149) on `46352e4` is green
+  in every job and is the exit evidence.

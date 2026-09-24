@@ -1,6 +1,6 @@
 # M2 working record
 
-M2 implementation is committed and exit validation is in progress. `CURRENT` remains M1. This is a working record, not an exit declaration; remote CI has now run this tree, and each section below says whether its evidence is remote or only this machine's. The tree carries version 0.2.0 across the root and 23 workspaces; no `v0.2.0` tag exists.
+M2 has exited: [M2-exit.md](M2-exit.md) is the exit declaration and names the implementation commit, the remote checks and the nightly history. This working record is kept as the account of how the milestone got there, including the defects each lane found; it is no longer updated, and where the two differ the exit record is authoritative.
 
 ## Implemented
 
