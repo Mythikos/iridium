@@ -203,10 +203,14 @@ expected-statuses = ["2xx", 401, 403, 404, 409, 429, "5xx"]
 [checks.negative_data_rejection]
 expected-statuses = [400, 401, 403, 404, 405, 406, 409, 414, 415, 422, 428, 429, 431, "5xx"]
 
-# Non-disclosure resolves an unknown/non-member resource before checking its version header.
-# Existing authorized resources with a missing If-Match return the documented 428.
+# Authorization decides before any handler reads the version header, and its perm step has three
+# refusals (09-api-reference.md section 1.3): a non-member gets 404, a member lacking the permission
+# 403, and a non-read permission on an archived vault 409 vault_archived, the write freeze. The same
+# step answers all three, so a mutation missing If-Match on an archived vault is refused as archived
+# rather than asked for its validator. Existing authorized resources with a missing If-Match return
+# the documented 428.
 [checks.missing_required_header]
-expected-statuses = [400, 401, 403, 404, 406, 415, 422, 428, 429]
+expected-statuses = [400, 401, 403, 404, 406, 409, 415, 422, 428, 429]
 
 # A rename preview must propose at least one of name or parentId. That is a cross-field rule over a
 # query object, and a query object is exploded into one parameter each, so no published schema can

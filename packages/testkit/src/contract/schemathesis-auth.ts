@@ -10,7 +10,6 @@ from email.utils import parsedate_to_datetime
 
 import requests
 import schemathesis
-from hypothesis import reject
 
 with open("/tmp/iridium-auth.json", encoding="utf-8") as fixture_file:
     fixture = json.load(fixture_file)
@@ -107,21 +106,24 @@ class FixtureSessionCache:
         self._stats["controlLogins"] += 1
         return token
 
-    def discard_null_path(self, case):
-        """Discard a case that would put a JSON null into a path parameter.
+    def admit(self, case):
+        """Whether a generated case can be sent at all; a JSON null in a path parameter cannot.
 
-        Dependency analysis infers links from response fields to path parameters by name, and a job
-        row's vaultId is null for a global job, so the inferred link renders the literal path
-        /vaults/None. A path parameter cannot be null; that is not a request the API can be sent, and
-        the refusal it earns is the fuzzer testing its own inference. reject() is the engine's own
-        signal for an invalid step: the stateful executor re-raises it to Hypothesis rather than
-        recording a failure, exactly as it does for the steps it discards itself.
+        Schemathesis records values seen in responses and redraws them into later requests, and a
+        recorded null skips its schema validation, so a global job's null vaultId becomes the
+        literal path /vaults/None. That is not a request the API can be sent, and the refusal it
+        earns is the fuzzer testing its own bookkeeping. This runs as a filter_case hook, which
+        Schemathesis applies with Hypothesis .filter() to every case strategy, stateful steps
+        included, after the recorded values are drawn. Raising reject() from before_call instead
+        was reported as a hook error, because the hook dispatcher wraps what a hook raises, and it
+        aborted the stateful phase.
         """
         parameters = case.path_parameters or {}
         if any(value is None for value in parameters.values()):
             with self._lock:
                 self._stats["nullPathParameterRejects"] += 1
-            reject()
+            return False
+        return True
 
     def protect(self, case):
         """Redirect an operation that would revoke this fixture's own sign-in to a spare account."""
@@ -205,10 +207,14 @@ class FixtureAuth:
 
 
 @schemathesis.hook
+def filter_case(context, case):
+    return _fixture_sessions.admit(case)
+
+
+@schemathesis.hook
 def before_call(context, case, kwargs):
     # Every phase reaches this hook with its final case, including a stateful transition whose
     # path parameter came from a link rather than from the data-generation pipeline.
-    _fixture_sessions.discard_null_path(case)
     _fixture_sessions.protect(case)
 
 

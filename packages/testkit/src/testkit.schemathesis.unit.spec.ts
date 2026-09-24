@@ -315,7 +315,7 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
   it('keeps checks enabled and scopes the expired-token response to its operation', () => {
     expect(SCHEMATHESIS_CONFIG).not.toContain('enabled = false');
     expect(SCHEMATHESIS_CONFIG).toContain('include-name = "POST /api/v1/auth/set-password"');
-    expect(SCHEMATHESIS_CONFIG).toContain('400, 401, 403, 404, 406, 415, 422, 428, 429');
+    expect(SCHEMATHESIS_CONFIG).toContain('400, 401, 403, 404, 406, 409, 415, 422, 428, 429');
     expect(SCHEMATHESIS_CONFIG.split('[[operations]]')[0]).not.toContain('410');
   });
 
@@ -512,9 +512,9 @@ describe('testkit.schemathesis.unit [area:testkit]', () => {
         }),
         expect.objectContaining({
           target: '/tmp/iridium_auth.py',
-          // An inferred link over a nullable field renders /vaults/None; the step is discarded
-          // through the engine's own rejection, not reported as the API refusing it.
-          content: expect.stringContaining('_fixture_sessions.discard_null_path(case)'),
+          // A recorded null redrawn into a path renders /vaults/None; the case is filtered out
+          // before it is sent, not raised from a call hook, which aborts the stateful phase.
+          content: expect.stringContaining('def filter_case(context, case):'),
         }),
       ]),
     );
