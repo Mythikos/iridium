@@ -325,7 +325,7 @@ export {
   waitFor,
   withDeadline,
 } from './harness/deadline.ts';
-export { reserveLoopbackPort } from './harness/free-port.ts';
+export { reserveFixturePort, reserveLoopbackPort } from './harness/free-port.ts';
 export type { MarkerSequence } from './harness/markers.ts';
 export {
   MARKER_CLOSE,

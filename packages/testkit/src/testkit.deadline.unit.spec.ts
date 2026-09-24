@@ -8,7 +8,11 @@ import {
   waitFor,
   withDeadline,
 } from './harness/deadline.ts';
-import { reserveLoopbackPort } from './harness/free-port.ts';
+import {
+  ephemeralPortFloor,
+  reserveFixturePort,
+  reserveLoopbackPort,
+} from './harness/free-port.ts';
 
 describe('testkit.deadline.unit [area:testkit]', () => {
   it('returns the first value the probe produces', async () => {
@@ -106,5 +110,14 @@ describe('testkit.deadline.unit [area:testkit]', () => {
     expect(a).toBeGreaterThan(1024);
     expect(b).toBeGreaterThan(1024);
     expect(a).not.toBe(b);
+  });
+
+  it('reserves a fixture port below the ephemeral range, which the kernel never assigns itself', async () => {
+    const floor = await ephemeralPortFloor();
+    const port = await reserveFixturePort();
+    expect(port).toBeGreaterThanOrEqual(20_000);
+    expect(port).toBeLessThan(floor);
+    // The ephemeral side of the same host is where reserveLoopbackPort lands.
+    expect(await reserveLoopbackPort()).toBeGreaterThanOrEqual(floor);
   });
 });

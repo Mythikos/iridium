@@ -12,7 +12,7 @@ import type { TestProject } from 'vitest/node';
 import { MYSQL_NETWORK_ALIAS } from '../env/mysql.ts';
 import { COLLAB_PROXY_NAME, MYSQL_PROXY_NAME, startToxiproxy } from '../env/toxiproxy.ts';
 import { withDeadline } from '../harness/deadline.ts';
-import { reserveLoopbackPort } from '../harness/free-port.ts';
+import { reserveFixturePort } from '../harness/free-port.ts';
 import { requireSharedTestEnv } from './shared-env.ts';
 
 export default async function setup(project: TestProject): Promise<() => Promise<void>> {
@@ -24,8 +24,9 @@ export default async function setup(project: TestProject): Promise<() => Promise
   }
 
   // Create the portable SSH host-port forwarder before Toxiproxy joins its network.
-  // The sequential chaos files bind their child to this reserved port when exercising WS toxics.
-  const collabServerPort = await reserveLoopbackPort();
+  // The sequential chaos files bind their child to this port when exercising WS toxics, long after
+  // it is chosen, so it comes from below the ephemeral range (`reserveFixturePort`).
+  const collabServerPort = await reserveFixturePort();
   // Testcontainers unrefs its SSH socket before requesting the forwarding rule. This referenced
   // deadline keeps global setup alive until that rule is acknowledged and fails a stuck setup.
   await withDeadline(TestContainers.exposeHostPorts(collabServerPort), {
