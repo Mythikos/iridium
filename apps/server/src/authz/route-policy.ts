@@ -422,17 +422,20 @@ type VaultResolver = (
   principal: CallerPrincipal,
 ) => Promise<Resolution>;
 
-/** The vault and membership columns every id resolver selects beside its own row. */
+/**
+ * The vault and membership columns every id resolver selects beside its own row. The vault is an
+ * inner join: every id-bearing row's `vault_id` references `vaults`, so a row always has its vault,
+ * and a job without a vault is not a row the resolver sees at all.
+ */
 interface AccessColumns {
-  readonly status: VaultStatus | null;
-  readonly mcp_enabled: boolean | null;
+  readonly status: VaultStatus;
+  readonly mcp_enabled: boolean;
   readonly role: Role | null;
   readonly member_version: number | null;
 }
 
-/** The access a joined row carries, or `null` when the row names no vault that exists. */
-function accessFrom(vaultId: VaultId, row: AccessColumns): Access | null {
-  if (row.status === null || row.mcp_enabled === null) return null;
+/** The access a joined row carries. */
+function accessFrom(vaultId: VaultId, row: AccessColumns): Access {
   return {
     vault: { id: vaultId, status: row.status, mcp_enabled: row.mcp_enabled },
     member:
@@ -459,7 +462,7 @@ async function resolveNode(
   const id = requiredId(view.params, parameter);
   const row = await db
     .selectFrom('nodes as r')
-    .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+    .innerJoin('vaults as v', 'v.id', 'r.vault_id')
     .leftJoin('vault_members as vm', (join) =>
       join.onRef('vm.vault_id', '=', 'r.vault_id').on('vm.user_id', '=', idBytes(principal.userId)),
     )
@@ -504,7 +507,7 @@ const VAULT_RESOLVERS: Readonly<Record<VaultFrom, VaultResolver>> = {
     const id = requiredId(view.params, 'attachmentId');
     const row = await db
       .selectFrom('attachments as r')
-      .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+      .innerJoin('vaults as v', 'v.id', 'r.vault_id')
       .leftJoin('vault_members as vm', (join) =>
         join
           .onRef('vm.vault_id', '=', 'r.vault_id')
@@ -530,7 +533,7 @@ const VAULT_RESOLVERS: Readonly<Record<VaultFrom, VaultResolver>> = {
     const id = requiredId(view.params, 'jobId');
     const row = await db
       .selectFrom('jobs as r')
-      .leftJoin('vaults as v', 'v.id', 'r.vault_id')
+      .innerJoin('vaults as v', 'v.id', 'r.vault_id')
       .leftJoin('vault_members as vm', (join) =>
         join
           .onRef('vm.vault_id', '=', 'r.vault_id')

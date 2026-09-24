@@ -404,7 +404,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` inner join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
           parameters: [idBytes(USER.userId), idBytes(id)],
         },
       ]);
@@ -426,7 +426,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       // neither answer costs a second query the other does not (04 section 5.4, T4).
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          sql: 'select `r`.`vault_id`, `r`.`kind`, `r`.`deleted_at`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `nodes` as `r` inner join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
           parameters: [idBytes(USER.userId), idBytes(VAULT)],
         },
       ]);
@@ -464,7 +464,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `r`.`vault_id`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `attachments` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          sql: 'select `r`.`vault_id`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `attachments` as `r` inner join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
           parameters: [idBytes(USER.userId), idBytes(attachmentId)],
         },
       ]);
@@ -517,7 +517,7 @@ describe('authz.route-policy.apply.unit [area:authz]', () => {
       expect(built.scopes).toEqual(allowed ? [RESOLVED_SCOPE] : []);
       expect(sql.fake.executed).toEqual([
         {
-          sql: 'select `r`.`vault_id`, `r`.`requested_by`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `jobs` as `r` left join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
+          sql: 'select `r`.`vault_id`, `r`.`requested_by`, `v`.`status`, `v`.`mcp_enabled`, `vm`.`role`, `vm`.`version` as `member_version` from `jobs` as `r` inner join `vaults` as `v` on `v`.`id` = `r`.`vault_id` left join `vault_members` as `vm` on `vm`.`vault_id` = `r`.`vault_id` and `vm`.`user_id` = ? where `r`.`id` = ?',
           parameters: [idBytes(principal.userId), idBytes(jobId)],
         },
       ]);
