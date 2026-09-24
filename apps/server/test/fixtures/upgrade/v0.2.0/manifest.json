@@ -2,7 +2,7 @@
   "format": "iridium-upgrade-fixture/1",
   "milestone": "M2",
   "version": "v0.2.0",
-  "generated_at": "2026-09-21T05:04:57.073Z",
+  "generated_at": "2026-09-24T14:19:46.434Z",
   "dataset": "seed.structure",
   "mysql_line": "8.4",
   "mysql_version": "8.4.11",
@@ -10,8 +10,8 @@
   "dump": {
     "file": "dump.sql.gz",
     "compression": "gzip",
-    "bytes": 1892291,
-    "sha256": "69198daf65cb9e5a0e38172f5022f8223149c07e9d06ed05363102c6e3806577",
+    "bytes": 1904640,
+    "sha256": "340035c83e6dc6c7c447d7c261394f509a264ab5fc790450160ea668c7fa84a4",
     "argv": [
       "--single-transaction",
       "--hex-blob",
@@ -80,60 +80,60 @@
   },
   "counts_provenance": "unmodified dump restored into an isolated same-line schema",
   "fingerprints": {
-    "nodes": "b813c309593cac033d490df681704ee0cdd17d11059890480c2814fb6a967cb0",
-    "notes": "63a25c0549f41bed53fdd9f5a12ce8d84e9fcc0319507146dd12daebc0dc2fd3",
-    "note_docs": "7d1d215240f7545e418b89e0400f6597b472e865c96e9448df96d5ac12611ca2",
-    "note_updates": "c04cabffa73a1d2d62148da4d6f13beae274e365726a7de813bf0e25d20a3531",
-    "note_projections": "0d1ebd35a4216e32d8e318c028dc4db86a8aec74b8e02bd0069d1706e53ef006",
-    "note_projection_terms": "6ead8fb9a63a54bb50a239f82d506799d48bd119b838c12173a1fa17e731322e",
-    "note_search": "4d0eaf41661bd35ecfd35153a3985e1788f98beae7c4b451227e45fe888fd807",
-    "note_links": "adf7f9b5276069ff7bfeb63130d0f54b41976d59cb1e0675a20a41840b94668a",
-    "note_revisions": "d98a8e7994a70fd76d9d6d31bab3789acae5d008cfb24c46a29240f92e2843e7",
-    "attachments": "287ca469de7ae741c34ef5f62efdd9e3cbe27d4d7593549fb72d5bc774e5d37d",
-    "audit_events": "9ce6aa4b9b8b43be70fad607094ae08d9245bde6b59fa186470db029575bb6fa",
-    "audit_chain_heads": "754283e605a17ee88b55f57cb38d6888faab0b0b30f339de864330e41ecceebe"
+    "nodes": "b2e3d46a9350d13566e2fdd6d0b26f941af8d7216537ea9267d0c81aa3d70864",
+    "notes": "97208a9b2e941abdd95cb080330933b1d2185ceb1907df4f40e55be5f2052df9",
+    "note_docs": "afe2f736488e42e57a0b207e01b81d1528ce58ed78562822f792f4f62253f283",
+    "note_updates": "30eee244baf696d955d61c598186bf99b45d611c25fa3b3449c8272c6a874fad",
+    "note_projections": "0e5c6feb640295d5afa246361a39fb858d0cf8970fdd78c2c0c9063ed90bbc2c",
+    "note_projection_terms": "5a3fe31b7c68c555ee588612ba2fe6ac15f63f2af09619b5e3e771db67a64d79",
+    "note_search": "41fa5aef9c497b8b318178cf5f52c0cd31c2d500ab43b26a3a3b8fd417f03b24",
+    "note_links": "28148987690f653cf3aa60f8f53dfb9e18340f50884c59b4cbe23a74ad9566e9",
+    "note_revisions": "59b1164ee38371bc2723a3d189d03b46d059b704f271115cc2a93bb20241dfae",
+    "attachments": "84657093a458d9772f9859305f778de72293cfc89e87a713996a83863fcdaed6",
+    "audit_events": "7f5070b258805acb307171aca286087dcde627259c911a1d72520b1fa0ddbc21",
+    "audit_chain_heads": "8c8073e02d7cf88f2fa23445a7ee8df8da6d42e9a833c3003309d9a13fec51be"
   },
   "attachments": {
     "count": 1,
     "bytes": 70,
     "files": [
       {
-        "storageKey": "01a0c258-2c26-7709-9018-6638be79bf97/26/2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c",
+        "storageKey": "01a0d3c5-f33c-731a-8386-e470480fa2b7/26/2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c",
         "bytes": 70,
         "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
       }
     ]
   },
   "structure": {
-    "pipeline_version": 2,
+    "pipeline_version": 3,
     "total_node_rows": 20000,
     "listed_node_rows": 19999,
-    "vault_id": "01a0c258-2c26-7709-9018-6638be79bf97",
-    "root_node_id": "01a0c258-2c26-770a-b0c3-7e5d23c1d369",
+    "vault_id": "01a0d3c5-f33c-731a-8386-e470480fa2b7",
+    "root_node_id": "01a0d3c5-f33c-731b-b663-55a434e13ee5",
     "selected_paths": [
       {
-        "id": "01a0c258-2db1-785c-b7e5-d4a3463fa3b3",
-        "parentId": "01a0c258-2daa-723f-84b7-43fceb9daf3a",
+        "id": "01a0d3c5-f63d-7428-8bcb-bc6083d81fee",
+        "parentId": "01a0d3c5-f630-7239-9a05-1aa290ea966c",
         "name": "Provenance",
         "path": "/Examples/Provenance"
       },
       {
-        "id": "01a0c258-2e4f-7649-9f2e-e0ca5dbc1e97",
-        "parentId": "01a0c258-2daa-723f-84b7-43fceb9daf3a",
+        "id": "01a0d3c5-f729-7a38-8235-0e25d2513729",
+        "parentId": "01a0d3c5-f630-7239-9a05-1aa290ea966c",
         "name": "Links",
         "path": "/Examples/Links"
       },
       {
-        "id": "01a0c25a-1605-7519-888d-1f0821658ba0",
-        "parentId": "01a0c258-4e66-7013-a99c-21ee73e0b8be",
+        "id": "01a0d3c8-cc32-7ce1-ba90-820b8501f9e1",
+        "parentId": "01a0d3c6-295c-7b40-b07d-59fde973ef0a",
         "name": "Branch 19988",
         "path": "/Branch 00004/Branch 00078/Branch 01249/Branch 19988"
       }
     ],
     "notes": {
       "target": {
-        "id": "01a0c258-2db9-7dca-9fea-a1ae17470cbe",
-        "parentId": "01a0c258-2d9d-7693-835f-988cfc1476fa",
+        "id": "01a0d3c5-f64a-756a-99e9-0bc1215f858e",
+        "parentId": "01a0d3c5-f615-7ac7-88bf-27a276d5f3a7",
         "name": "Target",
         "path": "/Library/Target",
         "source": "---\ntags: [fixtures, m2]\naliases: [fixture-target]\n---\n# Structure target\n\nA searchable fixture needle.\n",
@@ -142,8 +142,8 @@
         "hadBom": false
       },
       "sharedLibrary": {
-        "id": "01a0c258-2dce-7301-81a4-2249bd64f7cd",
-        "parentId": "01a0c258-2d9d-7693-835f-988cfc1476fa",
+        "id": "01a0d3c5-f689-7107-9d54-5e6f06fab6c3",
+        "parentId": "01a0d3c5-f615-7ac7-88bf-27a276d5f3a7",
         "name": "Shared",
         "path": "/Library/Shared",
         "source": "# Shared in Library\n",
@@ -152,8 +152,8 @@
         "hadBom": false
       },
       "sharedArchive": {
-        "id": "01a0c258-2de2-7749-b3d5-04114db378aa",
-        "parentId": "01a0c258-2da4-77da-8d82-399634037706",
+        "id": "01a0d3c5-f6a4-712e-a9a0-1d6196db3351",
+        "parentId": "01a0d3c5-f622-7a55-b7e6-1c4d602d4991",
         "name": "Shared",
         "path": "/Archive/Shared",
         "source": "# Shared in Archive\n",
@@ -162,8 +162,8 @@
         "hadBom": false
       },
       "links": {
-        "id": "01a0c258-2e4f-7649-9f2e-e0ca5dbc1e97",
-        "parentId": "01a0c258-2daa-723f-84b7-43fceb9daf3a",
+        "id": "01a0d3c5-f729-7a38-8235-0e25d2513729",
+        "parentId": "01a0d3c5-f630-7239-9a05-1aa290ea966c",
         "name": "Links",
         "path": "/Examples/Links",
         "source": "[Resolved](../Library/Target.md)\n[Broken](Missing.md)\n[[Shared]]\n[[fixture-target]]\n![Image](/attachments/structure.png)\n[External](https://example.test/)\n",
@@ -172,8 +172,8 @@
         "hadBom": false
       },
       "crlf": {
-        "id": "01a0c258-2df4-765a-a648-dc0e120ccb68",
-        "parentId": "01a0c258-2db1-785c-b7e5-d4a3463fa3b3",
+        "id": "01a0d3c5-f6bb-750e-afb5-390064f4c7dd",
+        "parentId": "01a0d3c5-f63d-7428-8bcb-bc6083d81fee",
         "name": "CRLF origin",
         "path": "/Examples/Provenance/CRLF origin",
         "source": "# CRLF origin\r\n\r\nOriginal Windows lines.\r\n",
@@ -182,8 +182,8 @@
         "hadBom": false
       },
       "bom": {
-        "id": "01a0c258-2e03-7f29-a481-603c827d9ab2",
-        "parentId": "01a0c258-2db1-785c-b7e5-d4a3463fa3b3",
+        "id": "01a0d3c5-f6d4-7ea3-b65a-0ad5917b8318",
+        "parentId": "01a0d3c5-f63d-7428-8bcb-bc6083d81fee",
         "name": "BOM origin",
         "path": "/Examples/Provenance/BOM origin",
         "source": "﻿# BOM origin\n\nOriginal byte-order mark.\n",
@@ -193,39 +193,39 @@
       }
     },
     "attachment": {
-      "id": "01a0c258-2e22-7572-89f3-7806d92e2667",
+      "id": "01a0d3c5-f715-735b-8eab-0b5fb751e3e0",
       "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c",
       "pathHint": "attachments/structure.png"
     },
     "administrator": {
-      "id": "01a0c258-2b8c-7f3e-9241-decd1b32a5f3",
+      "id": "01a0d3c5-f188-7fb4-8192-cad629c949f1",
       "email": "admin@iridium.test",
       "displayName": "Kernel Admin",
       "isServerAdmin": true
     },
     "users": [
       {
-        "id": "01a0c258-2b8c-7f3e-9241-decd1b32a5f3",
+        "id": "01a0d3c5-f188-7fb4-8192-cad629c949f1",
         "email": "admin@iridium.test"
       },
       {
-        "id": "01a0c258-2bf1-736d-8f68-1aea49b79f4c",
+        "id": "01a0d3c5-f277-7c98-a3fe-38f5505fc8f9",
         "email": "editorA@iridium.test"
       },
       {
-        "id": "01a0c258-2bf1-736e-bbe1-5120584b4062",
+        "id": "01a0d3c5-f27f-77c1-b525-e2ec2eb0a8ee",
         "email": "editorB@iridium.test"
       },
       {
-        "id": "01a0c258-2bf5-7004-ab8d-59250889e5c0",
+        "id": "01a0d3c5-f280-7e7f-8d90-e5da749d81a1",
         "email": "editorC@iridium.test"
       },
       {
-        "id": "01a0c258-2bf5-7005-b6ae-b25212f62bef",
+        "id": "01a0d3c5-f29b-744f-9c61-7969c1e2e167",
         "email": "viewer@iridium.test"
       },
       {
-        "id": "01a0c258-2bf5-7006-a62a-8ae664d9394f",
+        "id": "01a0d3c5-f29d-7dab-9f0f-8457658dd0fe",
         "email": "outsider@iridium.test"
       }
     ]

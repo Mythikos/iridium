@@ -1,6 +1,6 @@
 /** Immutable M2 upgrade artefact metadata and byte-level dump/attachment verification (D12-4). */
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -244,6 +244,10 @@ export function writeStructureUpgradeFixture(input: {
   if (!input.mysqlVersion.startsWith('8.4.'))
     throw new Error('The v0.2.0 fixture must originate on MySQL 8.4.');
   const directory = STRUCTURE_UPGRADE_DIRECTORY;
+  // The attachment tree holds exactly the manifest's files. Writing over a checked-out fixture left
+  // the previous run's content-addressed file beside the new one, and the uploaded artifact then
+  // carried both.
+  rmSync(join(directory, 'attachments'), { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
   const compressed = gzipSync(Buffer.from(input.dump, 'utf8'), { level: 9 });
   const attachmentPath = structureAttachmentPath(
@@ -320,10 +324,21 @@ export function readStructureUpgradeFixture(): {
   const grants = readFileSync(join(STRUCTURE_UPGRADE_DIRECTORY, manifest.grants.file));
   if (grants.byteLength !== manifest.grants.bytes || fixtureHash(grants) !== manifest.grants.sha256)
     throw new Error('The M2 DBA grant artifact does not match its manifest.');
-  for (const file of manifest.attachments.files) {
-    const bytes = readFileSync(
-      structureAttachmentPath(join(STRUCTURE_UPGRADE_DIRECTORY, 'attachments'), file.storageKey),
+  const attachmentRoot = join(STRUCTURE_UPGRADE_DIRECTORY, 'attachments');
+  const stored = readdirSync(attachmentRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => resolve(entry.parentPath, entry.name))
+    .toSorted();
+  const listed = manifest.attachments.files
+    .map((file) => structureAttachmentPath(attachmentRoot, file.storageKey))
+    .toSorted();
+  if (JSON.stringify(stored) !== JSON.stringify(listed))
+    throw new Error(
+      `The M2 fixture's attachment tree is not its manifest's inventory: stored ` +
+        `${JSON.stringify(stored)}, listed ${JSON.stringify(listed)}. Regenerate the fixture.`,
     );
+  for (const file of manifest.attachments.files) {
+    const bytes = readFileSync(structureAttachmentPath(attachmentRoot, file.storageKey));
     if (bytes.byteLength !== file.bytes || fixtureHash(bytes) !== file.sha256)
       throw new Error('The M2 fixture attachment does not match its manifest.');
   }
