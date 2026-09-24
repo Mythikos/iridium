@@ -155,3 +155,40 @@ stands on its own; the unit assertion, not the timing bound, is what guards it.
   separately.
 - **`perf`, `load`, `conformance-all`, `compose-boot`, `mcp-clients`, `backup-restore-drill`** are
   scheduled for later milestones and skipped at M2.
+
+## Post-tag release evidence (2026-09-24)
+
+Product tag `v0.2.0` is annotated ("M2: structure and search") and targets this record's commit,
+`58c0b1d1a9131da5e327aec886700f4a9bd902d9`. Tagged release
+[36045348131](https://github.com/Mythikos/iridium/actions/runs/36045348131) passes: `release-plan`
+[107787421649](https://github.com/Mythikos/iridium/actions/runs/36045348131/job/107787421649), both
+MySQL verification lanes ([107787574755](https://github.com/Mythikos/iridium/actions/runs/36045348131/job/107787574755)
+on 8.4.11, [107787574810](https://github.com/Mythikos/iridium/actions/runs/36045348131/job/107787574810)
+on 9.7.2) and `server-image`
+[107795920531](https://github.com/Mythikos/iridium/actions/runs/36045348131/job/107795920531).
+`desktop` and `release-feed` (due at M5), `bridge` (M3) and `drill` (M8) are skipped by the release
+plan, as they were at M1.
+
+The published image is
+`ghcr.io/mythikos/iridium-server@sha256:c7d4e8c182fbc3bad2172850dbc0af2a5321ee35691e5b681bda646d1664fad4`,
+tagged `0.2.0`, `0.2` and `0`. Its AMD64 manifest is
+`sha256:d33e5e24305786bcc3d8267350dd3570976525177f3ca383a2546a2258914e4f`; its ARM64 manifest is
+`sha256:f7393d6ccce56228a069f92a19b7d3d74b72468f16c25ae283c112fe13d5d9a8`.
+
+- **Runtime identity.** Unlike M1's first release, the two-platform runtime check passes inside
+  the tagged run, on the containerd image store that M1's post-tag repair configured. Both platforms
+  run the published digest and report version `0.2.0`, source `58c0b1d`, Node 24.21.0 and schema
+  head `0059_projection_terms_backfill`; the shipped `mysqldump` reports 9.7.2 on x86_64 and on
+  aarch64.
+- **Provenance and SBOM.** Registry inspection finds an attestation manifest for each platform.
+  Both SLSA provenance records give `vcs:revision` and `SOURCE_COMMIT` as the tagged commit, and
+  each attached SPDX SBOM records 338 packages. The release's CycloneDX SBOMs record 3,762 AMD64
+  and 3,761 ARM64 components (artifacts `10828494794` and `10828904070`).
+- **Vulnerability scan.** Grype 0.119.0 under the unchanged gate (`severity-cutoff: high`,
+  `only-fixed: true`, `fail-build: true`) matches 236 vulnerabilities across 337 packages on each
+  platform. Every match lacks a fixed version, so the gate ignores all of them, and both SARIF
+  reports contain zero findings. The repository carries no Grype ignore file. As at M1, a clean
+  gate is not a claim that the image has no vulnerability of any kind.
+- Artifact `server-image-sbom` (`10829128405`, digest
+  `sha256:a00877b368bf4a00ebbaf8a8958dfab5ec97ca8609618af027b09dc623179a76`) keeps both runtime
+  identities, both CycloneDX SBOMs and both SARIF reports.

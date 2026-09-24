@@ -1427,3 +1427,8 @@ the remote evidence.
   isolation statistic (`46352e4`).
 - CI [36031452149](https://github.com/Mythikos/iridium/actions/runs/36031452149) on `46352e4` is green
   in every job and is the exit evidence.
+- Product tag `v0.2.0` on record commit `58c0b1d`: release
+  [36045348131](https://github.com/Mythikos/iridium/actions/runs/36045348131) passes both
+  verification lanes and `server-image`, including the two-platform runtime check that M1's first
+  release failed. The image, manifests, provenance, SBOM and scan evidence are in
+  [M2-exit.md](M2-exit.md) ("Post-tag release evidence").
