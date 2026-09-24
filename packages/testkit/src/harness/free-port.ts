@@ -93,9 +93,9 @@ async function bindable(port: number): Promise<boolean> {
  * A free loopback port for a fixture that is chosen once and bound much later, such as the chaos
  * collaboration port every chaos file binds its child server to.
  *
- * {@link reserveLoopbackPort} releases an ephemeral port, and in that window the kernel may hand the
- * same number to any outbound socket or to a container's published port: on a CI runner the chaos
- * child then failed with `EADDRINUSE`. A port below the ephemeral range is never assigned
+ * {@link reserveLoopbackPort} releases an ephemeral port, and in that window the kernel may hand
+ * the same number to any outbound socket or to a container's published port: on a CI runner the
+ * chaos child then failed with `EADDRINUSE`. A port below the ephemeral range is never assigned
  * implicitly, so only an explicit bind can take it, and each candidate is bound once to prove it
  * free, which also skips the ranges Windows reserves for Hyper-V.
  */

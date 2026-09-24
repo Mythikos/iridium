@@ -6,16 +6,16 @@
  * the parent index's rows-per-key is the whole vault. From a few thousand notes it therefore chose
  * `ix_nodes_vault_deleted` or `ix_nodes_vault_name`, re-reading every live node of the vault once
  * per node already reached: 15 s at 4,880 notes on both MySQL lines, which the nightly
- * `persistence.model.prop` met as a note create answering `503 unavailable`. Each walk now names the
- * index in its recursive member (`childLookupHint`), and this file plans the exact statements
+ * `persistence.model.prop` met as a note create answering `503 unavailable`. Each walk now names
+ * the index in its recursive member (`childLookupHint`), and this file plans the exact statements
  * production runs, through the builders production calls, and reads which index the member uses.
  *
- * The seeded tree is small, and at that size an unhinted walk mostly happens to choose `uq_sibling`.
- * The assertion is on the pinned index rather than on the absence of a slow one, so it holds at any
- * size; with the hint removed, all seven descendant cases fail on 8.4.11 and six on 9.7.2, whose
- * optimizer picks the parent index unaided for one of them at this size. The last case proves in-file
- * that the same reading reports a different index for a walk that uses one: the ancestor walk, which
- * climbs by primary key.
+ * The seeded tree is small, and at that size an unhinted walk mostly happens to choose
+ * `uq_sibling`. The assertion is on the pinned index rather than on the absence of a slow one, so
+ * it holds at any size; with the hint removed, all seven descendant cases fail on 8.4.11 and six on
+ * 9.7.2, whose optimizer picks the parent index unaided for one of them at this size. The last case
+ * proves in-file that the same reading reports a different index for a walk that uses one: the
+ * ancestor walk, which climbs by primary key.
  */
 import type { ParsedSearchQuery } from '@iridium/contracts';
 import { inspectQueryPlan, keepSchema, type SeededVault } from '@iridium/testkit';
@@ -36,7 +36,8 @@ import { startAuthServer, type AuthTestServer } from '../support/auth-app.ts';
 const PARENT_INDEX = 'ix_nodes_vault_parent';
 
 // Every case plans against the one tree `beforeAll` builds; a per-test reset would leave an empty
-// schema, where the search statement's `vaults` join is a constant with no row and plans to nothing.
+// schema, where the search statement's `vaults` join is a constant with no row and plans to
+// nothing.
 keepSchema();
 let context: AuthTestServer;
 let vault: SeededVault;
@@ -83,8 +84,8 @@ function planNodes(value: unknown): PlanNode[] {
 /**
  * Whether a plan node is a recursive member, in either `EXPLAIN FORMAT=JSON` version the two lines
  * default to. Version 1 (8.4) marks the member's own query block `recursive: true`. Version 2 (9.7)
- * puts that mark on the materialization, which holds the anchor too, so there the member is the join
- * that scans the CTE's new records: the anchor never reads the CTE it defines.
+ * puts that mark on the materialization, which holds the anchor too, so there the member is the
+ * join that scans the CTE's new records: the anchor never reads the CTE it defines.
  */
 function isRecursiveMember(node: PlanNode): boolean {
   if (node['recursive'] === true && 'nested_loop' in node) return true;
@@ -95,11 +96,11 @@ function isRecursiveMember(node: PlanNode): boolean {
 }
 
 /**
- * Whether a plan node reads the base table `nodes` under `alias`. Version 1 names a table by its alias
- * alone, inside the member's own query block. Version 2 (every node carries an `operation`) gives a
- * base table both `alias` and `table_name` but a CTE only `table_name`, and a join enclosing the whole
- * materialization also contains a new-records scan, so there the base table is checked: the ranked
- * search query reuses the alias for its outer `tree_paths` join.
+ * Whether a plan node reads the base table `nodes` under `alias`. Version 1 names a table by its
+ * alias alone, inside the member's own query block. Version 2 (every node carries an `operation`)
+ * gives a base table both `alias` and `table_name` but a CTE only `table_name`, and a join
+ * enclosing the whole materialization also contains a new-records scan, so there the base table is
+ * checked: the ranked search query reuses the alias for its outer `tree_paths` join.
  */
 function readsNodes(node: PlanNode, alias: string): boolean {
   if ('operation' in node) return node['alias'] === alias && node['table_name'] === 'nodes';

@@ -116,8 +116,8 @@ export async function ancestorsContain(
 }
 
 /**
- * The statement {@link ancestorsContain} runs; shared with plan inspection. It climbs by primary key,
- * the one recursive walk over `nodes` that is not a descendant walk.
+ * The statement {@link ancestorsContain} runs; shared with plan inspection. It climbs by primary
+ * key, the one recursive walk over `nodes` that is not a descendant walk.
  */
 export function ancestorsStatement(
   parentId: Buffer,

@@ -102,8 +102,9 @@ function searchTreePathsCte(acl: RawBuilder<unknown>): RawBuilder<unknown> {
 }
 
 /**
- * The ranked search statement over the readable vaults, one row past the page so the caller can tell
- * whether another page exists. Shared with plan inspection so the contract observes this statement.
+ * The ranked search statement over the readable vaults, one row past the page so the caller can
+ * tell whether another page exists. Shared with plan inspection so the contract observes this
+ * statement.
  *
  * @param input.vaultIds The readable vault ids, deduplicated, sorted and non-empty.
  * @param input.after The validated `[score, noteIdHex]` keyset, or `null` for the first page.
