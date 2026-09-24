@@ -571,7 +571,8 @@ WITH RECURSIVE t AS (
   FROM nodes n
   WHERE n.id = :rootId
   UNION ALL
-  SELECT n.id, n.parent_id, n.kind, n.name, n.version, n.updated_at, n.updated_by,
+  SELECT /*+ JOIN_INDEX(n ix_nodes_vault_parent) */
+         n.id, n.parent_id, n.kind, n.name, n.version, n.updated_at, n.updated_by,
          CONCAT(t.path, '/', n.name), t.depth + 1
   FROM nodes n JOIN t ON n.parent_id = t.id
   WHERE n.id <> n.parent_id AND n.deleted_at IS NULL AND t.depth < 64
@@ -583,6 +584,7 @@ ORDER BY path, id;
 ```
 
 - `path` is `'/'`-joined names excluding the root (`'/Guides/Onboarding'`); a note's exported filename is `<path>.md`. Names are ≤ `NODE_NAME_MAX_BYTES` (255) bytes and depth ≤ `TREE_MAX_DEPTH` (64) — the literal `64` in `t.depth < 64` above is `LIMITS.TREE_MAX_DEPTH` in the interpolated query (§6.5) — so a path is ≤ 16 383 bytes, which is why the anchor member casts to `CHAR(16383)` (the non-recursive member fixes the column width of a recursive CTE).
+- **Every descendant walk reads children through `ix_nodes_vault_parent`, named in the recursive member** (amended 2026-09-24). The optimizer costs a recursive member against a one-row estimate of its CTE, and in a flat vault the parent index's rows-per-key is the whole vault, so from a few thousand notes it chose `ix_nodes_vault_deleted` or `ix_nodes_vault_name` and re-read every live node once per node already reached: 15 s at 4,880 notes on both lines, against 10 ms pinned. The `JOIN_INDEX` optimizer hint is MySQL's documented successor to `FORCE INDEX … FOR JOIN` on both lines. It is shared as `childLookupHint` in `apps/server/src/tree/queries.ts`, and `tree.descent-plan.integration` plans every walk and asserts the index its recursive member uses.
 - `path_prefix` filters (`GET /vaults/:id/nodes?pathPrefix=`, MCP `list_notes`) are applied in the outer query with `WHERE path = :prefix OR path LIKE CONCAT(:prefixEscaped, '/%')`; `recursive=false` adds `depth = :prefixDepth + 1`.
 - Resolving a path to a node (`resolveNote({vaultId, path})`) walks segment by segment from the root using `ix_nodes_vault_parent` plus `uq_sibling` (`WHERE vault_id = ? AND parent_id = ? AND name = ? AND deleted_at IS NULL`), which is case-insensitive and accent-sensitive by collation; MCP's forgiving resolution additionally uses `ix_nodes_vault_name` for basename candidates.
 - Trashed subtrees are excluded by `n.deleted_at IS NULL` in the recursive member; `includeTrashed=true` (history scope) runs the same CTE without that predicate and joins `trash_entries` for `original_path`.

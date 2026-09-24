@@ -33,6 +33,21 @@ export interface PathRow extends NodeRow {
   readonly depth: number;
 }
 
+/**
+ * The access path of every descendant walk: a node's children are read through
+ * `ix_nodes_vault_parent` (03-data-model.md section 6.3), named in the recursive member's own query
+ * block. The optimizer costs that member against a one-row estimate of the CTE, and in a flat vault
+ * the parent index's rows-per-key is the whole vault, so from a few thousand notes it chose
+ * `ix_nodes_vault_deleted` or `ix_nodes_vault_name` and re-read every live node of the vault once
+ * per node already reached. At 4,880 notes that was 15 s on both MySQL lines, past the query
+ * deadline, inside the structural transaction that projects a note with a link; pinned, 10 ms.
+ *
+ * @param alias The recursive member's alias for `nodes`.
+ */
+export function childLookupHint(alias: 'n' | 'child'): RawBuilder<unknown> {
+  return sql.raw(`/*+ JOIN_INDEX(${alias} ix_nodes_vault_parent) */`);
+}
+
 /** A CTE from the root; a root's self-reference is never followed. */
 export function pathsCte(vaultId: Buffer, includeTrashed: boolean = false): RawBuilder<unknown> {
   return sql`tree_paths AS (
@@ -40,7 +55,7 @@ export function pathsCte(vaultId: Buffer, includeTrashed: boolean = false): RawB
     FROM nodes n JOIN vaults v ON v.root_node_id = n.id
     WHERE v.id = ${vaultId}
     UNION ALL
-    SELECT n.*, ${includeTrashed ? sql`COALESCE(trash.original_path, CONCAT(parent.path, '/', n.name))` : sql`CONCAT(parent.path, '/', n.name)`}, parent.depth + 1
+    SELECT ${childLookupHint('n')} n.*, ${includeTrashed ? sql`COALESCE(trash.original_path, CONCAT(parent.path, '/', n.name))` : sql`CONCAT(parent.path, '/', n.name)`}, parent.depth + 1
     FROM nodes n JOIN tree_paths parent ON n.parent_id = parent.id
     ${includeTrashed ? sql`LEFT JOIN trash_entries trash ON trash.node_id = n.id` : sql``}
     WHERE n.id <> n.parent_id AND n.vault_id = ${vaultId}
@@ -55,28 +70,40 @@ export async function derivePaths(
   vaultId: Buffer,
   includeTrashed: boolean = false,
 ): Promise<readonly PathRow[]> {
-  return (
-    await sql<PathRow>`WITH RECURSIVE ${pathsCte(vaultId, includeTrashed)}
-    SELECT * FROM tree_paths WHERE id <> parent_id ORDER BY path, id`.execute(db)
-  ).rows;
+  return (await derivedPathsStatement(vaultId, includeTrashed).execute(db)).rows;
 }
+
+/** The statement {@link derivePaths} runs; shared with plan inspection. */
+export function derivedPathsStatement(
+  vaultId: Buffer,
+  includeTrashed: boolean,
+): RawBuilder<PathRow> {
+  return sql<PathRow>`WITH RECURSIVE ${pathsCte(vaultId, includeTrashed)}
+    SELECT * FROM tree_paths WHERE id <> parent_id ORDER BY path, id`;
+}
+
+/** A node with its depth below the subtree's top. */
+export type SubtreeRow = NodeRow & { readonly depth: number };
 
 /** Descendant traversal includes the target and never follows the root self-reference. */
 export async function subtreeRows(
   db: TreeExecutor,
   nodeId: Buffer,
   includeTrashed: boolean = false,
-): Promise<readonly (NodeRow & { readonly depth: number })[]> {
-  return (
-    await sql<NodeRow & { readonly depth: number }>`WITH RECURSIVE subtree AS (
+): Promise<readonly SubtreeRow[]> {
+  return (await subtreeStatement(nodeId, includeTrashed).execute(db)).rows;
+}
+
+/** The statement {@link subtreeRows} runs; shared with plan inspection. */
+export function subtreeStatement(nodeId: Buffer, includeTrashed: boolean): RawBuilder<SubtreeRow> {
+  return sql<SubtreeRow>`WITH RECURSIVE subtree AS (
     SELECT n.*, 0 AS depth FROM nodes n WHERE n.id = ${nodeId}
     UNION ALL
-    SELECT n.*, parent.depth + 1 FROM nodes n JOIN subtree parent ON n.parent_id = parent.id
+    SELECT ${childLookupHint('n')} n.*, parent.depth + 1 FROM nodes n JOIN subtree parent ON n.parent_id = parent.id
     WHERE n.id <> n.parent_id AND n.vault_id = parent.vault_id
       ${includeTrashed ? sql`` : sql`AND n.deleted_at IS NULL`}
       AND parent.depth < ${sql.lit(LIMITS.TREE_MAX_DEPTH)}
-  ) SELECT * FROM subtree ORDER BY depth, id`.execute(db)
-  ).rows;
+  ) SELECT * FROM subtree ORDER BY depth, id`;
 }
 
 /** Cycle checks use the new parent's ancestor chain inside the vault lock. */
@@ -85,14 +112,24 @@ export async function ancestorsContain(
   parentId: Buffer,
   movingId: Buffer,
 ): Promise<boolean> {
-  const result = await sql<{ found: number }>`WITH RECURSIVE ancestors AS (
+  return (await ancestorsStatement(parentId, movingId).execute(db)).rows.length !== 0;
+}
+
+/**
+ * The statement {@link ancestorsContain} runs; shared with plan inspection. It climbs by primary key,
+ * the one recursive walk over `nodes` that is not a descendant walk.
+ */
+export function ancestorsStatement(
+  parentId: Buffer,
+  movingId: Buffer,
+): RawBuilder<{ found: number }> {
+  return sql<{ found: number }>`WITH RECURSIVE ancestors AS (
     SELECT id, parent_id, 0 AS depth FROM nodes WHERE id = ${parentId}
     UNION ALL
     SELECT n.id, n.parent_id, parent.depth + 1
     FROM nodes n JOIN ancestors parent ON n.id = parent.parent_id
     WHERE parent.id <> parent.parent_id AND parent.depth < ${sql.lit(LIMITS.TREE_MAX_DEPTH)}
-  ) SELECT 1 AS found FROM ancestors WHERE id = ${movingId} LIMIT 1`.execute(db);
-  return result.rows.length !== 0;
+  ) SELECT 1 AS found FROM ancestors WHERE id = ${movingId} LIMIT 1`;
 }
 
 /** All per-note fields and attribution are joined once for the entire page. */

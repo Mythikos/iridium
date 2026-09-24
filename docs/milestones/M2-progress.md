@@ -113,6 +113,20 @@ surfaced, because each one hid the next.
   no drain, no flush" promises. A crash point is now observed by the process exiting without a clean
   status, which nothing else in that test produces; the eight points that leave the process alive
   keep the logged consumption.
+- **A descendant walk re-read the whole vault once per node.** The first M2 rehearsal's
+  `mysql-matrix-extended (property, 300)` failed `persistence.model.prop` with a note create
+  answering `503 unavailable`, a statement past the 10 s query deadline. The counterexample `[[]]`
+  mattered only because a note with a link builds the projection's vault index inside its
+  structural transaction, and by then the fixture vault held 4,880 notes, all under the root. A
+  root-privileged dump of InnoDB's transactions at the moment of refusal named the statement: the
+  recursive path CTE, holding no lock and waiting on none. The optimizer costs a recursive member
+  against a one-row estimate of the CTE, and in a flat vault the parent index's rows-per-key is the
+  whole vault, so from about 3,000 notes it chose `ix_nodes_vault_deleted` or `ix_nodes_vault_name`
+  and scanned every live node once per node reached: 15 s at 4,880 notes on both lines. The five
+  descendant walks now name `ix_nodes_vault_parent` in their recursive member with MySQL's
+  `JOIN_INDEX` hint, and the same walk takes 10 ms. `tree.descent-plan.integration` plans each walk
+  on both lines; with the hint removed, all seven cases fail on 8.4.11 and six on 9.7.2; `tree.paths.integration`'s 10,000-node budget had not
+  caught it because its generated tree is branched (03-data-model.md §6.3).
 
 ## Remaining exit work
 

@@ -8,14 +8,16 @@ import {
   type ResolvedLink,
   type VaultIndexSnapshot,
 } from '@iridium/markdown';
-import { sql, type Kysely } from 'kysely';
+import { sql, type Kysely, type RawBuilder } from 'kysely';
 
 import type { Database } from '../db/schema.ts';
 import type { ServerLogger } from '../ops/logging.ts';
 import { derivePath } from '../tree/paths.ts';
+import { childLookupHint } from '../tree/queries.ts';
 import { IndexedVaultIndex } from './indexed-lookups.ts';
 
-interface PathRow {
+/** One note's path, as the snapshot reads it. */
+export interface PathRow {
   readonly id: Buffer;
   readonly name: string;
   readonly path: string;
@@ -50,6 +52,22 @@ async function entryCount(db: Kysely<Database>, vault: Buffer): Promise<number> 
     SELECT id FROM attachments WHERE vault_id=${vault} AND live=1 AND path_hint IS NOT NULL LIMIT ${maximum - count}
   ) candidates`.execute(db);
   return count + Number(attachments.rows[0]?.entries ?? 0);
+}
+
+/**
+ * Every live note's path below the vault root, one row past the snapshot cap so the caller can tell
+ * the snapshot would not fit. Shared with plan inspection so the contract observes this statement.
+ */
+export function vaultNotePaths(rootId: Buffer, vaultId: Buffer): RawBuilder<PathRow> {
+  return sql<PathRow>`WITH RECURSIVE paths AS (
+    SELECT id,parent_id,name,kind,CAST('' AS CHAR(${sql.lit(LIMITS.NODE_PATH_MAX_CHARS)})) AS path,0 AS depth
+      FROM nodes WHERE id=${rootId} AND deleted_at IS NULL
+    UNION ALL
+    SELECT ${childLookupHint('n')} n.id,n.parent_id,n.name,n.kind,CONCAT(p.path,IF(p.path='','','/'),n.name),p.depth+1
+      FROM nodes n JOIN paths p ON n.parent_id=p.id
+      WHERE n.id<>n.parent_id AND n.vault_id=${vaultId} AND n.deleted_at IS NULL
+        AND p.depth<${sql.lit(LIMITS.TREE_MAX_DEPTH)}
+  ) SELECT id,name,path FROM paths WHERE kind='note' ORDER BY id LIMIT ${Math.floor(LIMITS.VAULT_INDEX_MAX_ENTRIES / 2) + 1}`;
 }
 
 /** Each candidate array is independently limited; concurrent changes can only select the fallback. */
@@ -99,17 +117,7 @@ export async function projectionIndex(
   };
   const count = await entryCount(db, source.vault_id);
   if (count > LIMITS.VAULT_INDEX_MAX_ENTRIES) return indexed(count);
-  const paths = await sql<PathRow>`WITH RECURSIVE paths AS (
-    SELECT id,parent_id,name,kind,CAST('' AS CHAR(${sql.lit(LIMITS.NODE_PATH_MAX_CHARS)})) AS path,0 AS depth
-      FROM nodes WHERE id=${source.root_node_id} AND deleted_at IS NULL
-    UNION ALL
-    SELECT n.id,n.parent_id,n.name,n.kind,CONCAT(p.path,IF(p.path='','','/'),n.name),p.depth+1
-      FROM nodes n JOIN paths p ON n.parent_id=p.id
-      WHERE n.id<>n.parent_id AND n.vault_id=${source.vault_id} AND n.deleted_at IS NULL
-        AND p.depth<${sql.lit(LIMITS.TREE_MAX_DEPTH)}
-  ) SELECT id,name,path FROM paths WHERE kind='note' ORDER BY id LIMIT ${Math.floor(LIMITS.VAULT_INDEX_MAX_ENTRIES / 2) + 1}`.execute(
-    db,
-  );
+  const paths = await vaultNotePaths(source.root_node_id, source.vault_id).execute(db);
   let entries = paths.rows.length * 2;
   if (entries > LIMITS.VAULT_INDEX_MAX_ENTRIES) return indexed(entries);
   const aliases = await sql<{ note_id: Buffer; alias: string }>`SELECT p.note_id,a.alias

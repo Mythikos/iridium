@@ -9,12 +9,13 @@ import {
   type VaultId,
 } from '@iridium/contracts';
 import { queryTitleTerms, toBooleanQuery } from '@iridium/markdown/search';
-import { sql, type Kysely, type Transaction } from 'kysely';
+import { sql, type Kysely, type RawBuilder, type Transaction } from 'kysely';
 
 import { idBytes } from '../auth/ids.ts';
 import type { Database } from '../db/schema.ts';
-import { cursorInvalid, type CursorCodec } from '../mcp/cursor.ts';
+import { cursorInvalid, type CursorCodec, type CursorKeyPart } from '../mcp/cursor.ts';
 import type { ReindexContext, ReindexSelection } from '../projection/reindex.ts';
+import { childLookupHint } from '../tree/queries.ts';
 
 /** Content indexing follows the exact projection revision inside its committing transaction. */
 export interface SearchDocument {
@@ -68,7 +69,8 @@ export interface SearchSnippetSource {
     readonly frontmatterRaw?: string | null;
   }): Promise<readonly SearchSnippet[]>;
 }
-interface RankedRow {
+/** One ranked search candidate, as {@link rankedSearchStatement} returns it. */
+export interface RankedRow {
   readonly note_id: Buffer;
   readonly vault_id: Buffer;
   readonly vault_name: string;
@@ -82,6 +84,86 @@ interface RankedRow {
   readonly content_hash: Buffer;
   readonly frontmatter_raw: string | null;
 }
+/**
+ * Paths of every node in the readable vaults, from each root down; the ranked query joins notes to
+ * it.
+ *
+ * @param acl The readable vault ids, already joined as SQL values.
+ */
+function searchTreePathsCte(acl: RawBuilder<unknown>): RawBuilder<unknown> {
+  return sql`tree_paths AS (
+      SELECT n.id,n.parent_id,n.name,n.vault_id,n.deleted_at,CAST('' AS CHAR(${sql.lit(LIMITS.NODE_PATH_MAX_CHARS)})) AS path,0 AS depth
+      FROM nodes n JOIN vaults v ON v.root_node_id=n.id WHERE v.id IN (${acl}) AND v.status IN ('active','archived')
+      UNION ALL
+      SELECT ${childLookupHint('n')} n.id,n.parent_id,n.name,n.vault_id,n.deleted_at,CONCAT(p.path,'/',n.name),p.depth+1
+      FROM nodes n JOIN tree_paths p ON n.parent_id=p.id AND n.vault_id=p.vault_id
+      WHERE n.id<>n.parent_id AND n.deleted_at IS NULL AND p.depth<${sql.lit(LIMITS.TREE_MAX_DEPTH)}
+    )`;
+}
+
+/**
+ * The ranked search statement over the readable vaults, one row past the page so the caller can tell
+ * whether another page exists. Shared with plan inspection so the contract observes this statement.
+ *
+ * @param input.vaultIds The readable vault ids, deduplicated, sorted and non-empty.
+ * @param input.after The validated `[score, noteIdHex]` keyset, or `null` for the first page.
+ */
+export function rankedSearchStatement(input: {
+  readonly parsed: ParsedSearchQuery;
+  readonly vaultIds: readonly string[];
+  readonly pathPrefix: string | undefined;
+  readonly limit: number;
+  readonly after: readonly CursorKeyPart[] | null;
+}): RawBuilder<RankedRow> {
+  const { parsed, after, limit } = input;
+  const scopePrefix = input.pathPrefix;
+  const booleanQuery = toBooleanQuery(parsed);
+  const titleTerms = queryTitleTerms(parsed);
+  const acl = sql.join(input.vaultIds.map(idBytes));
+  const common = [
+    sql`s.vault_id IN (${acl})`,
+    sql`n.deleted_at IS NULL`,
+    sql`v.status IN ('active','archived')`,
+  ];
+  for (const prefix of [scopePrefix, parsed.operators['path']]) {
+    if (prefix !== undefined) {
+      const path = pathPrefix(prefix);
+      if (path !== '/')
+        common.push(sql`(n.path = ${path} OR n.path LIKE ${escapeLike(path) + '/%'} ESCAPE '!')`);
+    }
+  }
+  const filename = parsed.operators['file'];
+  if (filename !== undefined)
+    common.push(
+      sql`n.name LIKE ${'%' + escapeLike(filename.replace(/\.md$/i, '')) + '%'} ESCAPE '!'`,
+    );
+  for (const term of titleTerms)
+    common.push(sql`s.title LIKE ${'%' + escapeLike(term) + '%'} ESCAPE '!'`);
+  // A one-character negative is also absent from the FULLTEXT index; the explicit predicate
+  // keeps it meaningful on title fallback and filter-only searches.
+  for (const term of parsed.negations)
+    common.push(
+      sql`CONCAT(s.title, '\n', s.body_text) NOT LIKE ${'%' + escapeLike(term) + '%'} ESCAPE '!'`,
+    );
+  const hasFullTextPositive =
+    parsed.phrases.length > 0 || parsed.terms.some((term) => Array.from(term).length > 1);
+  const match = sql<number>`MATCH(s.title,s.body_text) AGAINST (${booleanQuery} IN BOOLEAN MODE)`;
+  const score = hasFullTextPositive ? match : sql<number>`0`;
+  const columns = sql`s.note_id,s.vault_id,v.name AS vault_name,n.path,s.title,s.revision,d.head_seq,s.updated_at,p.markdown,p.content_hash,p.frontmatter_raw`;
+  const joins = sql`FROM note_search s JOIN tree_paths n ON n.id=s.note_id JOIN vaults v ON v.id=s.vault_id
+    JOIN note_projections p ON p.note_id=s.note_id AND p.revision=s.revision JOIN note_docs d ON d.note_id=s.note_id`;
+  const conditions = sql.join(common, sql` AND `);
+  const boundary =
+    after !== null && typeof after[0] === 'number' && typeof after[1] === 'string'
+      ? sql`(score < ${after[0]} OR (score = ${after[0]} AND note_id > ${Buffer.from(after[1], 'hex')}))`
+      : sql`TRUE`;
+  return sql<RankedRow>`WITH RECURSIVE ${searchTreePathsCte(acl)}, ranked AS (
+    SELECT ${columns},${score} AS score ${joins} WHERE ${conditions} AND ${hasFullTextPositive ? sql`${match}>0` : sql`FALSE`}
+    UNION ALL
+    SELECT ${columns},0 AS score ${joins} WHERE ${conditions} AND ${hasFullTextPositive ? sql`FALSE` : sql`TRUE`}
+  ) SELECT * FROM ranked WHERE ${boundary} ORDER BY score DESC,note_id ASC LIMIT ${limit + 1}`;
+}
+
 function escapeLike(value: string): string {
   return value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_');
 }
@@ -135,11 +217,6 @@ export class MysqlFulltextSearch implements SearchIndex {
     scope: SearchScope,
     page: SearchIndexPage,
   ): Promise<SearchPage> {
-    const parsed = {
-      query: parsedQuery,
-      booleanQuery: toBooleanQuery(parsedQuery),
-      titleTerms: queryTitleTerms(parsedQuery),
-    };
     const vaultIds = scope.vaultIds,
       codec = page.cursors,
       principalKey = page.principalKey;
@@ -150,7 +227,6 @@ export class MysqlFulltextSearch implements SearchIndex {
       limit: page.limit,
       snippetChars: page.snippetChars,
     };
-    const { booleanQuery, titleTerms } = parsed;
     const ids = [...new Set(vaultIds)].toSorted();
     const filter = {
       q: query.q,
@@ -172,60 +248,14 @@ export class MysqlFulltextSearch implements SearchIndex {
         !/^[0-9a-f]{32}$/.test(after[1]))
     )
       throw cursorInvalid('Invalid search keyset.');
-    if (ids.length === 0) return { results: [], query: parsed.query };
-    const acl = sql.join(ids.map(idBytes));
-    const common = [
-      sql`s.vault_id IN (${acl})`,
-      sql`n.deleted_at IS NULL`,
-      sql`v.status IN ('active','archived')`,
-    ];
-    for (const prefix of [query.pathPrefix, parsed.query.operators['path']]) {
-      if (prefix !== undefined) {
-        const path = pathPrefix(prefix);
-        if (path !== '/')
-          common.push(sql`(n.path = ${path} OR n.path LIKE ${escapeLike(path) + '/%'} ESCAPE '!')`);
-      }
-    }
-    const filename = parsed.query.operators['file'];
-    if (filename !== undefined)
-      common.push(
-        sql`n.name LIKE ${'%' + escapeLike(filename.replace(/\.md$/i, '')) + '%'} ESCAPE '!'`,
-      );
-    for (const term of titleTerms)
-      common.push(sql`s.title LIKE ${'%' + escapeLike(term) + '%'} ESCAPE '!'`);
-    // A one-character negative is also absent from the FULLTEXT index; the explicit predicate
-    // keeps it meaningful on title fallback and filter-only searches.
-    for (const term of parsed.query.negations)
-      common.push(
-        sql`CONCAT(s.title, '\n', s.body_text) NOT LIKE ${'%' + escapeLike(term) + '%'} ESCAPE '!'`,
-      );
-    const hasFullTextPositive =
-      parsed.query.phrases.length > 0 ||
-      parsed.query.terms.some((term) => Array.from(term).length > 1);
-    const match = sql<number>`MATCH(s.title,s.body_text) AGAINST (${booleanQuery} IN BOOLEAN MODE)`;
-    const score = hasFullTextPositive ? match : sql<number>`0`;
-    const columns = sql`s.note_id,s.vault_id,v.name AS vault_name,n.path,s.title,s.revision,d.head_seq,s.updated_at,p.markdown,p.content_hash,p.frontmatter_raw`;
-    const joins = sql`FROM note_search s JOIN tree_paths n ON n.id=s.note_id JOIN vaults v ON v.id=s.vault_id
-      JOIN note_projections p ON p.note_id=s.note_id AND p.revision=s.revision JOIN note_docs d ON d.note_id=s.note_id`;
-    const conditions = sql.join(common, sql` AND `);
-    const boundary =
-      after !== null && typeof after[0] === 'number' && typeof after[1] === 'string'
-        ? sql`(score < ${after[0]} OR (score = ${after[0]} AND note_id > ${Buffer.from(after[1], 'hex')}))`
-        : sql`TRUE`;
-    const found = await sql<RankedRow>`WITH RECURSIVE tree_paths AS (
-      SELECT n.id,n.parent_id,n.name,n.vault_id,n.deleted_at,CAST('' AS CHAR(${sql.lit(LIMITS.NODE_PATH_MAX_CHARS)})) AS path,0 AS depth
-      FROM nodes n JOIN vaults v ON v.root_node_id=n.id WHERE v.id IN (${acl}) AND v.status IN ('active','archived')
-      UNION ALL
-      SELECT n.id,n.parent_id,n.name,n.vault_id,n.deleted_at,CONCAT(p.path,'/',n.name),p.depth+1
-      FROM nodes n JOIN tree_paths p ON n.parent_id=p.id AND n.vault_id=p.vault_id
-      WHERE n.id<>n.parent_id AND n.deleted_at IS NULL AND p.depth<${sql.lit(LIMITS.TREE_MAX_DEPTH)}
-    ), ranked AS (
-      SELECT ${columns},${score} AS score ${joins} WHERE ${conditions} AND ${hasFullTextPositive ? sql`${match}>0` : sql`FALSE`}
-      UNION ALL
-      SELECT ${columns},0 AS score ${joins} WHERE ${conditions} AND ${hasFullTextPositive ? sql`FALSE` : sql`TRUE`}
-    ) SELECT * FROM ranked WHERE ${boundary} ORDER BY score DESC,note_id ASC LIMIT ${query.limit + 1}`.execute(
-      this.#database(),
-    );
+    if (ids.length === 0) return { results: [], query: parsedQuery };
+    const found = await rankedSearchStatement({
+      parsed: parsedQuery,
+      vaultIds: ids,
+      pathPrefix: query.pathPrefix,
+      limit: query.limit,
+      after,
+    }).execute(this.#database());
     const selected = found.rows.slice(0, query.limit);
     const results = await Promise.all(
       selected.map(async (row) => ({
@@ -243,7 +273,7 @@ export class MysqlFulltextSearch implements SearchIndex {
           revision: row.revision,
           markdown: row.markdown,
           contentHash: row.content_hash.toString('hex'),
-          query: parsed.query,
+          query: parsedQuery,
           snippetChars: query.snippetChars,
           frontmatterRaw: row.frontmatter_raw,
         }),
@@ -252,7 +282,7 @@ export class MysqlFulltextSearch implements SearchIndex {
     const last = selected.at(-1);
     return {
       results,
-      query: parsed.query,
+      query: parsedQuery,
       ...(found.rows.length > query.limit && last !== undefined
         ? {
             nextCursor: codec.issue({

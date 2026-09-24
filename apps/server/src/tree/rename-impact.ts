@@ -4,7 +4,7 @@ import { sql, type RawBuilder } from 'kysely';
 
 import { idBytes } from '../auth/ids.ts';
 import { linkDto, type IndexedLinkRow } from '../links/dto.ts';
-import { pathsCte, type TreeExecutor } from './queries.ts';
+import { childLookupHint, pathsCte, type TreeExecutor } from './queries.ts';
 
 /** One SQL aggregate bucket; the runtime guard also refuses corrupt or unrecognized statuses. */
 export interface AffectedLinkCount {
@@ -50,7 +50,7 @@ function affectedNodesCte(vaultId: Buffer, nodeId: Buffer): RawBuilder<unknown> 
   return sql`affected_nodes AS (
     SELECT id, parent_id, 0 AS depth FROM nodes WHERE id = ${nodeId} AND vault_id = ${vaultId}
     UNION ALL
-    SELECT child.id, child.parent_id, parent.depth + 1
+    SELECT ${childLookupHint('child')} child.id, child.parent_id, parent.depth + 1
     FROM nodes child JOIN affected_nodes parent ON child.parent_id = parent.id
     WHERE child.id <> child.parent_id AND child.vault_id = ${vaultId}
       AND parent.depth < ${sql.lit(LIMITS.TREE_MAX_DEPTH)}
@@ -84,6 +84,17 @@ export async function renameImpact(
   return summariseAffectedLinks(counts.rows, samples.rows.map(linkDto));
 }
 
+/** How many nodes a rename or move of `nodeId` reaches; shared with plan inspection. */
+export function affectedNodeCount(
+  vaultId: Buffer,
+  nodeId: Buffer,
+): RawBuilder<{ readonly total: number | string }> {
+  return sql<{
+    readonly total: number | string;
+  }>`WITH RECURSIVE ${affectedNodesCte(vaultId, nodeId)}
+    SELECT COUNT(*) AS total FROM affected_nodes`;
+}
+
 /** SQL owns filtering and the keyset order. The caller supplies one repeatable-read transaction. */
 export async function readAffectedLinkPage(
   db: TreeExecutor,
@@ -97,8 +108,7 @@ export async function readAffectedLinkPage(
 ): Promise<{ readonly rows: readonly Link[]; readonly subtreeNodeIds: number }> {
   const vault = idBytes(vaultId);
   const subtree = affectedNodesCte(vault, idBytes(nodeId));
-  const count = await sql<{ readonly total: number | string }>`WITH RECURSIVE ${subtree}
-    SELECT COUNT(*) AS total FROM affected_nodes`.execute(db);
+  const count = await affectedNodeCount(vault, idBytes(nodeId)).execute(db);
   const after = options.after;
   const result = await sql<IndexedLinkRow>`WITH RECURSIVE ${pathsCte(vault, true)}, ${subtree}
     SELECT links.*, tree_paths.path AS from_path ${affectedLinksFrom(vault)}
