@@ -72,7 +72,7 @@
       "section": "04-auth-and-access-control.md",
       "sinceMilestone": "M1",
       "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
-      "absenceAssertion": "the `Principal` union is exactly `user | token | system`; no route declares `{ public: true }` outside the documented public set; no `share` or `publish` route, command or tool"
+      "absenceAssertion": "the `Principal` union is exactly `user | token | system`; no route declares `{ public: true }` outside the public-route allowance, a map from each public path to the milestone its route is due at (listed under \"Milestone phasing\" below): the forward check refuses any registered public route the map does not name, and the reverse check fails for an entry due at or below the effective test target that the boot did not register, each direction with an in-file poison case; no `share` or `publish` route, command or tool"
     },
     {
       "id": "cross-vault-moves",
@@ -112,7 +112,7 @@
       "section": "07-client-applications.md",
       "sinceMilestone": "M4",
       "source": "01-vision-scope-and-principles.md §4.4 (deferral table)",
-      "absenceAssertion": "no `react-native`, Capacitor or Cordova dependency in any workspace manifest; no `@media` breakpoint below the desktop floor declared in `packages/ui/src/styles/tokens.css`; no Playwright project with a viewport narrower than that floor (the projects are exactly `setup`, `chromium` and `electron` — see the *Cross-browser support* row)"
+      "absenceAssertion": "no `react-native`, Capacitor or Cordova dependency in any workspace manifest; no `@media` breakpoint below the desktop floor declared in `packages/ui/src/theme/tokens.css`; no Playwright project with a viewport narrower than that floor (the projects are exactly `setup`, `chromium` and `electron` — see the *Cross-browser support* row)"
     },
     {
       "id": "enterprise-sso",

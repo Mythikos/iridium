@@ -6,14 +6,14 @@ This section is the build specification for everything that touches Markdown tex
 
 | # | Invariant | Where it is enforced | Test |
 |---|---|---|---|
-| I1 | The note text of record (the Y.Text `content`) is LF-only, has one leading encoding BOM removed (any subsequent U+FEFF is content), contains no U+0000, and is never rewritten by parsing, previewing, projecting, importing or exporting | `normalizeSource` at create/import/restore/repair; client `\r` guard; compaction scan (`05-collaboration-and-durability.md`) | `markdown.no-rewrite.prop`, `collab.lf-invariant`, `markdown.roundtrip.prop` |
+| I1 | The note text of record (the Y.Text `content`) is LF-only, has one leading encoding BOM removed (any subsequent U+FEFF is content), contains no U+0000, and is never rewritten by parsing, previewing, projecting, importing or exporting | `normalizeSource` at create/import/restore/repair; client `\r` guard; compaction scan (`05-collaboration-and-durability.md`) | `markdown.no-rewrite.prop`, `collab.lf-invariant.guard`, `markdown.roundtrip.prop` |
 | I2 | No AST→Markdown serializer exists anywhere in the codebase; every mutation of note text is a text edit driven by mdast offsets | oxlint `no-restricted-imports` bans `remark-stringify`, `mdast-util-to-markdown`, `gray-matter` repo-wide | `deps.banned-imports` |
 | I3 | `rehype-sanitize` with `iridiumSanitizeSchema` is the single security boundary for rendered Markdown and runs identically in the browser worker and in the server worker; nothing runs after it except the hast→React mapping | `toPreviewTree` is the product preview entry point and its last transform is the sanitizer | `markdown.sanitize-schema.unit`, `markdown.xss-corpus.unit` |
 | I4 | Untrusted Markdown is never parsed on the Node main thread or on the browser UI thread | server piscina pool, browser Web Worker; lint rule bans `@iridium/markdown` parse imports outside worker entry files | `projection.worker-isolation.unit` |
 | I5 | Every consumer of "what the note says" (REST `GET /notes/:id/markdown`, MCP `get_note`, export, search, mirror) reads `note_projections.markdown` at a recorded `revision`; never the live Y.Doc | `ContentReadCore` (A37) | `content.read-model.integration` |
 | I6 | Original bytes are restorable: `notes.original_eol` and `notes.had_bom` are recorded once and export restores them by default | `NoteService.initialize`, export job | `markdown.roundtrip.prop`, `export-roundtrip.e2e` |
 | I7 | Obsidian-specific syntax is detected, reported and indexed, never emulated or rewritten in MVP | `detectObsidianSyntax`, import report, `note_links.kind` | `obsidian.detect.unit`, `transfer.fixtures.integration` |
-| I8 | Attachments are content-addressed, immutable, served only through the server with hardening headers, and deleted only by an explicit decision | `attachments/*`, `StorageDriver` | `attachments.security`, `attachments.unreferenced-report` |
+| I8 | Attachments are content-addressed, immutable, served only through the server with hardening headers, and deleted only by an explicit decision | `attachments/*`, `StorageDriver` | `attachments.security.integration`, `attachments.unreferenced-report.integration` |
 | I9 | The server never writes to a directory outside its own volumes; overwrite decisions belong to the desktop host and the user | export job writes only under `EXPORTS_DIR`; Electron main handles the save dialog | `export-roundtrip.e2e` (desktop) |
 
 ## 2. The `@iridium/markdown` package
@@ -258,7 +258,7 @@ Exact decisions encoded above:
 | Comments / doctype | removed | |
 | `ancestors` | table parts require `table`; `li` requires `ol`/`ul` | structural sanity |
 
-`hast-util-sanitize` applies protocol checks after percent-decoding and whitespace/control-character stripping, and the XSS corpus (`fixtures/hostile/*.md`) asserts at the hast level that: `javascript:`, `vbscript:`, `data:`, `file:`, `ftp:`, `tel:` hrefs and `data:image/*` srcs are removed; raw `<script>`, `<img onerror>`, `<iframe>`, `<svg onload>`, `<math>`, `<meta http-equiv>`, `<base>`, `<form>` are escaped text; ids not prefixed `user-content-` are dropped; `%0A`, `&#x6A;avascript:`, tab/newline-embedded schemes, fullwidth colons and RTL overrides do not smuggle a scheme through; 10 000 nested `>` and 200 000-line paragraphs are rejected by `prescan` before parsing. The same corpus runs in Chromium component tests (`preview.inertness.component.test.tsx`, real DOM, no script executes, no navigation, `window.iridium` unreachable) and in the web and Electron E2E suites (`security.hostile-markdown`).
+`hast-util-sanitize` applies protocol checks after percent-decoding and whitespace/control-character stripping, and the XSS corpus (`fixtures/hostile/*.md`) asserts at the hast level that: `javascript:`, `vbscript:`, `data:`, `file:`, `ftp:`, `tel:` hrefs and `data:image/*` srcs are removed; raw `<script>`, `<img onerror>`, `<iframe>`, `<svg onload>`, `<math>`, `<meta http-equiv>`, `<base>`, `<form>` are escaped text; ids not prefixed `user-content-` are dropped; `%0A`, `&#x6A;avascript:`, tab/newline-embedded schemes, fullwidth colons and RTL overrides do not smuggle a scheme through; 10 000 nested `>` and 200 000-line paragraphs are rejected by `prescan` before parsing. The same corpus runs in Chromium component tests (`preview.inertness.component`, real DOM, no script executes, no navigation, `window.iridium` unreachable) and in the web and Electron E2E suites (`security.hostile-markdown.e2e`, `desktop.hostile-markdown.e2e`).
 
 DOMPurify 3.4.15 is not on the render path. It exists only in `@iridium/markdown-react/src/html-sink.ts` for any future HTML-string sink (mermaid `srcdoc`, HTML export preview) with the fixed configuration `{ USE_PROFILES: { html: true }, FORBID_TAGS: ['form','input','style','math','svg','iframe','object','embed'], FORBID_ATTR: ['style'], CUSTOM_ELEMENT_HANDLING: { tagNameCheck: null, attributeNameCheck: null, allowCustomizedBuiltInElements: false }, ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|iridium-attachment:|\/api\/v1\/vaults\/)/i, RETURN_TRUSTED_TYPE: false }`. No MVP feature calls it (printing renders the React tree); the module ships with its own test so the first consumer cannot introduce it unconfigured.
 
@@ -531,7 +531,7 @@ The four entry points — the only places `normalizeSource` is called on note te
 | Revision restore | `notes/revisions.ts` (the restore target text) | unchanged (restore never alters the recorded original) |
 | `iridium doctor --repair-content` | `notes/content-repair.ts` (A22) | unchanged |
 
-After initialization the live text can only change through CRDT updates, and three independent guards keep it normalized: the editor strips `\r` on paste and blocks `\r` insertion (A41), the compactor rejects a document whose markdown contains `\r` or whose `toDelta()` carries attributes or embeds (A22, `notes.content_invalid`), and `collab.lf-invariant` asserts it end to end.
+After initialization the live text can only change through CRDT updates, and three independent guards keep it normalized: the editor strips `\r` on paste and blocks `\r` insertion (A41), the compactor rejects a document whose markdown contains `\r` or whose `toDelta()` carries attributes or embeds (A22, `notes.content_invalid`), and `collab.lf-invariant.guard` refuses any server note, transfer or collaboration source that produces a `\r`; the corpus-wide `note_projections.markdown NOT LIKE '%\r%'` assertion is `transfer.fixtures.integration`'s.
 
 ### 4.2 `normalizeSource`
 
@@ -950,7 +950,7 @@ Every entry path is validated before it is used for anything, in the scan worker
 | `empty_segment` | two consecutive `/` |
 | `invalid_name` | a segment that the tree name rules reject for any other reason (A12) |
 
-Archive-level guards, all producing job failure rather than findings when they indicate an attack rather than a bad file: an encrypted entry (`unsupported_file` finding, skipped), a declared uncompressed size that disagrees with the streamed size (`validateEntrySizes`, job fails), a total uncompressed size above 2 GiB or a compression ratio above 100:1 with more than 256 MiB expanded (job fails with `payload_too_large`, logged as a possible ZIP bomb), duplicate entry names (second occurrence becomes a `filename_collision` finding), more than 50 000 entries (job fails). `import.unsafe-paths` runs the whole table with POSIX and Windows fixtures.
+Archive-level guards, all producing job failure rather than findings when they indicate an attack rather than a bad file: an encrypted entry (`unsupported_file` finding, skipped), a declared uncompressed size that disagrees with the streamed size (`validateEntrySizes`, job fails), a total uncompressed size above 2 GiB or a compression ratio above 100:1 with more than 256 MiB expanded (job fails with `payload_too_large`, logged as a possible ZIP bomb), duplicate entry names (second occurrence becomes a `filename_collision` finding), more than 50 000 entries (job fails). `import.unsafe-paths.unit` runs the whole table with POSIX and Windows fixtures.
 
 ### 7.6 Classification
 
@@ -1101,7 +1101,7 @@ GET  /api/v1/exports/:jobId/download   → the artifact
 
 `export:read` on the vault (every role has it, including `viewer` — the spec grants viewers download/export). The request body is the one shape defined in `09-api-reference.md` §2.13, which is A45's: `scope` is the discriminated union `{ kind: 'vault' } | { kind: 'node', nodeId }` (the `node` form must name a live category of the vault; a note id is rejected with `422 validation_failed` because a single note is served by `GET /notes/:noteId/markdown`), and the resolved subtree root is persisted as `export_jobs.scope_node_id`. `includeTrashed` requires `history:read` and defaults to `false` (§8.3). An archived vault can still be exported (reads are allowed on archived vaults, A30) — this is the documented escape hatch for decommissioning.
 
-Only the requester (`jobs.requested_by`) or a server administrator may poll or download the job. Every export writes an audit event `export.created` with the scope and the option set, and one `access_log` row whose `note_ids` lists every note included, so "who took a copy of what" is answerable (A46, F14). `iridium_jobs_total{type="export",status}` tracks throughput.
+Only the requester (`jobs.requested_by`) or a server administrator may poll or download the job. Every export writes an audit event `export.created` with the scope and the option set, and one `access_log` row per exported note (`surface='export'`, `note_ids` `[that id]` with its `vault_id` and `revision`, carrying the `request_id` of the `POST` that queued the job), so "who took a copy of what" is answerable (A46, F14). The job writes those rows through `AccessLogWriter`'s durable method rather than its drop-oldest request queue, in batches of `ACCESS_LOG_FLUSH_ROWS` on the job's own `dbApp` connection that commit before the job reports success, so no export's record is truncated and no request row is evicted (`06-mcp-and-agent-access.md` D06-11, `03-data-model.md` D03-25). `iridium_jobs_total{type="export",status}` tracks throughput.
 
 Concurrency, stated identically here and in `09-api-reference.md` §2.13: at most `EXPORT_MAX_CONCURRENT` (default 2) export jobs *run* per process and at most one per vault; further requests queue, and a third concurrent job for the same principal is refused with `429 rate_limited` rather than queued behind the first two. Each artifact expires `retention.exportHours` after completion (the `server_settings.retention` field, default 24 h, written to `export_jobs.expires_at` when the job succeeds) and is deleted by the `transfer_cleanup` job, which nulls `artifact_key` and keeps the row and its manifest as the record that the export happened.
 
@@ -1369,7 +1369,7 @@ Environment keys (validated by `config/env.ts`, listed in `docs/ops/configuratio
 | `ATTACHMENT_UPLOAD_RATE` | `60` | uploads per minute per principal per vault |
 | `VAULT_INDEX_MAX_ENTRIES` | `100000` | above this a vault uses lazy link resolution (§5.2) |
 
-Constants in `@iridium/contracts/limits.ts` (shared by client and server, single source for the limits policy of A.1). The names are exactly those of the canonical limits table in `02-system-architecture.md` §7 — this section introduces no synonym, because `limits.single-source` and `limits.policy.unit` both check names, not values: `NOTE_HARD_MAX_UTF16 = 2_097_152`, `NOTE_SOFT_MAX_UTF16 = 1_000_000`, `MARKDOWN_SOURCE_MAX_BYTES = 2_097_152`, `MARKDOWN_BLOCKQUOTE_MAX_DEPTH = 32`, `MARKDOWN_LIST_INDENT_MAX_COLS = 64`, `MARKDOWN_LINES_PER_PARAGRAPH_MAX = 20_000`, `MARKDOWN_FOOTNOTE_REFS_MAX = 10_000`, `MARKDOWN_BRACKETS_MAX = 200_000`, `PROJECTION_TIMEOUT_SERVER_MS = 10_000` (env-overridable as `PROJECTION_TIMEOUT_MS`), `PROJECTION_TIMEOUT_CLIENT_MS = 2_000`, `PREVIEW_DEBOUNCE = [[65_536, 150], [524_288, 500], [Infinity, 1_500]]`, `SNIPPET_MAX_LINES = 3`, `SNIPPET_MAX_CHARS = 240`, `UPLOAD_MAX_BYTES = 52_428_800` (env-overridable as `MAX_UPLOAD_BYTES`), `IMPORT_UPLOAD_BATCH_FILES = 200`, `IMPORT_UPLOAD_BATCH_BYTES = 67_108_864`, `FM_TAG_MAX_LEN = 64`, `FM_TAGS_MAX = 200`, `FM_ALIAS_MAX_LEN = 255`, `FM_ALIASES_MAX = 100`.
+Constants in `@iridium/contracts/limits.ts` (shared by client and server, single source for the limits policy of A.1). The names are exactly those of the canonical limits table in `02-system-architecture.md` §7 — this section introduces no synonym, because `limits.single-source.guard` and `limits.policy.unit` both check names, not values: `NOTE_HARD_MAX_UTF16 = 2_097_152`, `NOTE_SOFT_MAX_UTF16 = 1_000_000`, `MARKDOWN_SOURCE_MAX_BYTES = 2_097_152`, `MARKDOWN_BLOCKQUOTE_MAX_DEPTH = 32`, `MARKDOWN_LIST_INDENT_MAX_COLS = 64`, `MARKDOWN_LINES_PER_PARAGRAPH_MAX = 20_000`, `MARKDOWN_FOOTNOTE_REFS_MAX = 10_000`, `MARKDOWN_BRACKETS_MAX = 200_000`, `PROJECTION_TIMEOUT_SERVER_MS = 10_000` (env-overridable as `PROJECTION_TIMEOUT_MS`), `PROJECTION_TIMEOUT_CLIENT_MS = 2_000`, `PREVIEW_DEBOUNCE = [[65_536, 150], [524_288, 500], [Infinity, 1_500]]`, `SNIPPET_MAX_LINES = 3`, `SNIPPET_MAX_CHARS = 240`, `UPLOAD_MAX_BYTES = 52_428_800` (env-overridable as `MAX_UPLOAD_BYTES`), `IMPORT_UPLOAD_BATCH_FILES = 200`, `IMPORT_UPLOAD_BATCH_BYTES = 67_108_864`, `FM_TAG_MAX_LEN = 64`, `FM_TAGS_MAX = 200`, `FM_ALIAS_MAX_LEN = 255`, `FM_ALIASES_MAX = 100`.
 
 ## 11. Fixtures and tests
 
@@ -1412,40 +1412,38 @@ All fixtures live in the repository and are consumed by both `@iridium/markdown`
 | `guards.no-inner-html.guard` | guard (grep) | no `dangerouslySetInnerHTML` in `@iridium/markdown-react` or `@iridium/ui` |
 | `preview.worker-only.unit` | unit (grep) | no UI-thread import of the parse entry points |
 | `projection.worker-isolation.unit` | unit | the server never calls `parseNote` outside a piscina worker entry |
-| `preview.inertness.component.test.tsx` | component (Chromium) | hostile fixtures render inert in a real DOM: no script, no navigation, no `window.iridium` reach; axe clean |
-| `projection.monotonic` | integration | out-of-order projection writes never regress a revision; `projected_seq` advances last |
-| `projection.title-after-rename` | integration | `note_search.title` follows a rename for notes without an H1 |
+| `preview.inertness.component` | component (Chromium) | hostile fixtures render inert in a real DOM: no script, no navigation, no `window.iridium` reach; axe clean |
+| `projection.monotonic.integration` | integration | out-of-order projection writes never regress a revision; `projected_seq` advances last |
+| `projection.title-after-rename.integration` | integration | `note_search.title` follows a rename for notes without an H1 |
 | `projection.reindex.integration` | integration | `--stale`, `--pipeline-version` and `--note` selections, throttling, and flush-before-project for loaded notes |
-| `search.snippets` | integration | stage 1 line numbers and ranges are exact |
+| `search.snippets.integration` | integration | stage 1 line numbers and ranges are exact |
 | `snippet.fallback.integration` | integration | `**ter**m`, a wrapped phrase, a table cell and an image `alt` all produce a mapped snippet |
-| `search.acl`, `search.staleness-hint` | integration | vault filter in SQL; the stale hint for `projected_seq < head_seq` |
+| `search.acl.integration`, `search.staleness-hint.integration` | integration | vault filter in SQL; the stale hint for `projected_seq < head_seq` |
 | `content.read-model.integration` | integration | REST, MCP and export return byte-identical markdown for the same revision |
 | `lock-order.integration` | integration | concurrent trash + edits + projections + audits never deadlock |
 | `transfer.fixtures.integration` | integration | the Obsidian sample vault scans and commits with the expected report, tree, attachments and links |
-| `import.unsafe-paths` | integration | every row of §7.5, with POSIX and Windows fixtures |
-| `import.unsafe-paths.unit` | unit | ratio and expanded-size guards fire before expansion |
+| `import.unsafe-paths.unit` | unit | every row of §7.5, with POSIX and Windows fixtures; ratio and expanded-size guards fire before expansion |
 | `import.classification.unit` | unit | the classification table of §7.6, including `.mdx`, `.txt`, noise files and an Iridium manifest |
 | `import.commit.integration` | integration | one note per file, `origin='import'` exactly once, no visible vault before the flip, idempotent resume after three kill points, collision policies |
-| `export.manifest` | integration | manifest keys, per-note revisions and hashes, warning codes, deterministic entry order |
+| `export.manifest.integration` | integration | manifest keys, per-note revisions and hashes, warning codes, deterministic entry order |
 | `export.sanitized-paths.unit` | unit | Windows-illegal name mapping and collision suffixing |
-| `attachments.security.integration` | integration | the acceptance rules of §9.3, including OOXML/ODF/CFB and every rejected class |
-| `attachments.security` | integration | header table of §9.4, cross-vault id access returns 404, SVG never `inline`, missing bytes return 503 |
+| `attachments.security.integration` | integration | the acceptance rules of §9.3, including OOXML/ODF/CFB and every rejected class; the header table of §9.4, cross-vault id access returns 404, SVG never `inline`, missing bytes return 503 |
 | `attachments.dedupe.integration` | integration | single-range requests, `If-None-Match` → 304, `ETag` stability |
-| `attachments.unreferenced-report` | integration | rows, revision-only references and orphan blobs; purge respects every guard |
+| `attachments.unreferenced-report.integration` | integration | rows, revision-only references and orphan blobs; purge respects every guard |
 | `mirror.integration` | integration | incremental writes, move handling, refusal on a non-empty directory, `--adopt` |
 | `import-report.e2e`, `export-roundtrip.e2e`, `attachments.e2e` | E2E (web + Electron) | the wizard, the decisions, the download/save flows, overwrite protection, paste/drag-drop upload |
-| `security.hostile-markdown` | E2E (web + Electron) | hostile notes execute nothing and reach no desktop privilege |
+| `security.hostile-markdown.e2e`, `desktop.hostile-markdown.e2e` | E2E (web, Electron) | hostile notes execute nothing and reach no desktop privilege |
 
 ### 11.3 Budgets measured in CI
 
 | Budget | Value | Where |
 |---|---|---|
-| Preview p95 (pilot p95 note size) | < 100 ms end to end in the worker | `perf.workspace` Playwright project; the documented switch criterion to markdown-it (A42) |
+| Preview p95 (pilot p95 note size) | < 100 ms end to end in the worker | `perf.workspace.e2e` (Playwright `chromium` project); the documented switch criterion to markdown-it (A42) |
 | `prescan` throughput | ≥ 250 MB/s (≈4 ms/MB) | unit benchmark |
 | Projection of a 100 KB note | < 400 ms in the worker | integration benchmark |
 | Preview worker bundle | ≤ 120 KB gzip (pipeline ≈ 50 KB + highlight ≈ 35 KB) | bundle assertion in `ci.yml` |
 | Import scan | ≥ 200 notes/s on the sample vault (4 vCPU) | `transfer.fixtures.integration` timing assertion |
-| Export | ≥ 20 MB/s of ZIP output | `export.manifest` timing assertion |
+| Export | ≥ 20 MB/s of ZIP output | `export.manifest.integration` timing assertion |
 | Projection timeout rate | < 1 % (alert rule) | `iridium_projection_timeouts_total` |
 
 ### 11.4 Milestone obligations
@@ -1497,5 +1495,5 @@ Decisions the skeleton does not settle. Ids are section-scoped for merge into `1
 | D08-29 | The highlighting registry is a fixed set of 21 grammars with an explicit alias map and `plainText` for `mermaid`, `math`, `dataview`, `dataviewjs`, `query`, `base`, `canvas`; no auto-detection, no lazy per-language loading in MVP | S11 measures the complete required payload; fixed lowlight registration avoids the unused common registry, keeps deterministic output, and leaves unknown languages as plain code |
 | D08-30 | The sanitizer schema replaces (never extends) `tagNames`, `attributes`, `protocols`, `ancestors` and `required`: 30 elements, no `data-*` wildcard, no `style`/`name`/`target`/`rel`, ids only under `^user-content-`, `href` limited to `http`/`https`/`mailto` and `src` to `http`/`https`, `tel:` and enterprise schemes excluded | deny-by-default against the exact element set the pipeline produces; every future widening is a reviewable diff against `markdown.sanitize-schema.unit` |
 | D08-31 | A valid same-note anchor is stored as `status='resolved'` with `resolved_node_id = from_note_id`; an anchor whose fragment matches none of the note's own headings is `broken`; every "who links here" query therefore carries `from_note_id <> resolved_node_id` | A43 closes the `note_links.status` vocabulary, so `anchor` cannot become a status, and `03-data-model.md` §9.5 requires exactly one resolved target on a `resolved` row — pointing an anchor at its own note satisfies both without a nullable-target special case in `doctor`, the backlinks query or the DTO |
-| D08-32 | The limits table of `02-system-architecture.md` §7 is the sole naming authority for `@iridium/contracts/limits.ts`; this section introduces no synonym, and `prescan` gains an explicit `MARKDOWN_SOURCE_MAX_BYTES` check on the UTF-8 byte length alongside the UTF-16 `NOTE_HARD_MAX_UTF16` check | `limits.single-source` and `limits.policy.unit` match on constant *names*, so two names for one limit make one of them an unreferenced constant and the other a compile error. The two 2 097 152 caps are genuinely different limits (bytes versus UTF-16 units); without the byte check the "2 MiB source" row of the policy had no enforcement site at all |
+| D08-32 | The limits table of `02-system-architecture.md` §7 is the sole naming authority for `@iridium/contracts/limits.ts`; this section introduces no synonym, and `prescan` gains an explicit `MARKDOWN_SOURCE_MAX_BYTES` check on the UTF-8 byte length alongside the UTF-16 `NOTE_HARD_MAX_UTF16` check | `limits.single-source.guard` and `limits.policy.unit` match on constant *names*, so two names for one limit make one of them an unreferenced constant and the other a compile error. The two 2 097 152 caps are genuinely different limits (bytes versus UTF-16 units); without the byte check the "2 MiB source" row of the policy had no enforcement site at all |
 | D08-33 | `note_links` stores `line` (1-based source line of the reference start, from mdast `position.start.line`) next to `start_offset`/`end_offset` | every link-facing DTO — `Link`, `affectedLinks.samples[]` — addresses source lines; deriving the line at read time would mean re-scanning `note_projections.markdown` on every backlinks, links, inbound-links and rename-impact response |

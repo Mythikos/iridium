@@ -1,6 +1,6 @@
 # A48 — Deployment topology: one server container, MySQL, an attachment volume, behind Caddy; hardened production compose; an air-gapped in-process TLS profile
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); Verification evidence **added 2026-09-24** (AG10).
 
 ## Context
 
@@ -31,6 +31,8 @@ Positive: a clean virtual machine plus `compose.prod.yaml` plus secrets produces
 ## Verification
 
 `ops.compose-prod.clean-vm` (nightly: boot `compose.prod.yaml` on a clean machine, reach `/readyz`, log in, edit a note, call `/mcp`); `proxied-stack.headers.mcp` (nightly, through both Caddy and nginx: `Mcp-Method`, `Mcp-Name` and `MCP-Protocol-Version` arrive intact, an absent `Mcp-Method` arrives absent rather than present-and-empty, and a `/collab` connection survives beyond the idle timeout under both proxies); `docker-image` (the image builds from the pruned lockfile with `--frozen-lockfile`, boots as a non-root user with `read_only: true`, writes only to the declared volumes, and answers `/readyz`) together with `supply-chain.sbom` (syft SBOM and grype policy scan on the pushed digest); `ops.trust-proxy.integration` (a spoofed `X-Forwarded-For` from an untrusted source does not change the rate-limit key); the air-gapped in-process TLS profile is exercised as a second mode of `ops.compose-prod.clean-vm`, which boots it without a proxy and drives REST, `/collab` and `/mcp` over Fastify's own `https` listener.
+
+**Added 2026-09-24 (AG10).** `ops.tls-profile.integration` proves the in-process TLS profile at M3, in process and in container mode, including the `node:http` options it shares with the plain listener; the second mode of `ops.compose-prod.clean-vm` remains its end-to-end evidence. This adds evidence and replaces no clause.
 
 ## References
 

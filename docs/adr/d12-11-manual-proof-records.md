@@ -1,0 +1,11 @@
+# D12-11: acceptance records for manual proofs
+
+Status: accepted; amended 2026-09-25: five manual-proof records, the fifth being `docs/acceptance/mcp-gui-clients.md` (AG10).
+
+**As accepted.** The four proofs that cannot be automated are recorded under `docs/acceptance/` with artefact hashes, exact versions and the reviewer's role, and referenced from the milestone exit record (table 13.4).
+
+**Amended 2026-09-25.** There are five such records. The fifth, `docs/acceptance/mcp-gui-clients.md`, is written before M4 exit and holds the GUI half of S9 that no machine can drive (AG10). It carries S9's criterion-1 checklist — tools listed; a note read by id and by path; a search; the rate limit; revocation failing the next call; the token never echoed; the tool list free of `authenticate` and `complete_authentication`; and no `/.well-known/` request in the server's path trace for that client's window — run for VS Code (with the workspace `.mcp.json` header drop #319528 recorded), Cursor, Windsurf, Claude Desktop through the bridge and through `mcp-remote`, and the claude.ai Request-headers beta, which needs the M4 staging origin and an organisation in the beta. Each entry records the Iridium version, build id and artefact hash, the exact client versions and the reviewer's role. The record's M8 section re-runs every GUI row and re-confirms S15's connector rows against the M8 release candidate, and each observation there carries an `iridiumVersion` at or above `0.8.0`, which `guards.mcp-client-versions.guard` checks at an effective target of M8. A client that fails takes S9's fallback within the milestone that observes the failure. Like the other four, the record discharges no spec §9 acceptance row and is named in no acceptance-map entry.
+
+A manual check with no artefact is not a check, and the GUI clients cannot be automated in CI; 12 §13.4's record is the plan's existing form for proofs a machine cannot perform, and the version floor makes the M8 re-observation a checked property rather than an intention.
+
+Source: the D12-11 amendment in [the decision log](../plan/13-decision-log.md), and D12-11 in [12-milestones.md](../plan/12-milestones.md), "Decisions made in this section"; the records are listed in [12 §13.4](../plan/12-milestones.md).

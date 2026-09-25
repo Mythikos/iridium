@@ -1,6 +1,6 @@
 # D10-33: collaboration owner lease scope
 
-Status: accepted, amended 2026-09-20.
+Status: accepted, amended 2026-09-20; amended 2026-09-25: credential revocation that every presentation re-reads from its row takes no owner lease.
 
 **D10-33 amendment, 2026-09-17 — schema scope.** MySQL advisory-lock names are server-wide, so a constant name incorrectly excludes independent deployments and per-worker test schemas. `ownerLockName` is `iridium_collab_owner:` followed by the 43-character unpadded base64url SHA-256 digest of the canonical schema name read on the reserved connection. The complete name is 64 ASCII characters. Resolve that name through `information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()` so MySQL's database-name comparison rules apply. There is no caller-selected lock key or environment override. Servers using the same schema still compete for exactly one lease; separate schemas can serve concurrently. The reservation, zero wait, readiness retry, denial, and drain ordering remain unchanged. The source exposes the resolved name as `lease.lockName` for diagnostics. Acquisition failures and shutdown racing acquisition must return the reserved connection without leaving a lock held.
 Source: the D10-33 amendment in [the decision log](../plan/13-decision-log.md). The acquisition and refusal protocol is owned by [the single-process ownership section](../plan/10-testing-and-quality.md#single-process-document-ownership).
@@ -22,3 +22,8 @@ save. Socket retries proceed independently. The fixture never forces reconnectio
 original documents and undo managers must survive, all edits must commit exactly once, and the
 overall 180 s case deadline remains. This changes that acceptance deadline explicitly; it does
 not change retry delays, fencing, durability, pool bounds or the intact-owner requirement.
+
+## Credential revocation
+
+**D10-33 amendment, 2026-09-25: the lease scope and credential revocation.** The owner lease covers connection-bound authorization — sessions, memberships, roles and user status — and documents: the state a serving process holds for open connections, epochs and queued writes (D04-14). Credential revocation that every presentation re-reads from its row — access tokens, OAuth consents and refresh tokens, and OAuth clients (A23) — takes no owner lease, because no serving-owned state depends on those rows and the fresh row read is what makes the next call fail. `iridium tokens revoke` and `revoke-all`, `iridium oauth consents revoke` and `iridium oauth clients disable` and `delete` therefore run in their own process without acquiring the lease or the owner-generation fence; the CLI's `AuthzBus` publish reaches only its own process, and the serving process's per-credential budgets and pending last-used entries for those credentials age out. 03-data-model.md §1.3 states the same scope. Creation of a new principal has no live connection to invalidate either.
+Source: the D10-33 amendment in [the decision log](../plan/13-decision-log.md) and D06-50 in [06-mcp-and-agent-access.md](../plan/06-mcp-and-agent-access.md).

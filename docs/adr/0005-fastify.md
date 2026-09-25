@@ -1,6 +1,6 @@
 # A5 — Fastify 5 as the single HTTP host for REST, `/collab`, and `/mcp`
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); the plugin-order clause is **superseded in part by AG1 (2026-09-12)**: it gains the oauth step before rest (recorded 2026-09-25), marked inline in the Decision.
 
 ## Context
 
@@ -8,7 +8,7 @@ One process must serve REST, the Hocuspocus WebSocket, static bundles, and the M
 
 ## Decision
 
-fastify 5.12.4 with @fastify/websocket 11.3.0, @fastify/helmet 13.1.1 (CSP nonces via `enableCSPNonces`), @fastify/rate-limit 11.2.0, @fastify/cookie 11.1.2, @fastify/multipart 10.1.1, @fastify/under-pressure 9.1.0, @fastify/static (pin at M0), @fastify/swagger 9.8.1 (+ @fastify/swagger-ui 6.1.1 on `/docs`, admin or dev only), fastify-type-provider-zod 7.0.0, @modelcontextprotocol/fastify 2.0.0. `buildApp({mode})` in `apps/server/src/app.ts` is the only boot path, with plugin order config → db → security → auth → authz → audit → rest → collab → mcp → ops → jobs. Every route declares `config.auth` (A30); a boot-time assertion fails the process if one does not. The server binds `127.0.0.1:4000` behind a reverse proxy (A48) with `trustProxy` set to the proxy CIDR only.
+fastify 5.12.4 with @fastify/websocket 11.3.0, @fastify/helmet 13.1.1 (CSP nonces via `enableCSPNonces`), @fastify/rate-limit 11.2.0, @fastify/cookie 11.1.2, @fastify/multipart 10.1.1, @fastify/under-pressure 9.1.0, @fastify/static (pin at M0), @fastify/swagger 9.8.1 (+ @fastify/swagger-ui 6.1.1 on `/docs`, admin or dev only), fastify-type-provider-zod 7.0.0, @modelcontextprotocol/fastify 2.0.0. `buildApp({mode})` in `apps/server/src/app.ts` is the only boot path, with plugin order config → db → security → auth → authz → audit → rest → collab → mcp → ops → jobs. **Superseded in part by AG1 (2026-09-12; recorded 2026-09-25):** the order is config → db → security → auth → authz → audit → oauth → rest → collab → mcp → ops → jobs (`02-system-architecture.md`, "Boot sequence and plugin order"). For information: the ARCH-27 amendment (2026-09-25) registers `@fastify/swagger`'s collector in `app.ts` immediately before the oauth step; that placement supersedes no clause of this decision, which never placed the collector. Every route declares `config.auth` (A30); a boot-time assertion fails the process if one does not. The server binds `127.0.0.1:4000` behind a reverse proxy (A48) with `trustProxy` set to the proxy CIDR only.
 
 ## Alternatives Considered
 

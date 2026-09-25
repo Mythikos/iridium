@@ -1,6 +1,6 @@
 # A37 — One read model for humans and agents: `ContentReadCore` over committed projections
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); **amended 2026-09-25:** `ContentReadCore` authorizes every option permission it serves (`history:read` for `includeTrashed` and `listTrash`, as already for a revision) and returns the not-found shape; surfaces may pre-check an option permission for their documented answer without the core depending on it — in the "Amended 2026-09-25" paragraph after the Decision.
 
 ## Context
 
@@ -9,6 +9,8 @@ Spec §7 requires that "search and export use the same access rules as the appli
 ## Decision
 
 One module, `apps/server/src/content/read/*`, exporting `listVaults(p)`, `listNodes(p, vaultId, {pathPrefix, kinds, recursive, includeTrashed, cursor, limit})`, `resolveNote(p, {noteId} | {vaultId, path})`, `readNoteMarkdown(p, noteId, {revision?, lines?, heading?})`, `listRevisions`, `search(p, …)`, and `listAttachments(p, vaultId, noteId?)`. `authorize()` (A30) runs **inside every method**, not in the callers. The REST read routes, the MCP tools (A34), and the UI reads all consume it; none of them ever touches the live `Y.Doc`. Every read carries `revision` (the projected seq) and `content_hash`. REST sets `ETag: "<revision>:<hash>"` and honours `If-None-Match` with a 304. `GET /notes/:id/markdown` returns `text/markdown`.
+
+**Amended 2026-09-25.** `ContentReadCore` authorizes every option permission it serves, as 06's first core property requires: `listNodes` calls `authorize(principal, 'history:read', {vaultId})` whenever `includeTrashed` is set, `listTrash` always does, and `readNoteMarkdown` already does when a revision is requested, each returning the not-found shape on a deny. A surface may check an option permission before calling the core to give its documented answer — REST's `403 forbidden` for `includeTrashed` and `revision` without `history:read` (`09-api-reference.md` §2), and on MCP the text "This token does not have the history:read permission.", computed from the token's own scopes before any read — but the core's own check never depends on it, and REST responses are unchanged. Every role holds `history:read`, so today a token's scope set is the only way to lack it; the core's check is the authoritative one and holds for every caller the core ever gains. The rest applies D06-07 and D06-17. The core's construction and read discipline are D06-15 as amended, its note resolution and slicing D06-39, and `listVaults` takes an optional page for the MCP tool while REST keeps its bounded list (D06-38). Verification: `mcp.scopes.mcp` (a token without `history:read`: the tool it gates is not listed and calling it is JSON-RPC `-32602`; `include_trashed` and `revision` return the permission text before any read) and `mcp.isolation.mcp` (each refusal for a foreign vault is byte-identical to the same tool's refusal for a random id).
 
 ## Alternatives Considered
 

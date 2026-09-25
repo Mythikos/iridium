@@ -156,6 +156,6 @@ n/a
   follow-ups) — irrelevant to persistence, relevant to the participants broadcast.
 - 05-collaboration-and-durability.md still names this spike `spike-onloaddocument-v2` with the file
   `docs/spikes/onloaddocument-v2.md`; the register's id is S1 and the file is this one.
-- Tests to keep from this harness at M1: `collab.restart-no-duplication` (the restart loop with the real
-  persistence), the mid-load case, and the "returned blob" control as a guard on the hook's return type;
-  then delete `apps/server/test/spikes/` (D12-5).
+- Tests to keep from this harness at M1: `collab.restart-no-duplication.integration` (the restart
+  loop with the real persistence), the mid-load case, and the "returned blob" control as a guard on
+  the hook's return type; then delete `apps/server/test/spikes/` (D12-5).

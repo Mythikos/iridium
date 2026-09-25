@@ -1,6 +1,6 @@
-# A57 — Threat model and compliance evidence: T1–T17 with a control → implementation → evidence map, and the operator CLI surface
+# A57 — Threat model and compliance evidence: T1–T20 (T18–T20 by AG1) with a control → implementation → evidence map, and the operator CLI surface
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); the threat table's extent is **superseded in part by AG1 (2026-09-12)**, marked inline in the Decision (recorded 2026-09-25).
 
 ## Context
 
@@ -8,7 +8,7 @@ Enterprise security reviews do not ask whether a product is secure; they ask for
 
 ## Decision
 
-The enterprise threat table is adopted verbatim as `04-auth-and-access-control.md` §12 "Threat model (T1–T17)", which owns the `T<n>` namespace, with seventeen rows — hostile Markdown; pathological Markdown; hostile client writes; ID guessing; stale-client resurrection; awareness spoofing; token leakage; session theft; cross-site WebSocket hijacking; insider and audit tampering; supply chain; Electron escape; denial of service via CRDT growth or uploads; data loss on crash; incomplete restore; prompt injection via note content; and secrets in environment variables or logs — each mapped to the named tests of A51 and to the ADRs that implement its controls. A control → implementation → evidence checklist accompanies it.
+The enterprise threat table is adopted verbatim as `04-auth-and-access-control.md` §12 "Threat model (T1–T17)", which owns the `T<n>` namespace, with seventeen rows — hostile Markdown; pathological Markdown; hostile client writes; ID guessing; stale-client resurrection; awareness spoofing; token leakage; session theft; cross-site WebSocket hijacking; insider and audit tampering; supply chain; Electron escape; denial of service via CRDT growth or uploads; data loss on crash; incomplete restore; prompt injection via note content; and secrets in environment variables or logs — each mapped to the named tests of A51 and to the ADRs that implement its controls. **Superseded in part by AG1 (2026-09-12; recorded 2026-09-25).** 04 §12 carries twenty rows, "Threat model (T1–T20)"; AG1 added T18, T19 and T20, the OAuth authorization-flow, client-identity and credential-lifetime threats. A control → implementation → evidence checklist accompanies it.
 
 The operator CLI breadth is normative: `migrate`; `doctor [--argon2 | --stale-projections | --yjs-instances | --repair-heads | --repair-content]`; `config check`; `backup`; `restore --verify`; `audit verify-chain | export | archive`; `reindex [--vault | --stale | --pipeline-version]`; `admin create-user | reset-password | disable-user | create-vault`; `tokens list | revoke | revoke-all [--user]`; `sessions revoke-all [--user]`; `keys rotate pepper | audit | cursor | attachment`; `jobs run <type>`; `trash purge --vault --dry-run`; `desktop-updates publish <dir>`; `mirror`. **Every CLI mutation writes an audit event with `credential_type='cli'`.**
 
@@ -36,12 +36,6 @@ Each threat row cites its own tests; collectively: `markdown.xss-corpus.unit` an
 ## References
 
 Digest §6.2, §10.2 (enterprise readiness and questionnaire expectations), §3.4 (untrusted note content for agents), §9.2 (supply-chain controls); spec §4, §8, §9; plan-enterprise graft; judges 1, 3. Implemented in `04-auth-and-access-control.md` §12 (the threat table itself), `11-operations-and-deployment.md` (the compliance checklist `docs/compliance-checklist.md` and the operator CLI), `10-testing-and-quality.md` (the named evidence) and `14-risks-and-open-questions.md`.
-
----
-
-## Area 9 — Owner answers to the open questions (2026-09-12)
-
-The project owner answered all eight questions of `14-risks-and-open-questions.md` §G on 2026-09-12. Four answers confirmed the default the ADR already carried and produced no new ADR — G2 (A43), G4 (A44, A47), G5 (A39) and G7 (A36), each recorded in that ADR's **Status** and **References** lines. Four changed a settled decision: G1 and G6 produced the two `AG` ADRs below, G3 produced A59, and G8 amended A53 in place under an inline supersession marker rather than producing an ADR of its own, because it changes one clause of one decision and invents no new mechanism. The three ADRs here are ordered by the question that produced them.
 
 ---
 

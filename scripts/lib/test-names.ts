@@ -56,8 +56,11 @@ const NAME_PATTERN = new RegExp(
  * a legal layer — and the plan quotes it as code wherever it explains how properties are written.
  * Neither is a test, so the checker must know them by name; rewording every mention to dodge the
  * grammar would make the prose worse to keep the grep simple.
+ *
+ * `config.mcp` is the same case from the configuration side: `IridiumConfig`'s `mcp` group is quoted
+ * as `config.mcp.<field>` wherever the plan names an MCP setting, and `mcp` is also a legal layer.
  */
-export const NOT_TEST_NAMES: readonly string[] = ['it.prop', 'test.prop'];
+export const NOT_TEST_NAMES: readonly string[] = ['it.prop', 'test.prop', 'config.mcp'];
 
 /** Whether a code span is a test name rather than a file, a flag, an identifier or a runner API. */
 export function isTestName(candidate: string): boolean {

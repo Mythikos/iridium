@@ -14,8 +14,8 @@ with **zero** `securitypolicyviolation` events under `style-src 'self' 'nonce-<n
 Both hosts serve a per-load nonce CSP (07-client-applications.md §6.2 and §7.3). CodeMirror injects
 `<style>` elements at runtime and Base UI positions floating elements through the CSSOM, so if the
 nonce plumbing does not work the only other way to make the editor render is `'unsafe-inline'` in
-`style-src` — which would undo the hostile-Markdown defence that `security.hostile-markdown` exists
-to prove (R-T26). M4's web host CSP and M5's Electron per-load CSP are both written from this
+`style-src` — which would undo the hostile-Markdown defence that `security.hostile-markdown.e2e`
+exists to prove (R-T26). M4's web host CSP and M5's Electron per-load CSP are both written from this
 answer, and `@iridium/editor`'s extension stack wires the facet from its first commit
 (12-milestones.md §4.4, line for S4; §11 "CSP strictness versus CodeMirror and the positioning
 library").

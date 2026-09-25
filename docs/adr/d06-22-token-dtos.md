@@ -1,0 +1,11 @@
+# D06-22: the token REST DTOs
+
+Status: accepted (2026-09-11); amended 2026-09-25: `me.tokens.create` takes `expiresInDays` bounded by one LIMITS member, with explicit omitted, over-policy and `null` cases.
+
+**As accepted.** The token REST surface uses the camelCase DTOs of `09-api-reference.md` (`Token`, `Snippet`, `AccessLogEntry`) rather than a second snake_case schema; this section adds `TokenStatusSchema`, `TokenVaultRefSchema` and `SnippetClientSchema` (the client identifiers, referenced by 09 §2.4 and 07 §4.15 instead of re-listed) to `@iridium/contracts/src/tokens.ts`, uses the placeholder `{{IRIDIUM_MCP_TOKEN}}` in every snippet template, answers semantic rejections with `422 validation_failed` and `errors[].code`, and lets only an administrator set `rateLimitPerHour` (`admin.tokens.update`). Two DTO spellings for one endpoint family would break the generated client and the `toMatchOpenApi` assertions, and a re-listed client enum drifts the moment a client is added. A self-settable rate limit would let a token's owner raise their own budget, which is a policy decision, not a preference.
+
+**Amended 2026-09-25.** `POST /me/tokens` takes `expiresInDays: z.int().min(1).max(LIMITS.PAT_LIFETIME_DAYS_MAX).nullable().optional()`, where `PAT_LIFETIME_DAYS_MAX` (366) is the LIMITS member D03-28 names. Omitted, the effective `patPolicy.defaultLifetimeDays` applies; an integer above the effective `maxLifetimeDays` is `422 validation_failed` with `errors[].code` `expiry_exceeds_policy`; `null` means "never", storing the sentinel `9999-12-31 23:59:59.999999` while the effective `allowNoExpiry` is true and otherwise answering `422` `no_expiry_forbidden`. The request schema, the `patPolicy` schema and `EnvSchema`'s maxima for `PAT_DEFAULT_LIFETIME_DAYS` and `PAT_MAX_LIFETIME_DAYS` all read that one member. The wire DTOs of the token routes live in `packages/contracts/src/rest/tokens.ts` (D06-02 as amended).
+
+Verification: `tokens.lifecycle.integration`, `limits.policy.unit` and `limits.single-source.guard`.
+
+Source: the D06-22 amendment in [the decision log](../plan/13-decision-log.md), and D06-22 in [06-mcp-and-agent-access.md](../plan/06-mcp-and-agent-access.md), "Decisions made in this section".

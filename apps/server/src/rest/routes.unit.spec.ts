@@ -1,5 +1,5 @@
 /**
- * `rest.routes.unit` — the served route set is exactly the manifest (09-api-reference.md §2.18;
+ * `rest.served-routes.unit` — the served route set is exactly the manifest (09-api-reference.md §2.18;
  * 12-milestones.md §5.2, the `rest` row).
  *
  * `API_ROUTES` is data with three consumers, and this is the one that holds the *server* to it: the
@@ -84,7 +84,7 @@ afterAll(async () => {
   await harness.close();
 });
 
-describe('rest.routes.unit [area:contracts]', () => {
+describe('rest.served-routes.unit [area:contracts]', () => {
   it('registers every `rest` row of the manifest', () => {
     const served = servedKeys();
     const missing = API_ROUTES.filter(

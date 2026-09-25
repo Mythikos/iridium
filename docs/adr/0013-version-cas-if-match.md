@@ -1,6 +1,6 @@
 # A13 — Optimistic concurrency: `version` CAS and `If-Match` on REST
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); **amended 2026-09-25 (D09-10):** `server_settings` rows are serialised by the document validator `schema_meta 'server_settings_version'`, which is never below the maximum row version, rather than by per-row CAS; `PUT /admin/settings` still requires `If-Match`. Marked inline in the Decision.
 
 ## Context
 
@@ -8,7 +8,7 @@ Spec §6: "Hierarchy, names, permissions, and deletion use database transactions
 
 ## Decision
 
-Every mutable metadata row carries `version INT UNSIGNED NOT NULL DEFAULT 1`; every update is `UPDATE … SET version = version + 1 WHERE id = ? AND version = ?` asserting `numUpdatedRows === 1n` (A10's `FOUND_ROWS`). REST exposes `ETag: "<version>"`. `If-Match` is **required** on `PATCH /nodes/:nodeId`, `POST /nodes/:nodeId/trash|restore`, `PATCH /vaults/:vaultId`, `PUT`/`DELETE /vaults/:vaultId/members/:userId` (for an existing row), `PATCH /me`, `PATCH /admin/users/:userId`, `PATCH /admin/tokens/:tokenId`, `PUT /admin/settings`, and `DELETE /vaults/:vaultId/attachments/:attachmentId` — the list `09-api-reference.md` §1.2 publishes, and the `If-Match` column of its route table is what `rest.route-index.contract` compares against `openapi.json`: missing → `428 precondition_required`; mismatch → `409 stale_version` with the `current` representation in the ProblemDetails body. The validator each one compares against is the `ETag` of the matching read (`GET /nodes/:nodeId`, `GET /vaults/:vaultId`, `GET /auth/me`, `GET /admin/users/:userId`, `GET /admin/settings`), except member, token and trash rows, which carry `version` in the collection body only so a list view can supply `If-Match` without a second request. Structural conflicts are explicit: `409 name_conflict` (from `ER_DUP_ENTRY` on `uq_sibling`), `409 invalid_move`, `409 category_not_empty`. The note body is CRDT and exempt. Version restore takes `{revision}` in the body with UI confirmation and step-up (A26), and **no** `If-Match` on `head_seq`.
+Every mutable metadata row carries `version INT UNSIGNED NOT NULL DEFAULT 1`; every update is `UPDATE … SET version = version + 1 WHERE id = ? AND version = ?` asserting `numUpdatedRows === 1n` (A10's `FOUND_ROWS`). (**Amended 2026-09-25 (D09-10):** `server_settings` rows are the exception: they are serialised by the document validator `schema_meta 'server_settings_version'`, locked `FOR UPDATE` by every `PUT /admin/settings` and incremented once per effective write, and a row's `version` records the document version that last changed it; `GET /admin/settings`'s `ETag` is that validator.) REST exposes `ETag: "<version>"`. `If-Match` is **required** on `PATCH /nodes/:nodeId`, `POST /nodes/:nodeId/trash|restore`, `PATCH /vaults/:vaultId`, `PUT`/`DELETE /vaults/:vaultId/members/:userId` (for an existing row), `PATCH /me`, `PATCH /admin/users/:userId`, `PATCH /admin/tokens/:tokenId`, `PUT /admin/settings`, and `DELETE /vaults/:vaultId/attachments/:attachmentId` — the list `09-api-reference.md` §1.2 publishes, and the `If-Match` column of its route table is what `rest.route-index.contract` compares against `openapi.json`: missing → `428 precondition_required`; mismatch → `409 stale_version` with the `current` representation in the ProblemDetails body. The validator each one compares against is the `ETag` of the matching read (`GET /nodes/:nodeId`, `GET /vaults/:vaultId`, `GET /auth/me`, `GET /admin/users/:userId`, `GET /admin/settings`), except member, token and trash rows, which carry `version` in the collection body only so a list view can supply `If-Match` without a second request. Structural conflicts are explicit: `409 name_conflict` (from `ER_DUP_ENTRY` on `uq_sibling`), `409 invalid_move`, `409 category_not_empty`. The note body is CRDT and exempt. Version restore takes `{revision}` in the body with UI confirmation and step-up (A26), and **no** `If-Match` on `head_seq`.
 
 ## Alternatives Considered
 
@@ -29,10 +29,6 @@ Positive: every conflict is explicit and carries the current row for the UI to r
 ## References
 
 Spec §6, §9; digest §5.2 (`FOUND_ROWS`); plan-risk-first + plan-product-dx §3.6 concurrency contract; judge verdict on restore. Implemented in `03-data-model.md` and `09-api-reference.md`.
-
----
-
-## Area 3 — Collaboration engine and durability
 
 ---
 

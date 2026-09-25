@@ -1,6 +1,6 @@
 # A.1 — Single limits policy
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); the three bridge timings were **added 2026-09-25** (D06-13 amendment) under the Decision's own rule that a later section may add a cap, and no existing value changed; **amended 2026-09-25 (D06-48):** every M3 number that bounds, refuses, times out or sizes server-held state is a `LIMITS` member named once, `BOUNDED_LIST_MAX` is named (replacing `rest/pagination.ts`'s `BOUNDED_LIST_ROWS`), `LIMIT_ENV_OVERRIDES` gains the MCP burst, process-ceiling and request-deadline overrides, and column widths and protocol hints stay named module constants on the single-source allowlist.
 
 ## Context
 
@@ -34,6 +34,7 @@ One policy, expressed as constants in `@iridium/contracts/limits.ts` and enforce
 | Upload | 50 MiB per attachment; import 2 GiB, 50 000 files, depth 64 | `@fastify/multipart`, import worker |
 | Body limits | JSON 1 MiB (`/mcp` 1 MiB) | Fastify `bodyLimit` |
 | Shutdown drain | 20 s | `main.ts` |
+| Bridge timings (added 2026-09-25, D06-13 amendment) | list refresh 300 000 ms (`BRIDGE_LIST_REFRESH_MS`); upstream timeout default 60 000 ms (`BRIDGE_UPSTREAM_TIMEOUT_DEFAULT_MS`), floor 5 000 ms (`BRIDGE_UPSTREAM_TIMEOUT_MIN_MS`) | `packages/mcp-bridge/src` |
 
 Every value is imported from the contracts package by the enforcing code and by the tests; no literal limit appears elsewhere (a lint `no-magic-numbers` exception list is maintained for this file only). A later section may **add** a cap to `limits.ts` — it must then appear in the `LimitId` union with an enforcement site and in the canonical rendering of `02-system-architecture.md` §"The single limits policy" — but it may never rename one, because the single-source test compares identifiers rather than values and a second spelling of one cap leaves one constant unreferenced and the other outside the union.
 
@@ -56,10 +57,6 @@ Positive: one source of truth shared by client, server, load tests and documenta
 ## References
 
 Digest §11.24, §1.2 (#675), §7.2 (quadratic cases), §6.2 (OWASP WebSocket message/rate limits); spec §8; plan-risk-first ADR-26; plan-product-dx 029; skeleton §A.1 and F15. Implemented in `05-collaboration-and-durability.md`, `08-markdown-pipeline-import-export.md`, `09-api-reference.md` and `11-operations-and-deployment.md`.
-
----
-
-## Area 4 — Identity, sessions, and authorization
 
 ---
 

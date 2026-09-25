@@ -8,8 +8,8 @@ What `Origin` header does the server receive from `new WebSocket('ws(s)://…/co
 
 ## Why it blocks
 
-`security.ws-origin` rejects an absent or unexpected `Origin` on the `/collab` upgrade with **no
-bypass knob**, because CSWSH is in the threat model (13-decision-log.md A24;
+`security.ws-origin.integration` rejects an absent or unexpected `Origin` on the `/collab` upgrade
+with **no bypass knob**, because CSWSH is in the threat model (13-decision-log.md A24;
 04-auth-and-access-control.md §"Absent `Origin` is rejected, with no bypass switch", threat T9). The
 allowlist contains the literal string `app://iridium`. If a renderer on that scheme sends nothing, or
 sends `null`, or sends a spelling with a trailing slash or a path, the desktop client cannot connect

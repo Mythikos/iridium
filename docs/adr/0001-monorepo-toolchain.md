@@ -28,7 +28,7 @@ Positive: a single checker and single Vite major across web and desktop; `erasab
 
 ## Verification
 
-M0 exit: `pnpm turbo run build check-types lint test` green on ubuntu and windows; `gen-drift` job green (A3); `deps.single-instance.guard` test (A14); boundaries job (`turbo boundaries`, or dependency-cruiser) green; `knip --production` clean; Docker image builds from the pruned lockfile with `pnpm install --frozen-lockfile`; the Turbo `envMode: strict` env lists are diffed against `EnvSchema` keys in CI (skeleton §B.2 invariant).
+M0 exit: `pnpm turbo run build check-types lint test` green on ubuntu and windows; the `static` job's `pnpm gen:check` step green (A3); `deps.single-instance.guard` test (A14); boundaries job (`turbo boundaries`, or dependency-cruiser) green; `knip --production` clean; Docker image builds from the pruned lockfile with `pnpm install --frozen-lockfile`; the Turbo `envMode: strict` env lists are diffed against `EnvSchema` keys in CI (skeleton §B.2 invariant).
 
 ## References
 

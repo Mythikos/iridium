@@ -1,0 +1,11 @@
+# D06-37: snippet entry names and placeholders
+
+Status: accepted 2026-09-25.
+
+Every token-audience snippet names its server entry `iridium` and every connector-audience snippet names it `iridium-connect`, in every client, so both audiences coexist in one client configuration. `claude-code-oauth` is `claude mcp add --transport http iridium-connect <origin>/mcp/connect` followed by `claude mcp login iridium-connect` (the nightly row adds `--no-browser` under `script(1)`, AG10); `vscode-oauth` is `{"servers": {"iridium-connect": {…}}}`; `cursor-oauth` and `mcp-remote-oauth` are `{"mcpServers": {"iridium-connect": {…}}}`. The connector-product text snippets suggest the display name "Iridium". Claude Code's header form is `claude mcp add --transport http iridium <origin>/mcp --header 'Authorization: Bearer ${IRIDIUM_MCP_TOKEN}'`: single quotes and `${IRIDIUM_MCP_TOKEN}`. Route-rendered token templates carry only the client-side placeholders `{{IRIDIUM_MCP_TOKEN}}` and, for `claude-desktop`, `<bridge-path>`; connector templates carry none. The `mcp-remote-oauth` arguments and sign-in mechanism are those S9 observed on 0.13.5, and its authorize and token requests must carry `resource=<origin>/mcp/connect`, or the row takes S9's fallback.
+
+`mcp.snippets.unit` asserts the two entry names per audience, that both entries merge into one configuration object without a key collision, the coverage of all eleven token-audience and six connector-audience clients rendered from `SnippetClientSchema` and `ConnectorClientSchema`, and the placeholder inventory.
+
+Coexistence of both audiences in one client is a stated requirement (the real-client matrix's third condition, and S9's criterion 3). The earlier connector snippets reused the token snippets' server key in the same client configuration files, so a user following both audiences overwrote one entry with the other. A fixed per-audience name makes the requirement testable offline, before any client is driven, and the placeholder inventory makes the harness's substitution list complete by test (D10-43).
+
+Source: D06-37 in [the decision log](../plan/13-decision-log.md) and in [06-mcp-and-agent-access.md](../plan/06-mcp-and-agent-access.md), "Decisions made in this section".

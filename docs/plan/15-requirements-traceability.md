@@ -16,16 +16,16 @@ A status cell may carry a parenthetical qualifier — `covered (both lines merge
 
 | Source group | Covered | Partial | Missing | Total |
 |---|---|---|---|---|
-| The brief — interpretation and hard requirements | 50 | 5 | 0 | 55 |
+| The brief — interpretation and hard requirements | 52 | 4 | 0 | 56 |
 | Spec §1–§3 — purpose, core objects, workspace and editing | 52 | 5 | 0 | 57 |
 | Spec §4–§5 — access control, live collaboration and saving | 82 | 5 | 0 | 87 |
 | Spec §6–§8 — architecture, storage, portability, recovery and operation | 109 | 1 | 0 | 110 |
 | Spec §9 — acceptance criteria | 73 | 0 | 0 | 73 |
 | Spec §10 — deferrals and the first milestone | 17 | 0 | 0 | 17 |
 | Plan hard properties | 5 | 0 | 0 | 5 |
-| **Total** | **388** | **16** | **0** | **404** |
+| **Total** | **390** | **15** | **0** | **405** |
 
-No requirement of the brief or of the spec is unaddressed by the plan: there are no `missing` rows. The 16 partial rows are enumerated with their closing actions in "Gaps" below. Four of them are absences that are not mechanically testable at all and are recorded as review-only; the other twelve are specified mechanisms whose named test is missing or asserts something weaker than the requirement, and none of the sixteen sits on a spec §9 acceptance row.
+No requirement of the brief or of the spec is unaddressed by the plan: there are no `missing` rows. The 15 partial rows are enumerated with their closing actions in "Gaps" below. Four of them are absences that are not mechanically testable at all and are recorded as review-only; the other eleven are specified mechanisms whose named test is missing or asserts something weaker than the requirement, and none of the fifteen sits on a spec §9 acceptance row.
 
 **No deferral or non-goal row is partial any more.** The twelve rows that prose alone used to hold — graph view, per-note or per-category permission overrides, mobile clients, enterprise single sign-on, multi-server collaboration, offline-first editing, cross-vault moves, automatic cross-document link rewriting, full Obsidian syntax compatibility, built-in AI features, "not a complete Obsidian replacement" and "no second content write path" — are now held by `guards.non-goals.guard`, which asserts one absence per `NonGoalId` against the built route, MCP, CLI, client-capability, schema and dependency inventories (10-testing-and-quality.md § The non-goal guard). Two deferral rows arrived later, with the owner's answers of 2026-09-12, and neither was ever partial: browsers outside current Chrome and Edge (G6) and signed desktop installers, MSIX and in-application updates (G8). Each was declared with its guard case already written — `guards.non-goals.guard` for both, joined by `desktop.artifact-names.guard` for the packaging row's artefact vocabulary — so the category is empty at fourteen rows rather than at twelve. **No spec §9 acceptance row is discharged by a manual record**: the three desktop rows that `docs/acceptance/host-parity.md` used to carry are `desktop.viewer-readonly.e2e`, `desktop.revocation-while-open.e2e` and `desktop.durable-save.e2e`, and that checklist is reduced to the route-and-command reachability walk, which is named in no `docs/acceptance-map.json` entry (12-milestones.md § 13.4).
 
@@ -51,7 +51,7 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | The server owns attachments | brief item 3 | 08-markdown-pipeline-import-export.md § 9 Attachments | `attachments.security.integration`, `attachments.dedupe.integration`, `attachments.unreferenced-report.integration` | M2, M6 | covered |
 | The server owns import and export | brief item 3 | 08-markdown-pipeline-import-export.md § 7 Import; 08-markdown-pipeline-import-export.md § 8 Export | `import.commit.integration`, `export.manifest.integration`, `transfer.fixtures.integration`, `export.stream.integration` | M6 | covered |
 | The server owns search | brief item 3 | 08-markdown-pipeline-import-export.md § 3.2 Plain text for search (`note_search.body_text`); 03-data-model.md § 9.4 `note_search` — narrow by design | `search.acl.integration`, `search.ranking.integration`, `search.snippets.integration`, `search.query-parser.unit` | M2 | covered |
-| The server owns the MCP endpoint | brief item 3 | 06-mcp-and-agent-access.md § Mounting `/mcp` on Fastify | `mcp.dual-era.contract`, `mcp.host-guard.contract`, `mcp.conformance.mcp` | M3 | covered |
+| The server owns the MCP endpoint | brief item 3 | 06-mcp-and-agent-access.md § Mounting the two MCP routes on Fastify | `mcp.dual-era.contract`, `mcp.host-guard.contract`, `mcp.conformance.mcp` | M3 | covered |
 | Clients never touch the database or storage directly | brief item 3 | 01-vision-scope-and-principles.md § 3.1 Server; 03-data-model.md § 2 Database roles and grants; 11-operations-and-deployment.md § Reference topology | `db-grants.integration`, `attachments.security.integration`, `mirror.readonly.integration` | M1, M2, M6 | partial |
 | MySQL (8.x/9.x) is the single system of record | brief item 4 | 03-data-model.md § 1.1 Engine and server configuration the schema depends on (the two-target matrix and the dialect rule); 02-system-architecture.md § Architectural summary | `migrations.integration`, `migrations.parity.integration`, `db.version-floor.integration`, `db.dialect-floor.guard`, `ops.upgrade-rehearsal.drill` | M0 | covered (both lines merge-blocking) |
 | MySQL holds user accounts | brief item 4 | 03-data-model.md § 3 Identity and authentication | `auth.login.integration`, `admin.users.integration`, `auth.pepper-rotation.integration` | M1 | covered |
@@ -75,18 +75,19 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | The token is pasted into the agent's MCP configuration at setup time, with per-client configuration snippets | brief item 5 | 06-mcp-and-agent-access.md § Per-client configuration snippets | `mcp.snippets.unit`, `tokens.dialog.component`, `token-create-and-use.e2e`, `proxied-stack.headers.mcp` | M3, M4 | covered |
 | Revocation cuts off agent access immediately | brief item 5; spec §9 row 'Live revocation' | 04-auth-and-access-control.md § 8.8 Timing guarantees; 06-mcp-and-agent-access.md § Revocation semantics; 04-auth-and-access-control.md § 9. Token principals on the authorization path | `mcp.revocation.mcp`, `collab.revocation-race.chaos`, `authz.revocation-rest.integration`, `tokens.lifecycle.integration` | M3 | covered |
 | The design leaves a clean path to scoped WRITE access without a contract change | brief item 5 | 06-mcp-and-agent-access.md § The designed path to write access; 01-vision-scope-and-principles.md § 4.5 Post-MVP roadmap as seams | `token.reserved-scopes-inert.unit`, `mcp.no-write-imports.unit` | M3 | covered |
-| The design leaves a clean path to OAuth-based flows later — **met in full at MVP** | brief item 5 | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; 06-mcp-and-agent-access.md § Discovery, and why it lives on a second mount; 04-auth-and-access-control.md § 9.1 Where a token principal comes from; § 9.2 The four invariants `authorize()` enforces | `oauth.discovery-split.contract`, `oauth.metadata.contract`, `oauth.authorization-code.integration`, `oauth.principal-parity.prop`, `oauth.audience.contract`, `mcp.verifier.dispatch.unit`, `tokens.kind-enum.unit` | M3 | covered |
-| A claude.ai custom connector works natively: it discovers the authorization server, registers, obtains the user's consent and reads notes over MCP | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; § Discovery, and why it lives on a second mount; 09-api-reference.md § 2.19 (the OAuth endpoints) | `oauth.metadata.contract`, `oauth.dcr.integration`, `oauth.authorization-code.integration`, `oauth.consent.integration`, `oauth.connector.e2e`, the nightly `mcp-clients` OAuth-audience half | M3 (the flow), M4 (`oauth.connector.e2e`) | covered |
-| A Claude Desktop custom connector works natively, so the `iridium-mcp` stdio bridge is no longer the required path for it | owner answer to G1, 2026-09-12 (brief item 5); G7 keeps the bridge for stdio-only clients, air-gapped sites and scripted use | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; § Discovery, and why it lives on a second mount; § The first-party stdio bridge: `iridium-mcp` | `oauth.authorization-code.integration`, `oauth.consent.integration`, `oauth.connector.e2e`, `bridge.parity.contract`, the nightly `mcp-clients` OAuth-audience half | M3 (the flow), M4 (`oauth.connector.e2e`) | covered |
-| Static-header clients keep working while OAuth discovery is advertised: an integration token at `/mcp` is never drawn into a discovery flow | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § Discovery, and why it lives on a second mount; 06-mcp-and-agent-access.md § Per-client configuration snippets | `oauth.discovery-split.contract`, `oauth.audience.contract`, `mcp.snippets.unit`, the nightly `mcp-clients` coexistence row (both audiences configured against one server) | M3 | covered |
+| The design leaves a clean path to OAuth-based flows later — **met in full at MVP** | brief item 5 | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; 06-mcp-and-agent-access.md § Discovery, and why it lives on a second mount; 04-auth-and-access-control.md § 9.1 Where a token principal comes from; § 9.2 The five invariants `authorize()` enforces | `oauth.discovery-split.contract`, `oauth.metadata.contract`, `oauth.authorization-code.integration`, `oauth.principal-parity.prop`, `oauth.audience.contract`, `mcp.verifier.dispatch.unit`, `tokens.kind-enum.unit` | M3 | covered |
+| A claude.ai custom connector works natively: it discovers the authorization server, registers, obtains the user's consent and reads notes over MCP | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; § Discovery, and why it lives on a second mount; 09-api-reference.md § 2.19 (the OAuth endpoints) | `oauth.metadata.contract`, `oauth.dcr.integration`, `oauth.authorization-code.integration`, `oauth.consent.integration`, `oauth.connector.e2e`, `clients.oauth.mcp` | M3 (the flow, proven by the scripted client in both registration kinds), M4 (`oauth.connector.e2e` through the browser sign-in bounce; the real products observed by spike S15 before exit, AG9) | covered |
+| A Claude Desktop custom connector works natively, so the `iridium-mcp` stdio bridge is no longer the required path for it | owner answer to G1, 2026-09-12 (brief item 5); G7 keeps the bridge for stdio-only clients, air-gapped sites and scripted use | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; § Discovery, and why it lives on a second mount; § The first-party stdio bridge: `iridium-mcp` | `oauth.authorization-code.integration`, `oauth.consent.integration`, `oauth.connector.e2e`, `bridge.parity.contract`, `clients.oauth.mcp` | M3 (the flow, proven by the scripted client in both registration kinds), M4 (`oauth.connector.e2e` through the browser sign-in bounce; the real products observed by spike S15 before exit, AG9) | covered |
+| Static-header clients keep working while OAuth discovery is advertised: an integration token at `/mcp` is never drawn into a discovery flow | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § Discovery, and why it lives on a second mount; 06-mcp-and-agent-access.md § Per-client configuration snippets | `oauth.discovery-split.contract`, `oauth.audience.contract`, `mcp.snippets.unit`, `clients.coexistence.mcp` (both audiences configured against one server) | M3 | covered |
 | A user can see every application they authorized and revoke any of them | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § Revocation semantics; 07-client-applications.md § 4.15 Token management (Settings › Integrations) | `authorized-apps.component`, `oauth.revocation.mcp`, `oauth.revoke-endpoint.integration` | M3 (the routes), M4 (the UI) | covered |
-| A server administrator can see every OAuth client and disable any of them | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; 06-mcp-and-agent-access.md § Admin: all tokens and agent activity | `admin.oauth-clients.integration`, `admin.oauth-consents.integration`, `oauth-client-list.component` | M7 | covered |
+| A server administrator can see every OAuth client and disable any of them | owner answer to G1, 2026-09-12 (brief item 5) | 06-mcp-and-agent-access.md § What the OAuth 2.1 authorization server is; 06-mcp-and-agent-access.md § Admin: all tokens and agent activity | `admin.oauth-clients.integration`, `admin.oauth-consents.integration`, `oauth-client-list.component`, `cli.audit-coverage.integration`, `oauth.revocation.mcp` | M3 (CLI list, disable and delete: `cli.audit-coverage.integration`, `oauth.revocation.mcp`), M7 (console) | covered |
+| A site can register a confidential client with a pinned client id | owner answer to G1, 2026-09-12 (brief item 5; plan refinement, D06-45) | 06-mcp-and-agent-access.md § Clients: identity, registration, redirect URIs (Manual registration); 09-api-reference.md § 2.15.7 OAuth clients and consents (`POST /admin/oauth-clients`) | `admin.oauth-client-create.integration`, `oauth.token-endpoint.integration` | M3 | covered |
 | MVP agent capability is exactly read plus enumerate plus search, and nothing more | brief item 5 | 06-mcp-and-agent-access.md § The six read-only tools | `mcp.scopes.mcp`, `mcp.tools-schema.contract`, `mcp.no-write-imports.unit`, `mcp.no-fresh.contract` | M3 | covered |
 | The spec's explicit §10 deferrals stand unless there is a strong reason otherwise | brief item 6 | 01-vision-scope-and-principles.md § 4.4 Explicit non-goals; 10-testing-and-quality.md § The non-goal guard; 12-milestones.md § 14.3 Deferrals that remain deferred | `guards.non-goals.guard` (one absence assertion per `NonGoalId`, each carrying its own `sinceMilestone`), `gen.drift.guard` (`docs/non-goals.json` regenerated from § 4.4 by `scripts/build-non-goals.ts`) | M1 onward (asserted at every milestone exit) | covered |
 | Every deviation from the spec is recorded with its reasoning | brief item 6 | 01-vision-scope-and-principles.md § 6.1 Deviations; 13-decision-log.md § How to read this log | none | M0 onward | partial |
 | Every design choice is the best one for the codebase, never the quick or low-effort fix; no band-aids around library gaps | brief item 7 | 01-vision-scope-and-principles.md § 5.1 P1 — Best for the codebase, never the low-effort fix | `deps.single-instance.guard`, `guards.one-boot-path.guard`, `limits.single-source.guard`, `authz.route-policy.boot.guard` | M0 onward | covered |
 | Implementation effort and elapsed time are not inputs to any decision; the plan contains no time or effort estimates | brief item 7 | 01-vision-scope-and-principles.md § 5.1 P1 — Best for the codebase, never the low-effort fix; 12-milestones.md § 1 How this plan is organised | none | M0 onward | partial |
-| "Risky or unverified" is answered by a recorded spike with a designed fallback that is executed, not by choosing the lesser option | brief item 7 | 12-milestones.md § 4.4 Spikes; 01-vision-scope-and-principles.md § 5.1 P1 — Best for the codebase, never the low-effort fix | none | M0 (spike register), executed per milestone | partial |
+| "Risky or unverified" is answered by a recorded spike with a designed fallback that is executed, not by choosing the lesser option | brief item 7 | 12-milestones.md § 4.4 Spikes; 01-vision-scope-and-principles.md § 5.1 P1 — Best for the codebase, never the low-effort fix | `docs.spikes.spec` | M0 (register and gate), each spike's milestone for its note | covered |
 | The deliverable of this phase is a detailed, actionable development plan covering architecture, data model, auth/token model, collaboration and durability semantics, MCP design, client design, Markdown pipeline, testing strategy, ops/deployment, milestones with acceptance criteria, decision log and risks | brief item 8 | plan-draft/README.md and the fourteen sections 01 to 14 | none | pre-M0 | partial |
 
 ## Spec §1–§3 — purpose, core objects, workspace and editing
@@ -180,14 +181,14 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | An editor may manage attachments | spec §4 role table row 'Editor' | 04-auth-and-access-control.md § 5.3 The matrix (`attachment:write`); § 6.6 (Attachment upload/delete row) | `authz.matrix.unit`, `attachments.security.integration`, `attachments.dedupe.integration` | M6 | covered |
 | A vault manager holds every editor permission | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 5.3 The matrix (role order) | `authz.matrix.unit` | M1 | covered |
 | A vault manager may manage vault membership | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 5.3 The matrix (`vault:manage_members`) | `authz.matrix.unit`, `admin.vaults.integration`, `collab.live-revocation.integration` | M1 | covered |
-| A vault manager may manage vault settings | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 5.3 The matrix (`vault:settings`); 09-api-reference.md § 2.5 Vaults (`/vaults`) (`PATCH /vaults/:vaultId`); 03-data-model.md § 13.1 `server_settings`; 10-testing-and-quality.md § Vault settings (rule `vault-settings`) | `vaults.settings.integration` (data-driven over the request object's keys; cases *a manager may write every setting*, *an editor and a viewer may not*, *the environment floor wins* → `errors[0].code === 'below_env_floor'`, *the change is audited, minimally* → one `vault.settings.changed` row), `authz.matrix.unit`, `authz.rest-viewer.integration`, `settings-store.contract` | M2 | covered |
+| A vault manager may manage vault settings | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 5.3 The matrix (`vault:settings`); 09-api-reference.md § 2.5 Vaults (`/vaults`) (`PATCH /vaults/:vaultId`); 03-data-model.md § 13.1 `server_settings`; 10-testing-and-quality.md § Vault settings (rule `vault-settings`) | `vaults.settings.integration` (data-driven over the request object's keys; cases *a manager may write every setting*, *an editor and a viewer may not*, *the environment floor wins* → `errors[0].code === 'below_env_floor'`, *the change is audited, minimally* → one `vault.settings.changed` row), `authz.matrix.unit`, `authz.rest-viewer.integration` | M2 | covered |
 | A vault manager may archive the vault | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 5.6 Vault status and visibility; 05-collaboration-and-durability.md § Vault archive | `authz.archived-vault.integration`, `collab.live-revocation.integration`, `admin.vaults.integration` | M2 | covered |
 | A vault manager may perform coordinated content-version restores | spec §4 role table row 'Vault manager' | 04-auth-and-access-control.md § 6.6 (Revisions row), § 6.9 Server-originated collaborative writes; 05-collaboration-and-durability.md § Coordinated version restore | `authz.matrix.unit`, `revisions.restore.integration`, `restore-revision.e2e`, `admin.step-up.integration` | M2 | covered |
-| A server administrator may manage server configuration | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.2 (`server:settings`); § 5.3 The matrix | `authz.matrix.unit`, `admin.settings.integration`, `settings-store.contract` | M7 | covered |
+| A server administrator may manage server configuration | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.2 (`server:settings`); § 5.3 The matrix | `authz.matrix.unit`, `admin.settings.integration`, `settings-store.contract` | M3 (the route and the `patPolicy`, `mcpEnabled` and `oauthPolicy` groups, AG12), M7 (the remaining groups and the console) | covered |
 | A server administrator may manage user accounts | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 3.2 Administrator-created accounts and the first administrator; § 5.2 (`server:users`) | `authz.matrix.unit`, `admin.users.integration`, `admin.reset-password.integration` | M1 | covered |
 | A server administrator may create vaults | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.2 (`server:vaults:create`) | `authz.matrix.unit`, `admin.vaults.integration` | M1 | covered |
 | A server administrator administers all vaults (effective manager on every vault) | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.3 The matrix (notes: effective role = `max(explicitRole, isServerAdmin ? 'manager' : 'none')`) | `authz.matrix.unit`, `authz.read-core.unit` | M1 | covered |
-| The server administrator role is explicitly trusted with all vault content, and that trust never widens a token principal | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.3 The matrix (notes); § 9.2 The four invariants `authorize()` enforces | `authz.matrix.unit`, `tokens.admin-owned.integration`, `authz.no-mcp-admin-implied.guard`, `token.effective-permissions.prop` | M3 | covered |
+| The server administrator role is explicitly trusted with all vault content, and that trust never widens a token principal | spec §4 role table row 'Server administrator' | 04-auth-and-access-control.md § 5.3 The matrix (notes); § 9.2 The five invariants `authorize()` enforces | `authz.matrix.unit`, `tokens.admin-owned.integration`, `authz.no-mcp-admin-implied.guard`, `token.effective-permissions.prop` | M3 | covered |
 | Accounts are created and managed by administrators, with one-time set-password links and never a plaintext password | spec §4 para 3 | 04-auth-and-access-control.md § 3.2 Administrator-created accounts and the first administrator; § 3.3 One-time set-password links | `admin.users.integration`, `setpw-link.integration`, `admin.reset-password.integration` | M1 | covered |
 | There is no public registration route | spec §4 para 3 | 04-auth-and-access-control.md § 3.2 Administrator-created accounts and the first administrator ("There is no registration route") | `authz.route-policy.boot.guard`, `rest.route-index.contract` | M1 | partial |
 | There are no note-level or category-level permission exceptions | spec §4 para 3 | 04-auth-and-access-control.md § 5.3 The matrix (notes: "There is no note-level or category-level permission"); 01-vision-scope-and-principles.md § 4.4 Explicit non-goals | `authz.matrix.unit`, `authz.usage.unit` | M1 | covered |
@@ -390,7 +391,7 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | A non-member cannot read another vault's revision history | spec §9 row 'Vault isolation' | 04-auth-and-access-control.md § 6. Enforcement points | `authz.vault-isolation.integration` (incl. case *foreign-vault revision history*, @M2, covering all seven `history:read`-gated REST surfaces and asserting `404` rather than `403`; exhaustiveness pinned by `satisfies Record<HistoryGatedSurface, Case>`), `mcp.isolation.mcp` (incl. case *foreign-vault revision history* over `list_note_revisions`, `get_note` with a `revision`, `list_notes` with `include_trashed`, and the `iridium://` revision resource) | M2, M3 | covered |
 | A non-member cannot download another vault's attachments | spec §9 row 'Vault isolation' | 08-markdown-pipeline-import-export.md § 9. Attachments | `attachments.security.integration`, `authz.vault-isolation.integration` | M2 | covered |
 | A non-member cannot obtain another vault's exports | spec §9 row 'Vault isolation' | 08-markdown-pipeline-import-export.md § 8. Export | `export.access-control.integration`, `transfer.isolation.integration`, `export.revocation.integration` | M2 (job routes), M6 (export contents) | covered |
-| Isolation holds on the MCP surface, including replayed cursors | spec §9 row 'Vault isolation'; brief item 5 | 06-mcp-and-agent-access.md § Vault scope: allowlist or `all_vaults` | `mcp.isolation.mcp`, `mcp.cursor.unit`, `mcp.cursor.mcp` | M3 | covered |
+| Isolation holds on the MCP surface, including replayed cursors | spec §9 row 'Vault isolation'; brief item 5 | 06-mcp-and-agent-access.md § Vault scope: allowlist or `all_vaults` | `mcp.isolation.mcp`, `pagination.cursor.unit`, `mcp.cursor.mcp` | M3 | covered |
 | Denials leak no existence, no `ETag` and no timing signal | spec §9 row 'Vault isolation' (plan deviation F13) | 04-auth-and-access-control.md § 6. Enforcement points; 10-testing-and-quality.md § 4. Vault isolation | `authz.vault-isolation.integration` (byte-identical `404` bodies, no `ETag`, median latency ratio ≤ 2×) | M2 | covered |
 | Isolation is visible to the user: a direct deep link to a foreign vault lands on "not found" and opens no socket | spec §9 row 'Vault isolation' | 07-client-applications.md § 4.3 Vault selector; 10-testing-and-quality.md § 4. Vault isolation | `vault-isolation.e2e` | M4 | covered |
 | Membership removal closes every open collaboration connection of that user within 1 s of COMMIT | spec §9 row 'Live revocation'; spec §4 para 4 | 04-auth-and-access-control.md § 8. Live revocation; 05-collaboration-and-durability.md § Role change on a live connection | `collab.live-revocation.integration` (trigger *membership removed*), `collab.revocation-race.chaos`, `kernel.smoke.integration` | M1 | covered |
@@ -450,7 +451,7 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 | Cross-vault moves must NOT be in the MVP | spec §10 deferral | Deferral: 03-data-model.md (`nodes.vault_id` immutable; a move whose target parent is in another vault → `409 invalid_move {reason:'cross_vault'}`); 01-vision-scope-and-principles.md § 4.4; 12-milestones.md § 14.3. Seam: export-then-import is the supported path; the export manifest carries ids and revisions | `tree.invalid-move.integration` (reason `cross_vault`: a manager of **both** vaults gets `409 invalid_move {reason:'cross_vault'}` and never a `404`; `nodes.vault_id` unchanged, no row written in either vault, both `tree_version`s unchanged, no audit event in either chain; plus case *cross-vault has no other door* — `vaultId`/`targetVaultId` bodies are refused `422 validation_failed`), `guards.non-goals.guard` (case *Cross-vault moves*: no request object in `openapi.json` carries a vault-changing member and no Kysely `.set(` assigns `vault_id` outside node creation and import commit), `hierarchy.model.prop`, `authz.vault-isolation.integration` (the mirror case: a member of one vault only gets `404 not_found`) | M1 (absence), M2 (refusal) — permanent non-goal | covered |
 | Bidirectional filesystem or Git synchronization must NOT be in the MVP | spec §10 deferral; spec §6 para 5 | Deferral: 08-markdown-pipeline-import-export.md § 8.8 `iridium mirror` ("Never watches, never reads back, never writes to the server … there is no filesystem-to-vault path in Iridium"); 01-vision-scope-and-principles.md § 4.4; 12-milestones.md § 14.3. Seam: the mirror reads the same `ContentReadCore` as everything else | `mirror.readonly.integration`, `mirror.integration` | M6 — permanent non-goal | covered |
 | Offline-first editing must NOT be in the MVP | spec §10 deferral; spec §5 para 5 | Deferral: 05-collaboration-and-durability.md § Reconnection semantics ("Iridium is online-first (spec §5)"); 01-vision-scope-and-principles.md § 4.4; roadmap epic 12 in 12-milestones.md § 14.2. Seam: `SaveStateMachine` is pure and property-tested, `NoteSession` owns the `Y.Doc` so a local persistence provider could be attached later; `y-indexeddb` is not used; 01-vision-scope-and-principles.md § 4.4 Explicit non-goals (Offline-first editing; `y-indexeddb` is not used) | `guards.non-goals.guard` (case *Offline-first editing*: no `y-indexeddb`, `y-leveldb`, `y-websocket` or `y-webrtc` reachable from the importers of `packages/{collab-client,editor,ui}` or `apps/{web,desktop}`, no `Y.encodeStateAsUpdate` call adjacent to a storage API in those packages, and no note-id pattern in the `host.storage` key allowlist), `save-state.machine.prop` (models `disconnected` and `rejected`), `disconnect-pause.e2e`, `collab.durable-ack.chaos` (case *crash before commit*, fresh-`Y.Doc` variant, which documents that an unacknowledged edit is correctly lost) | M1 (absence and state machine), M4 (UI) — deferred to roadmap epic 12 | covered |
-| Mobile clients must NOT be in the MVP | spec §10 deferral | Deferral: 07-client-applications.md § 9.3 Supported clients, browsers and platforms ("Mobile browsers — out of scope (spec §10 defers mobile clients); the layout degrades gracefully but is not tested or supported"); 01-vision-scope-and-principles.md § 4.4; 12-milestones.md § 14.3. Seam: `IridiumHost` isolates every platform concern | `guards.non-goals.guard` (case *Mobile clients*: no `react-native`, Capacitor or Cordova dependency in any workspace manifest, no `@media` breakpoint below the desktop floor declared in `packages/ui/src/styles/tokens.css`, and no Playwright project with a viewport narrower than that floor — the Playwright projects are exactly `setup`, `chromium` and `electron`) | M1 (dependency and breakpoint absence), M4 (the lane and token-floor assertions) — permanent non-goal; AG6 owns the browser matrix (answered 2026-09-12) | covered |
+| Mobile clients must NOT be in the MVP | spec §10 deferral | Deferral: 07-client-applications.md § 9.3 Supported clients, browsers and platforms ("Mobile browsers — out of scope (spec §10 defers mobile clients); the layout degrades gracefully but is not tested or supported"); 01-vision-scope-and-principles.md § 4.4; 12-milestones.md § 14.3. Seam: `IridiumHost` isolates every platform concern | `guards.non-goals.guard` (case *Mobile clients*: no `react-native`, Capacitor or Cordova dependency in any workspace manifest, no `@media` breakpoint below the desktop floor declared in `packages/ui/src/theme/tokens.css`, and no Playwright project with a viewport narrower than that floor — the Playwright projects are exactly `setup`, `chromium` and `electron`) | M1 (dependency and breakpoint absence), M4 (the lane and token-floor assertions) — permanent non-goal; AG6 owns the browser matrix (answered 2026-09-12) | covered |
 | Firefox, WebKit and any browser outside current Chrome and Edge must NOT be supported at 1.0 | owner answer to G6, 2026-09-12 (ADR AG6) | Deferral: 01-vision-scope-and-principles.md § 4.6; § 4.4 (bullet *Firefox, WebKit and any browser outside current Chrome and Edge*); 07-client-applications.md § 9.3. Seam: `IridiumHost` plus the feature-floor boot check, so adding a browser later is a Playwright project, a lane and a statement | `guards.non-goals.guard` (case *Cross-browser support*: exactly three Playwright projects, no Firefox/WebKit selector in any configuration, no `browser-smoke` workflow job, no `@smoke` tag under `apps/e2e/web/`), `ui.unsupported-browser.component` | M0 (configuration absence), M4 (the feature-floor page) | covered |
 | Signed desktop installers, MSIX and in-application updates must NOT be in 1.0 | plan-fixed non-goal (01-vision-scope-and-principles.md § 4.4), decision G8 (2026-09-12) | Deferral: 01-vision-scope-and-principles.md § 4.4 (row "Signed desktop installers and in-application updates"); 11-operations-and-deployment.md § Declared gaps at 1.0; 12-milestones.md § 14.2 epic 14 (signing, installer formats and in-application updates). Seam: 07-client-applications.md § 7.14 (fuse set, `asar`, `protocols`, `extraResources`, the generic `publish` block), 09-api-reference.md § 2.16 (`feedUrl`, `minVersion`, `files[].sha512`), 03-data-model.md § 13.3 | `guards.non-goals.guard`, `desktop.artifact-names.guard` | M1 (absence), M5 (the artefact set and its guard) — non-goal at 1.0, retired by the post-1.0 signing epic | covered |
 | Enterprise SSO must NOT be in the MVP | spec §10 deferral; spec §4 para 3 | Deferral: 04-auth-and-access-control.md § 13. Extension seams (post-MVP, designed now) (rows **OIDC single sign-on** and **SAML 2.0**); 01-vision-scope-and-principles.md § 4.4; roadmap epic *OIDC SSO* in 12-milestones.md § 14.2. Seam: one `SessionIssuer.issue()` path, deferred `auth_providers`/`identities`/`groups`/`group_members` tables, reserved `sessions.mfa_verified_at`, reserved `iridium://auth/callback` deep link. Iridium's OAuth 2.1 authorization server authorizes agents against Iridium's own accounts and is **not** single sign-on: it issues no `id_token`, exposes no `userinfo` endpoint, and accepts no external identity provider. `oauth.metadata.contract` asserts the served AS metadata declares neither | `guards.non-goals.guard` (case *Enterprise SSO*: exactly one `SessionIssuer` implementation in the module graph, the deferred tables `auth_providers`, `identities`, `groups` and `group_members` in no migration and no `Database` key, `sessions.mfa_verified_at` with no reader, no route under `/auth/` outside the documented set, and no OIDC or SAML dependency), `authz.seams.unit`, `tokens.kind-enum.unit` (`scim` reserved and refused), `desktop.deep-link-fuzz.e2e` (`auth/callback` with junk never navigates) | M1 (absence and seam), M5 (deep link) — deferred to the roadmap's OIDC SSO epic | covered |
@@ -470,19 +471,20 @@ No requirement of the brief or of the spec is unaddressed by the plan: there are
 
 ## Gaps
 
-Every `partial` row, with the change that closes it. There are no `missing` rows. Sixteen rows
+Every `partial` row, with the change that closes it. There are no `missing` rows. Fifteen rows
 remain, down from forty: the twelve deferral and non-goal rows are closed by
-`guards.non-goals.guard`; five of the six spec §9 partials are closed by named tests
+`guards.non-goals.guard`; all six spec §9 partials are closed by named tests
 (`desktop.viewer-readonly.e2e`, `desktop.revocation-while-open.e2e`, `desktop.durable-save.e2e`,
-`tree.invalid-move.integration`, and the settled `contracts.paths.unit`/`contracts.paths.prop`
-pair); and the move/rename link warning, the vault-settings route and single-process document
-ownership are closed by `tree.rename-impact.unit`/`tree.rename-impact.integration` plus
+`tree.invalid-move.integration`, the settled `contracts.paths.unit`/`contracts.paths.prop` pair,
+and the foreign-vault revision-history case of `authz.vault-isolation.integration` and
+`mcp.isolation.mcp`); the move/rename link warning, the vault-settings route and single-process
+document ownership are closed by `tree.rename-impact.unit`/`tree.rename-impact.integration` plus
 `rename-impact.dialog.component` and `rename-impact.e2e`, by `vaults.settings.integration`, and by
-`collab.owner-lease.integration` plus `collab.second-process-refused.chaos`. The order below is
-severity: the one remaining spec §9 acceptance row first, because those nine rows are the contract;
-then specified mechanisms whose test is missing or weaker than the requirement; then the rows that
-are partial by construction and are recorded as review-only so that no one mistakes them for
-oversights.
+`collab.owner-lease.integration` plus `collab.second-process-refused.chaos`; and the spike-register
+row is closed by `docs.spikes.spec`. The order below is severity: spec §9 acceptance rows first,
+because those nine rows are the contract (that category is now empty); then specified mechanisms
+whose test is missing or weaker than the requirement; then the rows that are partial by
+construction and are recorded as review-only so that no one mistakes them for oversights.
 
 ### Acceptance rows (spec §9)
 
@@ -558,51 +560,39 @@ covers `openapi.json`. Two consequences are worth recording here:
    and 01-vision-scope-and-principles.md § 5.1, enforced nowhere. Closes with a cheap `static`-job
    grep over `plan/` and `docs/` for duration and effort units, in the style of
    `guards.no-sleep.guard`.
-5. **"Risky or unverified" is answered by a recorded spike with an executed fallback** (brief item
-   7). The gate is now a single spelling rather than a contradiction: 12-milestones.md § 3 names
-   `docs.spikes.spec`, § 13.5 records that the name sits outside that document's layer convention by
-   14-risks-and-open-questions.md's decision D14-11, and D14-11 owns the spike-note template it
-   asserts (`docs/spikes/S<nn>-<slug>.md`, the eight fixed headings, a `Result` of `pass` or `fail`
-   and never `open`, and the pull request that executed the fallback when the result is `fail`).
-   What is still missing is the one thing this matrix needs in order to cite it: `docs.spikes.spec`
-   has no entry in 10-testing-and-quality.md's "Inventory completeness" tables, so it is not a key
-   of `docs/acceptance-map.json` and `scripts/check-test-name-references.ts` has nothing to resolve
-   the spelling against. Closes with an inventory entry — file, project, tag — for
-   `docs.spikes.spec` in 10-testing-and-quality.md; the spelling itself is settled and needs no
-   rename.
-6. **A category has no Markdown body** (spec §2 row 'Category'). The schema makes it impossible —
+5. **A category has no Markdown body** (spec §2 row 'Category'). The schema makes it impossible —
    `note_docs`, `note_updates` and `note_projections` are keyed by note id and only `kind='note'`
    rows get a body — and `tree.crud.integration` exercises category creation, but no case asserts
    it. Closes with a case in `tree.crud.integration` asserting that
    `POST /vaults/:vaultId/nodes {kind:'category'}` leaves zero `notes`/`note_docs` rows and that
    `GET /notes/:noteId/markdown` on a category id returns the documented refusal.
-7. **A category overview is an ordinary note, not a separate document type** (spec §2 para 2).
+6. **A category overview is an ordinary note, not a separate document type** (spec §2 para 2).
    01-vision-scope-and-principles.md § 3.3 states it and `nodes.kind` is a closed two-value enum,
    but no test asserts the enum is closed. Closes with a contract assertion that `NodeKind` has
    exactly `category` and `note`, in the shape `tokens.kind-enum.unit` takes for
    `access_tokens.kind`.
-8. **The workspace provides a vault selector** (spec §3 para 1). The selector is specified in detail
+7. **The workspace provides a vault selector** (spec §3 para 1). The selector is specified in detail
    (07-client-applications.md § 4.3: card grid, role badge, archived badge, last-vault memory) but
    the only named tests touching it are `a11y.axe.component` and `vault-isolation.e2e`, neither of
    which asserts its behaviour. Closes with a component or E2E test for role badges, the archived
    read-only badge, the `workspace:last-vault` skip-on-launch path and the 404-clears-the-key path.
-9. **The editor provides a split source/preview mode** (spec §3 para 3).
+8. **The editor provides a split source/preview mode** (spec §3 para 3).
    `security.hostile-markdown.e2e` opens a note "in reading and split modes" and asserts inertness,
    not split behaviour. Closes with a component test for `Mod-Shift-E`, the persisted panel ratio,
    the below-900 px degradation to `source` with the stored mode unchanged, and preview rendering
    from the live `Y.Text` rather than from the projection.
-10. **There is no public registration route** (spec §4 para 3). `authz.route-policy.boot.guard` and
-    `rest.route-index.contract` force every route to be declared and documented, which would surface
-    an added route, and `guards.non-goals.guard` asserts the absence of a *public sharing* surface —
-    but neither asserts the absence of an account-creation route, which is a spec §4 rule rather
-    than a § 4.4 non-goal and therefore outside the guard's declared list. Closes with a negative
-    case asserting that no unauthenticated account-creation route exists and that
-    `POST /admin/users` and `iridium admin create-user` are the only creators.
-11. **Redo targets the current user's editing operations** (spec §5 para 1).
+9. **There is no public registration route** (spec §4 para 3). `authz.route-policy.boot.guard` and
+   `rest.route-index.contract` force every route to be declared and documented, which would surface
+   an added route, and `guards.non-goals.guard` asserts the absence of a *public sharing* surface —
+   but neither asserts the absence of an account-creation route, which is a spec §4 rule rather
+   than a § 4.4 non-goal and therefore outside the guard's declared list. Closes with a negative
+   case asserting that no unauthenticated account-creation route exists and that
+   `POST /admin/users` and `iridium admin create-user` are the only creators.
+10. **Redo targets the current user's editing operations** (spec §5 para 1).
     `editor.undo-isolation.component` is specified as an undo property over 200 randomized
     interleavings; no named test dispatches redo (`Mod-Y`, `Mod-Shift-Z`) and asserts that it
     re-applies only the local client's operations. Closes with a redo case in that file.
-12. **No second synchronization engine** (spec §5 para 2). The pinned-stack table names one engine,
+11. **No second synchronization engine** (spec §5 para 2). The pinned-stack table names one engine,
     decision A14 excludes the v14 line, four guards constrain where CRDT code may live
     (`deps.single-instance.guard`, `collab.initial-state-only-path.guard`, `collab.no-reinit.guard`,
     `guards.one-boot-path.guard`), and `guards.non-goals.guard` rules out the rich-text editor
@@ -611,7 +601,7 @@ covers `openapi.json`. Two consequences are worth recording here:
     package that imports neither `yjs` nor `Y.Doc`. Closes by extending `deps.single-instance.guard`
     or the `turbo boundaries` step to fail on a text-synchronization dependency outside the pinned
     collaboration set.
-13. **A Markdown export is not a complete backup** (spec §8 para 2). The statement lives in
+12. **A Markdown export is not a complete backup** (spec §8 para 2). The statement lives in
     11-operations-and-deployment.md § Backup and restore, in `docs/ops/backup-restore.md` and in the
     generated `README-IRIDIUM.md`; `ops.backup-restore.drill` verifies the restore against the
     database rather than the export, which proves the policy but not the disclosure. Closes with an
@@ -620,19 +610,19 @@ covers `openapi.json`. Two consequences are worth recording here:
 
 ### Partial by construction — recorded as review-only
 
-14. **The deliverable of this phase is the development plan itself** (brief item 8). Coverage is the
+13. **The deliverable of this phase is the development plan itself** (brief item 8). Coverage is the
     fourteen sections plus `README.md` and this matrix; there is no automatable test and none is
     wanted. Recorded for completeness.
-15. **Categories are organizational folders, not tags** (spec §2 para 2). A modelling constraint:
+14. **Categories are organizational folders, not tags** (spec §2 para 2). A modelling constraint:
     the single-parent property is the honest proof and has its own covered row
     (`hierarchy.model.prop`), and `search.query-parser.unit` proves the reserved `tag:` operator is
     rejected rather than silently accepted. Nothing further to build.
-16. **Guaranteed recovery of unacknowledged edits after a client crash is outside the MVP**
+15. **Guaranteed recovery of unacknowledged edits after a client crash is outside the MVP**
     (spec §5 para 5). Explicit in the pending-edit table of 05-collaboration-and-durability.md
     § Reconnection semantics. No test asserts it and none should; the adjacent positive property —
     nothing acknowledged is ever lost — is held by `collab.durable-ack.chaos` and
     `persistence.model.prop`.
-17. **Convergence is not a guarantee of sensible prose** (spec §5 para 6). Carried as assumption
+16. **Convergence is not a guarantee of sensible prose** (spec §5 para 6). Carried as assumption
     ASM-27 in 14-risks-and-open-questions.md with its leading indicators and its pivot (history,
     named versions and restore as the recovery story). Not testable as stated; it stays under review
     rather than becoming a test.
@@ -652,7 +642,7 @@ fixed in the same pass as the gaps above.
 - **Undefined and superseded test names cited by sibling sections.** 04-auth-and-access-control.md
   § 14 and 05-collaboration-and-durability.md § What is tested and how cite names that
   10-testing-and-quality.md's superseded-spellings table resolves to (`tokens.format.prop`, `tokens.format.unit`,
-  `authz.route-policy.boot`, `authz.no-mcp-admin-implied.guard`, `mcp.revocation.mcp`,
+  `authz.route-policy.boot.guard`, `authz.no-mcp-admin-implied.guard`, `mcp.revocation.mcp`,
   `desktop.revocation-while-open.e2e`, `auth.sessions-web.integration`, `auth.sessions-desktop.integration`) or does not define at all (
   `collab.epoch-steady-state.integration`, `desktop.revocation-while-open`, `e2e.viewer-readonly`,
   `e2e.revocation-while-open`, `collab.stateless-protocol.integration`,
@@ -707,13 +697,21 @@ hard-property id the map does not list, when a file under `apps/e2e/` or `apps/s
 no requirement tag, or when a `hostContractCases()` case has not passed in every due harness.
 
 The link from that machinery to this section is `scripts/check-test-name-references.ts`, also a
-`static`-job step: it greps every markdown file under `plan/` and `docs/` for the
-`<area>.<subject>.<layer>` pattern and fails on any match that is not a key of
-`docs/acceptance-map.json`, printing the canonical spelling when the match is a superseded variant.
-`plan/15-requirements-traceability.md` is one of the files it greps. A test rename therefore breaks
-the build in the commit that renames until this matrix is updated with it, and a test name invented
-here — for a test that does not exist — fails the same job. That is the whole anti-drift contract:
-the Tests column cannot describe tests the repository does not have.
+`static`-job step, whose pure rules live in `scripts/lib/test-names.ts`: it scans every markdown
+file under `docs/` for the `<area>.<subject>.<layer>` pattern and fails on any match that is not a
+key of `docs/acceptance-map.json`, printing the canonical spelling when the match is a superseded
+variant. It also fails on a spelling that a Superseded table maps to a test —
+10-testing-and-quality.md's "Superseded spellings" and 12-milestones.md § 13.5, whose rows it skips
+and which `scripts/build-acceptance-map.ts` parses into the map's `superseded` array — wherever that
+spelling appears outside those tables, and on a backticked `.test`, `.test.ts` or `.test.tsx`
+citation or a directory-prefixed pseudo-name. A line whose subject is a superseded or undefined
+spelling itself is exempted by its hash in `scripts/lib/test-name-exemptions.json` rather than
+corrected (D13-16); in this section one line of the undefined-name list under "Matrix hygiene
+defects found while tracing" carries such an exemption. `guards.test-name-references.guard` proves
+those rules in-file. `docs/plan/15-requirements-traceability.md` is one of the files it scans. A
+test rename therefore breaks the build in the commit that renames until this matrix is updated with
+it, and a test name invented here — for a test that does not exist — fails the same job. That is the
+whole anti-drift contract: the Tests column cannot describe tests the repository does not have.
 
 Four rules follow from that, and they are the review checklist for any change to this section.
 

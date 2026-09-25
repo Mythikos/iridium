@@ -52,7 +52,7 @@ on the way were all one shape: a rule the server enforces that the document did 
 the rule belongs to a route released at `v0.1.0` the published shape is unchanged and the refusal is
 declared in the fuzz configuration, because A54 prices a tightened validation at an `apiVersion` bump
 and none of these changes can be observed by a client. Where the route is new at M2 the schema states
-the rule. `compat.n-minus-1` and the contract lane are green together.
+the rule. `compat.n-minus-1.integration` and the contract lane are green together.
 
 Five named exit tests passed without asserting a clause their §6.4 row states — the depth bound, the
 pre-trash validator, the job claim columns, the vault-status search cases and the after-thinning half
@@ -82,13 +82,13 @@ surfaced, because each one hid the next.
 - **Three budgets were sized for a machine that is not also hosting the lane's containers**: the
   multipart storage-driver contract, two collaboration waits and the chaos reconnect, which now
   shares one constant across its five call sites.
-- **A stopped fixture clock turned a purge into a hang.** `attachments.unreferenced-report` drove a
-  `ManualClock` with `jump()` alone, which fires nothing, while purge waits outside the structural
-  lock for the note's writer to reach disposal — including a backoff retry armed on that clock. One
-  lane per run expired at 120 s while the other passed in six seconds. `withPacedClock` awaits real
-  server work while injected time keeps pace with host time, the way `drainWithClock` already did
-  for shutdown. Pacing then exposed that `ManualClock` reported a fractional instant, which the
-  rate-limit store refuses outright.
+- **A stopped fixture clock turned a purge into a hang.**
+  `attachments.unreferenced-report.integration` drove a `ManualClock` with `jump()` alone, which
+  fires nothing, while purge waits outside the structural lock for the note's writer to reach
+  disposal — including a backoff retry armed on that clock. One lane per run expired at 120 s while
+  the other passed in six seconds. `withPacedClock` awaits real server work while injected time
+  keeps pace with host time, the way `drainWithClock` already did for shutdown. Pacing then exposed
+  that `ManualClock` reported a fractional instant, which the rate-limit store refuses outright.
 - **The administrator fuzz profile revoked its own sign-in.** `schemathesis-full` had been red every
   night since M1: a stateful scenario links a real id out of `GET /admin/users` into
   `POST /admin/users/{userId}/reset-password`, which replaces the password the fixture holds (A28),

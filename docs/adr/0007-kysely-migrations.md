@@ -1,6 +1,6 @@
 # A7 — Kysely + kysely-ctl + kysely-codegen; forward-only migrations in production; fail-closed readiness
 
-**Status:** Accepted (2026-09-11).
+**Status:** Accepted (2026-09-11); the one-DDL-per-file clause is **superseded in part by D03-29 (2026-09-25)**: it admits exactly `0028_audit_events_triggers` and `0029_audit_events_archive` by content hash, marked inline in the Decision.
 
 ## Context
 
@@ -8,7 +8,7 @@ The schema (skeleton §C) needs DDL that ORMs cannot express: `FULLTEXT` indexes
 
 ## Decision
 
-kysely 0.29.5 with `MysqlDialect` over mysql2 pools (A10); kysely-ctl 0.21.0 migrations in `apps/server/migrations/NNNN_<name>.ts`, one DDL statement per file, idempotent guards, `transactionMode: 'per-migration'`, the whole run wrapped in `GET_LOCK('iridium_migrate', 60)`; kysely-codegen 0.20.0 output diffed in CI against the hand-written `apps/server/src/db/schema.ts`. `iridium migrate status|up|to` uses `DATABASE_MIGRATE_URL` (the migrator role of A8). The container entrypoint migrates only when `IRIDIUM_MIGRATE_ON_BOOT=true` (default `true` in dev/compose; documented off for HA). `/readyz` returns 503 while migrations are pending. Production migrations are forward-only with the expand/contract rule (a column is dropped one release after code stops using it). Triggers and grants live in migrations so a restore re-applies them (A45/A47). The initial set is `0001_users` … `0034_grants` (skeleton §C.11).
+kysely 0.29.5 with `MysqlDialect` over mysql2 pools (A10); kysely-ctl 0.21.0 migrations in `apps/server/migrations/NNNN_<name>.ts`, one DDL statement per file [**Superseded in part by D03-29 (2026-09-25):** two M0 files, `0028_audit_events_triggers` (2 statements) and `0029_audit_events_archive` (3), each `IF NOT EXISTS`-guarded, are admitted by content hash; no further exception is admitted (`03-data-model.md` §14.2; `migrations.one-ddl.guard`)], idempotent guards, `transactionMode: 'per-migration'`, the whole run wrapped in `GET_LOCK('iridium_migrate', 60)`; kysely-codegen 0.20.0 output diffed in CI against the hand-written `apps/server/src/db/schema.ts`. `iridium migrate status|up|to` uses `DATABASE_MIGRATE_URL` (the migrator role of A8). The container entrypoint migrates only when `IRIDIUM_MIGRATE_ON_BOOT=true` (default `true` in dev/compose; documented off for HA). `/readyz` returns 503 while migrations are pending. Production migrations are forward-only with the expand/contract rule (a column is dropped one release after code stops using it). Triggers and grants live in migrations so a restore re-applies them (A45/A47). The initial set is `0001_users` … `0034_grants` (skeleton §C.11).
 
 ## Alternatives Considered
 

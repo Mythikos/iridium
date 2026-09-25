@@ -1,0 +1,11 @@
+# D12-21: the advisory nightly jobs
+
+Status: accepted 2026-09-25.
+
+The three-red-nights rule of `12-milestones.md` §3 ("Nightly health") excludes exactly the advisory nightly jobs: `mysql-innovation`, `node-26`, `conformance-all` and, below an M8 target, `mcp-clients`. Each carries `continue-on-error` in `nightly.yml`; `mcp-clients` does so through the milestone job's `clients_gate` output, which is true when the target is M8 or later, as `continue-on-error: ${{ needs.milestone.outputs.clients_gate != 'true' }}`, so the job becomes a gate at M8 without an edit (AG10). An advisory job's failures are reported and opened as issues like any nightly failure and dispositioned in the exit record's nightly section; they never count toward the three-night rule. `10-testing-and-quality.md`'s nightly policy sentence and `nightly.yml`'s header comment state the same set.
+
+`guards.nightly-policy.guard` (guard project, `ci.yml › static`, `[area:ops]`, M3) parses `nightly.yml` and 12 §3 and asserts that the set of jobs carrying `continue-on-error` equals the enumerated advisory set, that `mcp-clients`' `continue-on-error` is exactly the `clients_gate` expression, and that the milestone job computes `clients_gate` as target ≥ M8. Its poison cases — an extra `continue-on-error` job, and a literal `true` on `mcp-clients` — fail.
+
+A rule and its exceptions must be stated in one place and checked, or a red job is exempted by editing a workflow line nobody reviews. Before this decision 12 §3 blocked the next exit on any nightly job red three nights running, while `10-testing-and-quality.md`'s nightly table declared three jobs non-blocking, `nightly.yml` marked them `continue-on-error` under a header comment repeating the blanket rule, and the M2 exit record dispositioned two of them as "not counted" with no plan rule to cite. Enumerating the set in 12 §3 and asserting it against the workflow makes "advisory" a property the build checks. Rejected: leaving the set implicit in `continue-on-error` lines, which is a silent exemption path; making the advisory jobs blocking, which contradicts 10's early-warning lanes and the owner's answer to G10.
+
+Source: D12-21 in [the decision log](../plan/13-decision-log.md) and in [12-milestones.md](../plan/12-milestones.md), "Decisions made in this section".

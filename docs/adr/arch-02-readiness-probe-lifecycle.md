@@ -1,6 +1,6 @@
 # ARCH-02: readiness probe lifecycle
 
-Status: accepted, amended 2026-09-20.
+Status: accepted, amended 2026-09-20; noted 2026-09-25: M3 appends the fail-closed `server_settings` check after `access_log_partitions`, so the scan has seventeen checks.
 
 The first remote extended chaos campaigns expose two lifecycle problems. CH-16 adds up to
 500 ms of database latency before starting the standby process; Fastify's default ten-second
@@ -19,6 +19,8 @@ handshake budget. It remains bounded, and the same setting applies in every serv
 No listener opens before boot completes. A slow but reachable database can finish the real
 readiness probes instead of being mistaken for a plugin that forgot to resolve its hook.
 CH-16's injected latency, iteration count and 180-second case deadline are unchanged.
+
+Noted 2026-09-25: M3 appends one check, `server_settings`, after `access_log_partitions`, so `ReadyzCheckName` has seventeen names and the fail-closed set is `migrations`, `collab_owner_lease` and `server_settings` (OPS-24, D09-11 and ARCH-10 as amended). The check performs the settings store's first load and later refreshes it inside the same one-flight evaluation. The order of the existing sixteen, their thresholds, the one-flight rule and the 60-second bound are otherwise unchanged; the text above describes the sixteen-check scan as it stood on 2026-09-20.
 
 Verification belongs to `ops.readiness.unit`, `ops.shutdown.unit`, `readyz.integration`,
 `collab.second-process-refused.chaos` and `collab.db-outage.chaos`. The remote failures and

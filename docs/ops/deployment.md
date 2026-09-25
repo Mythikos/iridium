@@ -5,7 +5,7 @@ from `docs/plan/11-operations-and-deployment.md`, not invented ahead of it.*
 
 ## What this document will contain
 
-The end-to-end deployment walkthrough for `infra/compose.prod.yaml`: prerequisites, TLS (the public `Caddyfile` variant and the air-gapped `Caddyfile.internal` variant), secrets, creating the first admin, and post-deploy smoke checks — reproducing verbatim the hardened compose file, the Prometheus scrape and alerting setup, the outbound-network ("what leaves the box") statement, the supported-clients table, and the capacity starting points calibrated against the M8 load SLOs. Rewritten as a verbatim-followable procedure at M8 and validated by the nightly `compose.prod clean-VM boot` job.
+The end-to-end deployment walkthrough for `infra/compose.prod.yaml`: prerequisites, TLS (the public `Caddyfile` variant and the air-gapped `Caddyfile.internal` variant), secrets, creating the first admin, and post-deploy smoke checks — reproducing verbatim the hardened compose file, the Prometheus scrape and alerting setup, the outbound-network ("what leaves the box") statement, the supported-clients table, and the capacity starting points calibrated against the M8 load SLOs. Rewritten as a verbatim-followable procedure at M8 and validated by `ops.compose-prod.clean-vm` in `nightly.yml › compose-boot`.
 
 ## Source
 

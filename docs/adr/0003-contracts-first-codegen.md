@@ -8,7 +8,7 @@ Iridium has four wire surfaces (REST, WebSocket stateless messages, MCP, desktop
 
 ## Decision
 
-`@iridium/contracts` (zod 4.6.2 only) is the single source of wire contracts. A root `pnpm gen` runs, in order: (1) `apps/server` boots in `in-process` mode and writes `packages/contracts/openapi/openapi.json` via `app.swagger()` (OpenAPI 3.1, with `links` so Schemathesis can run stateful fuzzing), then `@redocly/cli 2.52.1 lint`; (2) openapi-typescript 7.13.0 emits `packages/api-client/src/generated/paths.d.ts`, consumed by openapi-fetch 0.17.0; (3) kysely-codegen 0.20.0 generates types from a migrated database and diffs them against the hand-written `apps/server/src/db/schema.ts`; (4) `packages/contracts/mcp/tools.schema.json` is emitted from the zod tool schemas and a test asserts the live `tools/list` (both eras) equals it in deterministic order; (5) desktop IPC typings for `window.iridium` are generated from `contracts/desktop-ipc.ts`; (6) an msw 2.15.0 handler skeleton is generated from `openapi.json` for component tests. CI runs `pnpm gen && git diff --exit-code` (job `gen-drift` inside `static`).
+`@iridium/contracts` (zod 4.6.2 only) is the single source of wire contracts. A root `pnpm gen` runs, in order: (1) `apps/server` boots in `in-process` mode and writes `packages/contracts/openapi/openapi.json` via `app.swagger()` (OpenAPI 3.1, with `links` so Schemathesis can run stateful fuzzing), then `@redocly/cli 2.52.1 lint`; (2) openapi-typescript 7.13.0 emits `packages/api-client/src/generated/paths.d.ts`, consumed by openapi-fetch 0.17.0; (3) kysely-codegen 0.20.0 generates types from a migrated database and diffs them against the hand-written `apps/server/src/db/schema.ts`; (4) `packages/contracts/mcp/tools.schema.json` is emitted from the zod tool schemas and a test asserts the live `tools/list` (both eras) equals it in deterministic order; (5) desktop IPC typings for `window.iridium` are generated from `contracts/desktop-ipc.ts`; (6) an msw 2.15.0 handler skeleton is generated from `openapi.json` for component tests. CI runs `pnpm gen && git diff --exit-code` (the `static` job's `pnpm gen:check` step).
 
 ## Alternatives Considered
 
@@ -25,7 +25,7 @@ Positive: any change to a route, stateless message, tool, or IPC channel is a bu
 
 ## Verification
 
-CI `static` job step `gen-drift`; `mcp.tools-schema.contract` (M3); `rest.route-index.contract` (M2); Redocly lint; kysely-codegen diff step (M0).
+The `static` job's `pnpm gen:check` step; `mcp.tools-schema.contract` (M3); `rest.route-index.contract` (M2); Redocly lint; kysely-codegen diff step (M0).
 
 ## References
 
