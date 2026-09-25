@@ -1106,7 +1106,7 @@ There is no `If-Match` on `head_seq` (it changes on every keystroke); the body's
 
 ```ts
 Query: {
-  q: z.string().min(1).max(512),
+  q: z.string().min(1).max(LIMITS.SEARCH_QUERY_MAX_CHARS),   // 512: the member the MCP `query` reuses (§4.4.4)
   pathPrefix: z.string().max(LIMITS.NODE_PATH_MAX_CHARS).optional(),   // same cap as the MCP `path_prefix` (§4.4.4); NODE_PATH_MAX_CHARS counts the leading / and the .md suffix
   cursor: CursorQueryParam.optional(), limit: z.int().min(1).max(LIMITS.SEARCH_LIMIT_MAX).default(LIMITS.SEARCH_LIMIT_DEFAULT),   // 100 / 20
   snippetChars: z.int().min(LIMITS.SNIPPET_CHARS_MIN).max(LIMITS.SNIPPET_CHARS_MAX).default(LIMITS.SNIPPET_MAX_CHARS),   // 80 … 1000, default 240: the members the MCP `snippet_chars` reuses (§4.4.4)
@@ -2612,7 +2612,7 @@ inputSchema (exactly one identity form; enforced by a zod refinement, reported a
   revision        integer       (optional; a retained revision seq; requires history:read)
   start_line      integer ≥ 1   (optional; beyond line_count it is an isError with the line text of §4.6)
   end_line        integer ≥ 1   (optional; ≥ start_line; beyond line_count it is clamped)
-  heading         string        (optional, 1..512; matched by slug, then exact text, then case-insensitively, the first in document order;
+  heading         string        (optional, 1..MCP_GET_NOTE_HEADING_MAX_CHARS (512); matched by slug, then exact text, then case-insensitively, the first in document order;
                                  returns that section only; not combinable with start_line/end_line; an unmatched heading is an isError
                                  with the heading texts of §4.6, the unavailable variant when the consulted outline's projection status is not ok)
   include_outline boolean       (default true)
@@ -2639,7 +2639,7 @@ Path resolution is forgiving but never guessing. The path is NFC-normalised, str
 #### 4.4.4 `search_notes`
 
 ```jsonc
-inputSchema:  query string (required, 1..512), vault_id uuid?, path_prefix string? (≤ NODE_PATH_MAX_CHARS (16 387), REST's pathPrefix bound),
+inputSchema:  query string (required, 1..SEARCH_QUERY_MAX_CHARS (512), REST search's q bound), vault_id uuid?, path_prefix string? (≤ NODE_PATH_MAX_CHARS (16 387), REST's pathPrefix bound),
               limit integer 1..SEARCH_LIMIT_MAX (100) (default SEARCH_LIMIT_DEFAULT, 20), cursor string?,
               snippet_chars integer SNIPPET_CHARS_MIN..SNIPPET_CHARS_MAX (80..1000) (default SNIPPET_MAX_CHARS, 240)   // REST search's members (§2.10)
 outputSchema: results array of { note_id, vault_id, vault_name, path (≤ NODE_PATH_MAX_CHARS), title, revision, score number,
@@ -2709,7 +2709,7 @@ Every string below is a constant or pure builder in `apps/server/src/mcp/errors.
 | Path did not match, but near matches exist (final segments compared ignoring case and accents, §4.4.3) | `No note at that path. Did you mean: <path>, <path>? A path resolves when it matches exactly or differs only in letter case; use one of these paths, or note_id to be exact.` (up to `LIMITS.LINK_CANDIDATES_MAX`, 5) | `not_found` |
 | Heading not matched, and the consulted outline's projection status is not `ok` (the committed outline for a head read; the status the outline port returned for a revision read that computes one) | `Headings are unavailable for this note (<status>); use start_line and end_line.` | `ok` |
 | Heading not matched, and the note has no headings | `This note has no headings; use start_line and end_line.` | `ok` |
-| Heading not matched otherwise | `No heading matches "<heading>". Headings in this note: <text> (slug <slug>, line <n>); …[ and <m> more]. Call get_note with heading set to one of these slugs, or with start_line and end_line.` — at most `LIMITS.MCP_HEADING_LIST_MAX` (50) headings in document order, each text cut at a grapheme boundary to `LIMITS.MCP_HEADING_LIST_ITEM_MAX_CHARS` (120) with a trailing `…`, a slug longer than that cap omitted (the line is still given); `<heading>` is the caller's input, bounded by the schema's 512 | `ok` |
+| Heading not matched otherwise | `No heading matches "<heading>". Headings in this note: <text> (slug <slug>, line <n>); …[ and <m> more]. Call get_note with heading set to one of these slugs, or with start_line and end_line.` — at most `LIMITS.MCP_HEADING_LIST_MAX` (50) headings in document order, each text cut at a grapheme boundary to `LIMITS.MCP_HEADING_LIST_ITEM_MAX_CHARS` (120) with a trailing `…`, a slug longer than that cap omitted (the line is still given); `<heading>` is the caller's input, bounded by the schema's `LIMITS.MCP_GET_NOTE_HEADING_MAX_CHARS` (512) | `ok` |
 | `start_line` beyond `line_count` (an `end_line` beyond it is clamped) | `start_line <n> is beyond the end of this note (<line_count> lines).` | `ok` |
 | Any cursor the codec or the listing's after-key check refuses — shape, encoding, signature, payload, version, kind, principal, filter, expiry or after-key (§1.6) | `Cursor invalid or expired — restart from the first page.` (`CURSOR_INVALID_TEXT`, re-exported from `pagination/cursor.ts`) — the cause goes only to the `mcp.cursor_rejected {requestId, tool, cause}` log line; the `access_log` row carries `status='denied'` and one deduplicated `mcp.access.denied {reason:'cursor'}` audit row is written, keyed on the resolved vault or `NULL`. A value longer than `LIMITS.CURSOR_MAX_CHARS` fails `CursorParam` first and receives the SDK's input-validation text, which is not audited | `denied` |
 | Revision requested but thinned away | `Revision <n> is no longer retained. Nearest retained revisions: <n1>, <n2>. Call list_note_revisions for the full list.` | `not_found` |

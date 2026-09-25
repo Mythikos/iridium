@@ -1,4 +1,5 @@
 /** Live compatibility policy, SemVer precedence, and refusal ordering without replacing product rules. */
+import { RELEASE_MIN_CLIENT_VERSION } from '@iridium/contracts';
 import type { FastifyInstance } from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -137,7 +138,35 @@ describe('rest.client-version.unit [area:ops]', () => {
       await expect(minimumClientVersion({ mode: 'connect', dbApp: null })).rejects.toMatchObject({
         code: 'not_ready',
       });
-      expect(await minimumClientVersion({ mode: 'none', dbApp: null })).toBe('0.0.0');
+      expect(await minimumClientVersion({ mode: 'none', dbApp: null })).toBe(
+        RELEASE_MIN_CLIENT_VERSION,
+      );
+    } finally {
+      await target.fake.db.destroy();
+    }
+  });
+
+  it('serves the SemVer maximum of the release floor and the operator floor', async () => {
+    // A54 as amended: the operator can raise the release's floor and never lower it. `0.0.0-0` is the
+    // lowest SemVer precedence there is, so it is below the floor whatever value a release carries.
+    expect(clientVersionProblem(RELEASE_MIN_CLIENT_VERSION, RELEASE_MIN_CLIENT_VERSION)).toBeNull();
+    const below = '0.0.0-0';
+    const target = fixture(below);
+    try {
+      expect(clientVersionProblem(below, RELEASE_MIN_CLIENT_VERSION)).toMatchObject({
+        code: 'client_outdated',
+      });
+      expect(await minimumClientVersion({ mode: 'connect', dbApp: target.fake.db })).toBe(
+        RELEASE_MIN_CLIENT_VERSION,
+      );
+      target.change('999.0.0');
+      expect(await minimumClientVersion({ mode: 'connect', dbApp: target.fake.db })).toBe(
+        '999.0.0',
+      );
+      target.change(RELEASE_MIN_CLIENT_VERSION);
+      expect(await minimumClientVersion({ mode: 'connect', dbApp: target.fake.db })).toBe(
+        RELEASE_MIN_CLIENT_VERSION,
+      );
     } finally {
       await target.fake.db.destroy();
     }

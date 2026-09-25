@@ -1,5 +1,3 @@
-import { describe, expect, it } from 'vitest';
-
 /**
  * `cli.dispatch.unit` — argv resolution and every refusal that happens before anything connects.
  *
@@ -15,6 +13,9 @@ import { describe, expect, it } from 'vitest';
  * before the environment is read at all — which is what makes it usable inside a deployment whose
  * `EnvSchema` parse is the thing that is broken.
  */
+import { API_VERSION, RELEASE_MIN_CLIENT_VERSION } from '@iridium/contracts';
+import { describe, expect, it } from 'vitest';
+
 import type { RawEnv } from '../config/env.ts';
 import { runCli } from './dispatch.ts';
 import { EXIT } from './exit.ts';
@@ -204,6 +205,19 @@ describe('cli.dispatch.unit [area:ops]', () => {
       expect(parseJson(result.stdout)).toMatchObject({
         schemaHead: expect.stringMatching(/^\d{4}_/),
       });
+    });
+
+    it('reports the API counter and the release floor the binary carries, from the contracts', async () => {
+      // 11's `iridium version` row: the release floor, never the effective floor, which needs the
+      // database this command does not open (A54 as amended).
+      const result = await run(['version', '--json'], {});
+      expect(parseJson(result.stdout)).toMatchObject({
+        apiVersion: API_VERSION,
+        releaseMinClientVersion: RELEASE_MIN_CLIENT_VERSION,
+      });
+      expect((await run(['version'], {})).stdout).toContain(
+        `releaseMinClientVersion  ${RELEASE_MIN_CLIENT_VERSION}`,
+      );
     });
   });
 

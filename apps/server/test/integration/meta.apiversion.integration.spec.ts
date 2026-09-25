@@ -1,5 +1,5 @@
 /** The durable release floor changes the next real request while discovery remains readable (A54). */
-import { Meta } from '@iridium/contracts';
+import { API_VERSION, Meta, RELEASE_MIN_CLIENT_VERSION } from '@iridium/contracts';
 import { describe, expect, it } from 'vitest';
 
 import { createMaintDb } from '../../src/db/migrator.ts';
@@ -46,8 +46,8 @@ describe('meta.apiversion.integration [area:ops]', () => {
       expect(response.status).toBe(200);
       const meta = Meta.parse(response.body);
       expect(meta).toMatchObject({
-        apiVersion: 1,
-        minClientVersion: '0.0.0',
+        apiVersion: API_VERSION,
+        minClientVersion: RELEASE_MIN_CLIENT_VERSION,
         features: [],
         publicOrigin: target.origin,
         collab: { path: '/collab' },
@@ -62,7 +62,9 @@ describe('meta.apiversion.integration [area:ops]', () => {
         .select('value')
         .where('key', '=', 'min_client_version')
         .executeTakeFirstOrThrow();
-      expect(row.value).toBe(meta.minClientVersion);
+      // A fresh schema carries 0055's seeded operator floor, which never lowers the release floor the
+      // binary carries: the served floor is their SemVer maximum (09 section 7.1; A54 as amended).
+      expect(row.value).toBe('0.0.0');
     } finally {
       await target.stop();
     }

@@ -9,9 +9,9 @@
 import { createHmac } from 'node:crypto';
 
 import {
-  AUDIT_TARGETS_MAX,
   auditChainPreimage,
   idToBytes,
+  LIMITS,
   type AuditChainPayload,
   AUDIT_ACTIONS,
   AUDIT_ACTION_CHAIN,
@@ -539,8 +539,8 @@ describe('audit.chain.unit [area:audit] signed storage and verification', () => 
   it.each([
     undefined,
     [],
-    Array.from({ length: AUDIT_TARGETS_MAX }, () => ({ type: 'node', id: TARGET_ID })),
-    Array.from({ length: AUDIT_TARGETS_MAX + 1 }, () => ({ type: 'node', id: TARGET_ID })),
+    Array.from({ length: LIMITS.AUDIT_TARGETS_MAX }, () => ({ type: 'node', id: TARGET_ID })),
+    Array.from({ length: LIMITS.AUDIT_TARGETS_MAX + 1 }, () => ({ type: 'node', id: TARGET_ID })),
   ])(
     'keeps capped targets, null fields and metadata identical in storage and the signature: %#',
     async (targets) => {
@@ -559,13 +559,15 @@ describe('audit.chain.unit [area:audit] signed storage and verification', () => 
       const capped =
         targets === undefined || targets.length === 0
           ? undefined
-          : targets.slice(0, AUDIT_TARGETS_MAX);
+          : targets.slice(0, LIMITS.AUDIT_TARGETS_MAX);
       const metadata =
         targets === undefined
           ? null
           : {
               keep: true,
-              ...((targets?.length ?? 0) > AUDIT_TARGETS_MAX ? { targets_truncated: true } : {}),
+              ...((targets?.length ?? 0) > LIMITS.AUDIT_TARGETS_MAX
+                ? { targets_truncated: true }
+                : {}),
             };
       try {
         const recorded = await fake.db.transaction().execute((trx) =>

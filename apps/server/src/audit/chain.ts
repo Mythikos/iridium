@@ -41,13 +41,13 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   AUDIT_ACTION_CHAIN,
   AUDIT_SCHEMA_VERSION,
-  AUDIT_TARGETS_MAX,
   AuditAction,
   auditChainPreimage,
   chainIdForVault,
   GENESIS_CHAIN_HASH,
   idFromBytes,
   idToBytes,
+  LIMITS,
   SERVER_CHAIN_ID,
   toTimestamp,
   type AuditActorType,
@@ -425,8 +425,8 @@ function capTargets(targets: readonly AuditTarget[] | undefined): {
   readonly truncated: boolean;
 } {
   if (targets === undefined || targets.length === 0) return { targets: null, truncated: false };
-  if (targets.length <= AUDIT_TARGETS_MAX) return { targets, truncated: false };
-  return { targets: targets.slice(0, AUDIT_TARGETS_MAX), truncated: true };
+  if (targets.length <= LIMITS.AUDIT_TARGETS_MAX) return { targets, truncated: false };
+  return { targets: targets.slice(0, LIMITS.AUDIT_TARGETS_MAX), truncated: true };
 }
 
 /**

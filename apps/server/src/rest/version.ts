@@ -1,5 +1,16 @@
-/** The API compatibility counter, live release-controlled client floor, and mounted features (A54). */
-import { RESPONSE_HEADERS, type Feature } from '@iridium/contracts';
+/**
+ * The client-compatibility gate, the effective client floor, and the mounted features (A54). The
+ * API counter `API_VERSION` and the release floor `RELEASE_MIN_CLIENT_VERSION` are wire contract and
+ * live in `@iridium/contracts`; the floor this module serves and enforces is the SemVer maximum of
+ * that release floor and the operator floor `schema_meta.min_client_version`
+ * (09-api-reference.md section 7.1; A54 as amended 2026-09-25).
+ */
+import {
+  API_VERSION,
+  RELEASE_MIN_CLIENT_VERSION,
+  RESPONSE_HEADERS,
+  type Feature,
+} from '@iridium/contracts';
 import type { FastifyInstance } from 'fastify';
 
 import type { DatabaseHandle } from '../boot/db.ts';
@@ -7,18 +18,6 @@ import type { IridiumConfig } from '../config/env.ts';
 import { isOpsPath } from '../ops/paths.ts';
 import { CLIENT_VERSION_HEADER, CLIENT_VERSION_MAX_LENGTH } from '../security/client-header.ts';
 import { ProblemError } from '../security/problem.ts';
-
-/**
- * The integer `GET /meta.apiVersion` and the `X-Iridium-Api-Version` response header carry.
- *
- * It increments only for a breaking change as §7.2 defines one: removing or renaming a field, an
- * endpoint, an `operationId`, a `ProblemDetails` code, a stateless message type or an IPC channel;
- * changing semantics; tightening validation. Adding any of those is additive and leaves it alone.
- */
-export const API_VERSION = 1;
-
-/** The initial release floor, seeded by migration 0055; database-free schema export uses it too. */
-const INITIAL_CLIENT_VERSION = '0.0.0';
 
 interface SemanticVersion {
   readonly core: readonly string[];
@@ -79,11 +78,36 @@ function compareVersions(left: SemanticVersion, right: SemanticVersion): number 
   return left.prerelease.length - right.prerelease.length;
 }
 
-/** Reads the committed floor on every request, so an operator change cannot sit in a process cache. */
+/** A release floor that is not SemVer 2.0.0; a build carrying one refuses to load this module. */
+class InvalidReleaseFloorError extends Error {
+  constructor(value: string) {
+    super(
+      `RELEASE_MIN_CLIENT_VERSION ${JSON.stringify(value)} in @iridium/contracts rest/meta.ts is ` +
+        'not a SemVer 2.0.0 version; set it to one (09-api-reference.md section 7.1).',
+    );
+    this.name = 'InvalidReleaseFloorError';
+  }
+}
+
+function releaseFloor(): SemanticVersion {
+  const parsed = semanticVersion(RELEASE_MIN_CLIENT_VERSION);
+  if (parsed === null) throw new InvalidReleaseFloorError(RELEASE_MIN_CLIENT_VERSION);
+  return parsed;
+}
+
+/** The floor this release carries, parsed once: a build constant, never re-read per request. */
+const RELEASE_FLOOR = releaseFloor();
+
+/**
+ * Reads the operator floor on every request, so an operator change cannot sit in a process cache,
+ * and returns the SemVer maximum of it and the release floor: the operator can raise the release's
+ * floor and never lower it (09-api-reference.md section 7.1; A54 as amended).
+ */
 export async function minimumClientVersion(
   database: Pick<DatabaseHandle, 'mode' | 'dbApp'>,
 ): Promise<string> {
-  if (database.mode === 'none') return INITIAL_CLIENT_VERSION;
+  // Database-free schema export has no operator floor and uses the release floor alone (09 §7.1).
+  if (database.mode === 'none') return RELEASE_MIN_CLIENT_VERSION;
   const db = database.dbApp;
   if (db === null) throw new ProblemError('not_ready');
   const row = await db
@@ -91,12 +115,13 @@ export async function minimumClientVersion(
     .select('value')
     .where('key', '=', 'min_client_version')
     .executeTakeFirst();
-  if (row === undefined || semanticVersion(row.value) === null) {
+  const operatorFloor = row === undefined ? null : semanticVersion(row.value);
+  if (row === undefined || operatorFloor === null) {
     throw new ProblemError('unavailable', {
       detail: 'The server client compatibility policy is unavailable.',
     });
   }
-  return row.value;
+  return compareVersions(operatorFloor, RELEASE_FLOOR) < 0 ? RELEASE_MIN_CLIENT_VERSION : row.value;
 }
 
 /** A presented version is explicit input; absent versions are handled before this policy. @internal */

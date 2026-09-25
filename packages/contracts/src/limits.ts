@@ -118,6 +118,18 @@ const OTHER_LIMITS = {
    * signature is verified, which keeps an unbounded query string away from the HMAC path.
    */
   CURSOR_MAX_CHARS: 4_096,
+  /**
+   * How long a page cursor stays valid from issue, on every paginated REST route and MCP tool: one
+   * member shared with the cursor codec (A35; D06-48). 1 h.
+   */
+  CURSOR_TTL_SECONDS: 3_600,
+  /**
+   * UTF-8 bytes of a path-led keyset's path, measured as its JSON-string encoding, that a cursor
+   * carries literally; a longer path travels as a head cut to this budget, the anchor id and a
+   * digest of the full path, which keeps every issued cursor within `CURSOR_MAX_CHARS` (A35 as
+   * amended 2026-09-25).
+   */
+  CURSOR_PATH_HEAD_MAX_BYTES: 1_024,
   /** `POST /auth/sessions` budget per IP per minute. */
   LOGIN_PER_MINUTE_PER_IP: 10,
   /** Consecutive failures per `email_key|ip` before a block. */
@@ -134,31 +146,213 @@ const OTHER_LIMITS = {
    */
   SESSIONS_PER_USER_PER_KIND: 20,
 
+  // ---- Lists REST and MCP share (09-api-reference.md section 1.6; D06-04; D06-48) --------
+  /**
+   * Rows in a bounded `{items}` response, which carries no cursor: `GET /vaults` and the other
+   * un-paginated lists, and the index resources of an `all_vaults` token.
+   */
+  BOUNDED_LIST_MAX: 1_000,
+  /** The `limit` ceiling of the paginated list queries, the activity readers and `list_notes`. */
+  LIST_PAGE_MAX: 500,
+  /** The `limit` those list queries and `list_notes` use when the request names none. */
+  LIST_PAGE_DEFAULT: 200,
+
   // ---- MCP and integration tokens --------------------------------------------------------
-  /** Burst budget per token per minute on `/mcp`. */
+  /**
+   * Burst layer of the per-credential budget (a PAT or an OAuth grant): 1 point per request
+   * whatever the weight, consumed before the hourly layer on both MCP mounts and the ★ REST reads
+   * (D04-37). Env `MCP_RATE_LIMIT_BURST_PER_MIN`.
+   */
   MCP_TOKEN_BURST_PER_MINUTE: 120,
-  /** Sustained budget per token per hour. Env `MCP_RATE_LIMIT_PER_HOUR` (the default only). */
+  /**
+   * Hourly points of a credential whose row names no capacity: the default of both per-kind
+   * baselines `PAT_DEFAULT_RATE_LIMIT_PER_HOUR` and `OAUTH_DEFAULT_RATE_LIMIT_PER_HOUR` (D03-28;
+   * D04-37).
+   */
   MCP_TOKEN_PER_HOUR: 3_000,
-  /** Points a `search_notes` (and a REST search) call costs. */
+  /**
+   * Hourly points `search_notes`, `search.vault` and `search.all` cost, decided only by `weightOf`
+   * in `auth/tokens/budget.ts` (D04-37).
+   */
   MCP_SEARCH_COST: 3,
-  /** Process ceiling on `/mcp`, across all tokens, per minute. */
+  /**
+   * Requests per minute across all credentials, one ceiling shared by `/mcp` and `/mcp/connect`
+   * (D04-37). Env `MCP_PROCESS_CEILING_PER_MIN`.
+   */
   MCP_PROCESS_PER_MINUTE: 600,
-  /** Characters of note text returned by `get_note` and the note resource, per call. */
+  /**
+   * UTF-8 bytes of a presented bearer credential, checked before it is parsed on every mount the
+   * one verifier serves (`/mcp`, `/mcp/connect` and the ★ REST reads): a longer one is the mount's
+   * one `401` with no database read (06-mcp-and-agent-access.md, the verifier's step 1; D06-48).
+   */
+  BEARER_MAX_BYTES: 128,
+  /**
+   * Failed bearer verifications per IP per minute on the two MCP mounts, a count of failures
+   * rather than of requests: once spent, `mcpIpGate` answers `429` before any `access_tokens` read
+   * (D06-48).
+   */
+  MCP_AUTH_FAILURES_PER_IP_PER_MINUTE: 60,
+  /**
+   * The server-side deadline of one MCP exchange, armed on the injected `Clock` and read in band
+   * through `extra.deadline` (D06-04 as amended; D06-48). 30 s. Env `MCP_REQUEST_TIMEOUT_MS`.
+   */
+  MCP_REQUEST_DEADLINE_MS: 30_000,
+  /**
+   * The writer grace after `MCP_REQUEST_DEADLINE_MS`: the exchange backstop answers
+   * `504 deadline_exceeded` when nothing answered, and the drain disconnects a peer that stopped
+   * reading, this much later (D06-48). 2 s; no environment form.
+   */
+  MCP_DEADLINE_GRACE_MS: 2_000,
+  /**
+   * UTF-16 units of committed Markdown one `get_note` call or note-resource read returns: whole
+   * lines, a grapheme cut only when the first selected line alone exceeds it; trailer lines never
+   * count (D06-04; D06-39).
+   */
   MCP_GET_NOTE_MAX_CHARS: 100_000,
+  /**
+   * Characters of `get_note`'s `heading` argument; a longer one is the SDK's input-validation
+   * `isError` (D06-09 as amended; D06-48).
+   */
+  MCP_GET_NOTE_HEADING_MAX_CHARS: 512,
+  /**
+   * Headings the `get_note` heading-not-found answer lists, in document order (D06-09 as amended;
+   * D06-48).
+   */
+  MCP_HEADING_LIST_MAX: 50,
+  /**
+   * Characters of each heading that answer lists, cut at a grapheme boundary (D06-09 as amended;
+   * D06-48).
+   */
+  MCP_HEADING_LIST_ITEM_MAX_CHARS: 120,
   /** `resource_link` content blocks emitted per tool result (D06-04). */
   MCP_MAX_RESOURCE_LINKS: 50,
+  /** The `limit` ceiling of a `list_vaults` page (D06-38). */
+  MCP_LIST_VAULTS_PAGE_MAX: 100,
+  /** The `list_vaults` page size when the call names no `limit` (D06-38). */
+  MCP_LIST_VAULTS_PAGE_DEFAULT: 50,
+  /**
+   * Rendered characters of vault descriptions and guidance one `list_vaults` page carries, in both
+   * the text block and `structuredContent`; an item that does not fit is flagged as omitted (D06-04
+   * as amended).
+   */
+  MCP_LIST_VAULTS_FREE_TEXT_MAX_CHARS: 12_000,
+  /**
+   * The text-block ceiling of a maximal `list_vaults` page, every field at its maximum. A derived
+   * ceiling: the page and free-text caps imply it, and `mcp.tools.unit` asserts it (D06-04 as
+   * amended).
+   */
+  MCP_LIST_VAULTS_PAGE_TEXT_MAX_CHARS: 50_000,
   /** Entries in the `iridium://vault/<id>` index resource (D06-04). */
   MCP_VAULT_INDEX_MAX_ENTRIES: 2_000,
+  /** Recently changed notes the vault index resource lists (D06-04 as amended; D06-48). */
+  MCP_VAULT_INDEX_RECENT_NOTES: 50,
+  /** Completion values returned per template variable (D06-04 as amended; D06-48). */
+  MCP_COMPLETION_MAX: 20,
+  /** Open `subscriptions/listen` streams per MCP handler, its `maxSubscriptions` (D06-48). */
+  MCP_MAX_SUBSCRIPTIONS: 1_024,
+  /** Keep-alive comment cadence on an open listen stream, its `keepAliveMs` (D06-48). 15 s. */
+  MCP_KEEPALIVE_MS: 15_000,
+  /** UTF-8 bytes of the server `instructions`, each of both variants (D06-48). 2 KiB. */
+  MCP_INSTRUCTIONS_MAX_BYTES: 2_048,
+  /** UTF-8 bytes of every registered tool description (D06-48). 2 KiB. */
+  MCP_TOOL_DESCRIPTION_MAX_BYTES: 2_048,
   /** Vault ids in a token allowlist or an OAuth consent (D06-04). */
   PAT_MAX_ALLOWLIST_VAULTS: 200,
-  /** Lower bound of `access_tokens.rate_limit_per_hour` and `pat_policy` (D06-04). */
-  PAT_RATE_LIMIT_PER_HOUR_MIN: 60,
-  /** Upper bound of `access_tokens.rate_limit_per_hour` and `pat_policy` (D06-04). */
-  PAT_RATE_LIMIT_PER_HOUR_MAX: 100_000,
+  /**
+   * Active PATs one user holds, counted under the owner's `users` row lock; creation beyond it is
+   * `422 validation_failed` with `errors[].code` `token_limit_reached`, and a rotation replaces a
+   * token rather than adding one (D06-50).
+   */
+  PAT_MAX_ACTIVE_PER_USER: 100,
+  /** The `limit` ceiling of the cursored `GET /me/tokens` and `GET /admin/tokens` (D06-48). */
+  TOKEN_LIST_MAX: 200,
+  /** The token-list page size when the request names no `limit` (D06-48). */
+  TOKEN_LIST_DEFAULT: 50,
+  /**
+   * Characters of an administrator's free-text reason: `DELETE /admin/tokens/:tokenId` and
+   * `POST /admin/tokens/revoke-all` at M3, `DELETE /admin/oauth-consents/:consentId` at M7
+   * (D06-48).
+   */
+  ADMIN_NOTE_MAX_CHARS: 120,
   /** Characters of `vaults.ai_guidance` (D06-04). */
   AI_GUIDANCE_MAX_CHARS: 4_000,
+
+  // ---- Token and OAuth settings bounds (03-data-model.md section 13.1; D03-28) -----------
+  /**
+   * Floor of every hourly budget: `access_tokens.rate_limit_per_hour`, `patPolicy` and
+   * `oauthPolicy` `defaultRateLimitPerHour`, and the baselines `PAT_DEFAULT_RATE_LIMIT_PER_HOUR`
+   * and `OAUTH_DEFAULT_RATE_LIMIT_PER_HOUR` (D03-28; D06-04).
+   */
+  PAT_RATE_LIMIT_PER_HOUR_MIN: 60,
+  /**
+   * Ceiling of every hourly budget: `access_tokens.rate_limit_per_hour`, `patPolicy` and
+   * `oauthPolicy` `defaultRateLimitPerHour`, and the baselines `PAT_DEFAULT_RATE_LIMIT_PER_HOUR`
+   * and `OAUTH_DEFAULT_RATE_LIMIT_PER_HOUR` (D03-28; D06-04).
+   */
+  PAT_RATE_LIMIT_PER_HOUR_MAX: 100_000,
+  /**
+   * Ceiling of both `patPolicy` lifetime members, their environment baselines
+   * (`PAT_DEFAULT_LIFETIME_DAYS`, `PAT_MAX_LIFETIME_DAYS`) and `expiresInDays`. 366 days (D03-28).
+   */
+  PAT_LIFETIME_DAYS_MAX: 366,
+  /** Ceiling of `patPolicy.rotationOverlapMaxHours` and its environment baseline. 24 h. */
+  PAT_ROTATION_OVERLAP_HOURS_MAX: 24,
+  /** Floor of `oauthPolicy.accessTokenTtlMinutes` and its environment baseline. */
+  OAUTH_ACCESS_TOKEN_TTL_MINUTES_MIN: 5,
+  /** Ceiling of `oauthPolicy.accessTokenTtlMinutes` and its environment baseline. 24 h. */
+  OAUTH_ACCESS_TOKEN_TTL_MINUTES_MAX: 1_440,
+  /** Ceiling of both OAuth refresh windows and their environment baselines. 366 days. */
+  OAUTH_REFRESH_DAYS_MAX: 366,
+
+  // ---- Audit (04-auth-and-access-control.md D04-16, D04-19 as amended) -------------------
+  /**
+   * The failure-audit window of `user.login.failed`, `collab.connection.rejected` and
+   * `collab.write.rejected`: one chained row per key per window (D04-16 as amended). 60 s.
+   */
+  AUDIT_DEDUP_SHORT_WINDOW_MS: 60_000,
+  /**
+   * The failure-audit window of `token.denied`, `mcp.access.denied` and `oauth.authorize.denied`
+   * (D04-16 as amended). 10 min.
+   */
+  AUDIT_DEDUP_LONG_WINDOW_MS: 600_000,
+  /** Keys one `FailureAuditGate` holds; a full gate evicts its oldest key (D04-16 as amended). */
+  AUDIT_DEDUP_KEYS_MAX: 10_000,
+  /**
+   * `targets` entries on one chained audit row, so a bulk action is one verifiable event; beyond
+   * it the writer sets its reserved `targets_truncated` marker (03-data-model.md section 12.2;
+   * D04-19 as amended).
+   */
+  AUDIT_TARGETS_MAX: 1_000,
+
+  // ---- Access-log writer and last-used tracker (D06-11 as amended; D06-49) ---------------
   /** Note ids recorded on one `access_log` row before `note_ids_truncated` is set. */
   ACCESS_LOG_MAX_NOTE_IDS: 2_000,
+  /** The access-log writer flushes at least this often (D06-11 as amended). 2 s. */
+  ACCESS_LOG_FLUSH_INTERVAL_MS: 2_000,
+  /** Queued rows that trigger an access-log flush before the interval ends (D06-11 as amended). */
+  ACCESS_LOG_FLUSH_ROWS: 200,
+  /** Rows the access-log queue holds; the oldest are dropped beyond it (D06-11 as amended). */
+  ACCESS_LOG_QUEUE_MAX_ROWS: 10_000,
+  /**
+   * Serialised bytes the access-log queue holds, charged per row as the `INSERT` sends it; the
+   * oldest rows are dropped beyond it (D06-11 as amended). 16 MiB.
+   */
+  ACCESS_LOG_QUEUE_MAX_BYTES: 16_777_216,
+  /**
+   * `LastUsedTracker` flush cadence, in every process that verifies tokens whatever `JOBS_ENABLED`
+   * says (D06-49). 10 min.
+   */
+  TOKEN_LAST_USED_FLUSH_INTERVAL_MS: 600_000,
+  /** Tokens the last-used map holds; a new token observed beyond it is dropped (D06-49). */
+  TOKEN_LAST_USED_PENDING_MAX: 10_000,
+
+  // ---- stdio bridge (D06-13 as amended) --------------------------------------------------
+  /** How often `iridium-mcp` refreshes its cached tool and resource lists. 5 min. */
+  BRIDGE_LIST_REFRESH_MS: 300_000,
+  /** The upstream request timeout `--timeout-ms` defaults to. 60 s. */
+  BRIDGE_UPSTREAM_TIMEOUT_DEFAULT_MS: 60_000,
+  /** The floor `--timeout-ms` accepts. 5 s. */
+  BRIDGE_UPSTREAM_TIMEOUT_MIN_MS: 5_000,
 
   // ---- OAuth 2.1 authorization server ----------------------------------------------------
   /** Authorization code lifetime, single use. */
@@ -173,6 +367,13 @@ const OTHER_LIMITS = {
   OAUTH_CIMD_TIMEOUT_MS: 5_000,
   /** Client ID metadata document cache lifetime. 24 h. */
   OAUTH_CIMD_CACHE_SECONDS: 86_400,
+  /**
+   * Client ID metadata document fetches or revalidations per signed-in user per hour, a fixed
+   * window on the injected clock (D06-41).
+   */
+  OAUTH_CIMD_FETCHES_PER_USER_PER_HOUR: 20,
+  /** Characters of a presented `client_id`; a CIMD `client_id` is an ASCII `https` URL (D06-41). */
+  OAUTH_CLIENT_ID_MAX_CHARS: 512,
   /** Dynamic client registrations per IP per hour. */
   OAUTH_DCR_PER_IP_PER_HOUR: 10,
   /** Registered clients that never completed an authorization. */
@@ -181,6 +382,24 @@ const OTHER_LIMITS = {
   OAUTH_UNUSED_CLIENT_TTL_DAYS: 7,
   /** Redirect URIs per client. */
   OAUTH_MAX_REDIRECT_URIS: 8,
+  /** Characters of one registered or presented redirect URI (D06-47). */
+  OAUTH_MAX_REDIRECT_URI_CHARS: 512,
+  /** Shortest PKCE `code_verifier`, in unreserved characters (RFC 7636 section 4.1; D06-47). */
+  OAUTH_CODE_VERIFIER_MIN: 43,
+  /** Longest PKCE `code_verifier`, in unreserved characters (RFC 7636 section 4.1; D06-47). */
+  OAUTH_CODE_VERIFIER_MAX: 128,
+  /**
+   * `POST /oauth/token` and `POST /oauth/revoke` requests per IP per minute, a separate bucket on
+   * each route (D06-47).
+   */
+  OAUTH_TOKEN_ENDPOINT_PER_IP_PER_MINUTE: 60,
+  /**
+   * `GET /oauth/authorize` requests per session per hour; a request without a session falls back to
+   * `REST_UNAUTHENTICATED_PER_MINUTE` per IP (D06-47).
+   */
+  OAUTH_AUTHORIZE_PER_SESSION_PER_HOUR: 30,
+
+  // ---- Projection, search, revisions and maintenance jobs (M2) ---------------------------
   /** Server projection timeout. Env `PROJECTION_TIMEOUT_MS`. */
   PROJECTION_TIMEOUT_SERVER_MS: 10_000,
   /** Client preview worker timeout. */
@@ -296,6 +515,11 @@ const OTHER_LIMITS = {
   BODY_MAX_BYTES_MCP: 1_048_576,
   /** Shutdown drain window. Env `SHUTDOWN_DRAIN_MS`. */
   SHUTDOWN_DRAIN_MS: 20_000,
+  /**
+   * How long before the drain budget ends each close-time write-behind flush stops, covering the
+   * idle-connection pool close and the final log flush (ARCH-06 as amended). 1 s.
+   */
+  SHUTDOWN_FLUSH_MARGIN_MS: 1_000,
 } as const;
 
 /** One public policy; each bound is defined once in its owning policy leaf. */
@@ -323,6 +547,9 @@ export const LIMIT_ENV_OVERRIDES = {
   COLLAB_MAX_CONNECTIONS_PER_USER: 'CONNECTIONS_PER_USER',
   COLLAB_MAX_CONNECTIONS_PER_IP: 'CONNECTIONS_PER_IP',
   MCP_RATE_LIMIT_PER_HOUR: 'MCP_TOKEN_PER_HOUR',
+  MCP_RATE_LIMIT_BURST_PER_MIN: 'MCP_TOKEN_BURST_PER_MINUTE',
+  MCP_PROCESS_CEILING_PER_MIN: 'MCP_PROCESS_PER_MINUTE',
+  MCP_REQUEST_TIMEOUT_MS: 'MCP_REQUEST_DEADLINE_MS',
   PROJECTION_TIMEOUT_MS: 'PROJECTION_TIMEOUT_SERVER_MS',
   REINDEX_RATE_PER_SECOND: 'REINDEX_RATE_PER_SECOND',
   UPDATE_LOG_RETENTION_DAYS: 'UPDATE_LOG_RETENTION_DAYS',

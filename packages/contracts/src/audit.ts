@@ -274,9 +274,6 @@ export const AuditTarget: z.ZodObject<
 /** One entry of `audit_events.targets`. */
 export type AuditTarget = z.infer<typeof AuditTarget>;
 
-/** Entries in `audit_events.targets` before the `truncated` marker is set instead. */
-export const AUDIT_TARGETS_MAX = 1_000;
-
 /**
  * `access_log.action` — a separate vocabulary, shaped `<surface>.<operation>`: `mcp.<tool>` for
  * MCP calls, `rest.<resource>.<operation>` for token-authenticated REST reads, `export.<op>` for

@@ -12,6 +12,25 @@ import { z } from 'zod';
 
 import { LIMITS, type PublishedLimitWireName } from '../limits.ts';
 
+/**
+ * The integer `GET /meta.apiVersion` and the `X-Iridium-Api-Version` response header carry
+ * (section 7.1; A54). It increments only for a breaking change as section 7.2 defines one:
+ * removing or renaming a field, an endpoint, an `operationId`, a `ProblemDetails` code, a stateless
+ * message type or an IPC channel; changing semantics; tightening validation. Adding any of those is
+ * additive and leaves it alone. It is wire contract, so it lives here rather than in the server,
+ * and a release that increments it raises `RELEASE_MIN_CLIENT_VERSION` in the same change.
+ */
+export const API_VERSION: number = 1;
+
+/**
+ * The release-carried client floor (section 7.1; A54 as amended 2026-09-25). The effective
+ * `minClientVersion` that `GET /meta` publishes and the request gate enforces is the SemVer
+ * maximum of this constant and the operator floor `schema_meta.min_client_version`, and
+ * database-free schema export uses it alone. `'0.0.0'` until a release that removes a deprecated
+ * surface past its sunset raises it (section 7.3); no data migration carries a release floor.
+ */
+export const RELEASE_MIN_CLIENT_VERSION: string = '0.0.0';
+
 /** The optional server capabilities a client must probe rather than infer. */
 export const FEATURES = [
   'mcp',

@@ -1,9 +1,9 @@
 import {
   AUDIT_ACTIONS,
   AUDIT_ACTION_CHAIN,
-  AUDIT_TARGETS_MAX,
   chainIdForVault,
   idToBytes,
+  LIMITS,
   newId,
   SERVER_CHAIN_ID,
   toTimestamp,
@@ -283,7 +283,7 @@ describe('audit.chain.integration [area:audit]', () => {
   });
 
   describe('canonical row boundaries', () => {
-    it.each([0, AUDIT_TARGETS_MAX, AUDIT_TARGETS_MAX + 1])(
+    it.each([0, LIMITS.AUDIT_TARGETS_MAX, LIMITS.AUDIT_TARGETS_MAX + 1])(
       'round-trips %i targets with delegated identity and nested JSON; truncation is explicit',
       async (count) => {
         const vaultId = newId();
@@ -313,11 +313,13 @@ describe('audit.chain.integration [area:audit]', () => {
           .where('chain_id', '=', chainIdForVault(vaultId))
           .executeTakeFirstOrThrow();
         expect(row.on_behalf_of_user_id).toEqual(Buffer.from(idToBytes(delegated)));
-        expect(row.targets).toEqual(count === 0 ? null : targets.slice(0, AUDIT_TARGETS_MAX));
+        expect(row.targets).toEqual(
+          count === 0 ? null : targets.slice(0, LIMITS.AUDIT_TARGETS_MAX),
+        );
         expect(row.metadata).toEqual({
           nested: [null, true, 2, 'text', { retained: false }],
           nullPrototype: { text: 'plain data without a prototype', number: 7 },
-          ...(count > AUDIT_TARGETS_MAX ? { targets_truncated: true } : {}),
+          ...(count > LIMITS.AUDIT_TARGETS_MAX ? { targets_truncated: true } : {}),
         });
         expect((await verifyChain(db, chainIdForVault(vaultId), keys)).ok).toBe(true);
       },

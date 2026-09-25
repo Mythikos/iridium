@@ -367,7 +367,7 @@ export function envShape(measurements: BootMeasurements) {
     MCP_RATE_LIMIT_PER_HOUR: intField(LIMITS.MCP_TOKEN_PER_HOUR, { min: 1 }),
     MCP_RATE_LIMIT_BURST_PER_MIN: intField(LIMITS.MCP_TOKEN_BURST_PER_MINUTE, { min: 1 }),
     MCP_PROCESS_CEILING_PER_MIN: intField(LIMITS.MCP_PROCESS_PER_MINUTE, { min: 1 }),
-    MCP_REQUEST_TIMEOUT_MS: intField(30_000, { min: 1 }),
+    MCP_REQUEST_TIMEOUT_MS: intField(LIMITS.MCP_REQUEST_DEADLINE_MS, { min: 1 }),
     OAUTH_ACCESS_TOKEN_TTL_MINUTES: intField(60, { min: 1 }),
     OAUTH_REFRESH_IDLE_DAYS: intField(30, { min: 1 }),
     OAUTH_REFRESH_ABSOLUTE_DAYS: intField(90, { min: 1 }),

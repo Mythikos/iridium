@@ -14,7 +14,7 @@
  * file read from disk, so the served document and the committed one can only differ by a drift the
  * `pnpm gen` gate already fails on.
  */
-import { LIMITS, Meta, publishedLimits, type RouteSpec } from '@iridium/contracts';
+import { API_VERSION, LIMITS, Meta, publishedLimits, type RouteSpec } from '@iridium/contracts';
 import type { FastifyInstance } from 'fastify';
 import {
   serializerCompiler,
@@ -29,7 +29,7 @@ import { BUILD_INFO } from '../ops/build-info.ts';
 import { hasOpenApi } from '../ops/openapi.ts';
 import { documentationAuth } from './docs.ts';
 import { routeSpec as manifestRow } from './handler-context.ts';
-import { API_VERSION, featuresFor, minimumClientVersion } from './version.ts';
+import { featuresFor, minimumClientVersion } from './version.ts';
 
 /** The operation ids this module registers, in registration order. */
 export const META_OPERATION_IDS = ['meta.get', 'meta.openapi'] as const;

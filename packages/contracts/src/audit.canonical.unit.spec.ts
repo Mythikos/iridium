@@ -4,7 +4,6 @@ import {
   AUDIT_ACTION_CHAIN,
   AUDIT_ACTIONS,
   AUDIT_SCHEMA_VERSION,
-  AUDIT_TARGETS_MAX,
   AuditAction,
   auditChainPreimage,
   AuditCanonicalError,
@@ -18,6 +17,7 @@ import {
   type CanonicalValue,
 } from './audit.ts';
 import { newId } from './ids.ts';
+import { LIMITS } from './limits.ts';
 import { toTimestamp } from './time.ts';
 
 /** One reverse solidus, and one code-point helper, so this file carries no literal control byte. */
@@ -118,7 +118,7 @@ describe('audit.canonical.unit [area:audit]', () => {
       expect(GENESIS_CHAIN_HASH).toHaveLength(GENESIS_HASH_BYTES);
       expect([...GENESIS_CHAIN_HASH].every((byte) => byte === 0)).toBe(true);
       expect(AUDIT_SCHEMA_VERSION).toBe(1);
-      expect(AUDIT_TARGETS_MAX).toBe(1000);
+      expect(LIMITS.AUDIT_TARGETS_MAX).toBe(1000);
     });
   });
 

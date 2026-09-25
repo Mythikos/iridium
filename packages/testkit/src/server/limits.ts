@@ -38,6 +38,9 @@ export type LimitOverrideName =
   | 'maxConnectionsPerUser'
   | 'maxConnectionsPerIp'
   | 'mcpRateLimitPerHour'
+  | 'mcpBurstPerMinute'
+  | 'mcpProcessCeilingPerMinute'
+  | 'mcpRequestTimeoutMs'
   | 'projectionTimeoutMs'
   | 'reindexRatePerSecond'
   | 'updateLogRetentionDays'
@@ -63,6 +66,9 @@ export const LIMIT_OVERRIDE_ENV: Readonly<Record<LimitOverrideName, LimitEnvKey>
   maxConnectionsPerUser: 'COLLAB_MAX_CONNECTIONS_PER_USER',
   maxConnectionsPerIp: 'COLLAB_MAX_CONNECTIONS_PER_IP',
   mcpRateLimitPerHour: 'MCP_RATE_LIMIT_PER_HOUR',
+  mcpBurstPerMinute: 'MCP_RATE_LIMIT_BURST_PER_MIN',
+  mcpProcessCeilingPerMinute: 'MCP_PROCESS_CEILING_PER_MIN',
+  mcpRequestTimeoutMs: 'MCP_REQUEST_TIMEOUT_MS',
   projectionTimeoutMs: 'PROJECTION_TIMEOUT_MS',
   reindexRatePerSecond: 'REINDEX_RATE_PER_SECOND',
   updateLogRetentionDays: 'UPDATE_LOG_RETENTION_DAYS',
